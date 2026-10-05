@@ -1,0 +1,52 @@
+/xbox/x_exe/Debug
+*.ncb
+*.suo
+/build
+/kisak-thug/gaym
+/kisak-thug/Debug
+/kisak-thug/.vs
+*.bak
+*.id0
+*.id1
+*.id2
+*.idb
+*.exe
+*.dmp
+*.nam
+*.til
+*.i64
+*.i64-unhandled
+*.log
+*.old
+# --- port Vita ---
+vita/build/
+vita/build_*/
+*.vpk
+*.velf
+*.self
+eboot.bin
+
+# --- assets du jeu : JAMAIS dans le repo ---
+Data/
+*.iso
+*.qb
+*.img
+*.bik
+
+# Sorties des outils d'analyse : ce sont des ASSETS DU JEU extraits de l'ISO
+# de l'utilisateur. Le depot ne contient que notre code -- jamais de donnees
+# du jeu, meme sur un depot prive. Regle non negociable.
+*.wav
+*.pcm
+vita/tools/piste_*.wav
+
+# Fichiers de metadonnees macOS, sans interet pour le port.
+.DS_Store
+
+# Adresse de la console : depend du reseau, ne concerne que cette machine.
+vita/tools/vita_ip.txt
+
+# --- LiveArea et ecran de lancement : generes depuis le dump (vita/livearea/generer.py) ---
+vita/sce_sys/*.png
+vita/sce_sys/livearea/contents/*.png
+vita/boot/

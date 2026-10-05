@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Stencil+Display:wght@800;900&display=block" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#222;display:flex;flex-direction:column;gap:20px;padding:20px;align-items:flex-start}
+.plan{position:relative;overflow:hidden;background:#000}
+.plan img.fond{position:absolute;image-rendering:auto}
+/* Etiquette VITA : plaque rouge a la bombe, pochoir blanc, inclinee comme le logo */
+.vita{position:absolute;transform-origin:0 0}
+.vita .plaque{position:absolute;inset:0;background:#c3221a;filter:url(#bombe);border-radius:2px}
+.vita .txt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:'Big Shoulders Stencil Display',sans-serif;font-weight:900;color:#f2efe6;
+  letter-spacing:.06em;filter:url(#use);text-shadow:0 0 1px rgba(0,0,0,.4)}
+.vita .ombre{position:absolute;inset:-6% -4%;background:rgba(0,0,0,.55);filter:blur(4px)}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <filter id="use" x="-5%" y="-5%" width="110%" height="110%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="4" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -7 5.2" result="trous"/>
+    <feComposite in="SourceGraphic" in2="trous" operator="in"/>
+  </filter>
+  <filter id="bombe" x="-15%" y="-25%" width="130%" height="150%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="9" result="bord"/>
+    <feDisplacementMap in="SourceGraphic" in2="bord" scale="6" result="d"/>
+    <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="1" seed="3" result="g"/>
+    <feColorMatrix in="g" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -3 2.6" result="g2"/>
+    <feComposite in="d" in2="g2" operator="in"/>
+  </filter>
+</defs></svg>
+
+<!-- pic0 960x544 : ecran-titre du jeu (loadscrn_ngc, texte legal efface) x1.5 + etiquette VITA -->
+<div class="plan" id="pic0" style="width:960px;height:544px">
+  <img class="fond" src="src_pic0.png" style="width:960px;left:0;top:-30px">
+  <div style="position:absolute;left:0;right:0;top:400px;bottom:0;background:linear-gradient(to bottom,rgba(0,0,0,0),rgba(0,0,0,.82) 55%,rgba(0,0,0,.9))"></div>
+  <div class="vita" style="left:664px;top:398px;width:150px;height:62px;transform:rotate(-4deg)">
+    <div class="ombre"></div><div class="plaque"></div><div class="txt" style="font-size:58px">VITA</div>
+  </div>
+</div>
+
+<!-- startup.png 280x158 (porte) : le logo de l'ecran-titre (x75-585, y45-333) + VITA. Pas de START : le systeme l'affiche. -->
+<div class="plan" id="startup" style="width:280px;height:158px">
+  <!-- Le systeme dessine "Demarrer" sur y117-147 et le cadre mange ~5 px :
+       logo resserre dans les ~105 px du haut, fond = meme texture bleue. -->
+  <img class="fond" src="src_porte_fond.png" style="width:280px;left:0;top:0">
+  <img class="fond" src="src_porte_logo.png" style="width:222px;left:18px;top:6px;
+       -webkit-mask-image:radial-gradient(ellipse 52% 56% at 50% 50%,#000 72%,transparent 100%);
+       mask-image:radial-gradient(ellipse 52% 56% at 50% 50%,#000 72%,transparent 100%)">
+  <div class="vita" style="left:206px;top:86px;width:52px;height:22px;transform:rotate(-4deg)">
+    <div class="ombre"></div><div class="plaque"></div><div class="txt" style="font-size:21px">VITA</div>
+  </div>
+</div>
+
+<!-- bg.png 840x500 : illustration de loadscrn_mainmenu x1.45, recadree (LOADING hors cadre).
+     Style a1 : porte x280-560 y139-297 (Vita3K live_area.cpp). -->
+<div class="plan" id="bg" style="width:840px;height:500px">
+  <img class="fond" src="src_bg.png" style="width:928px;left:-44px;top:0">
+</div>
+
+<!-- icon0.png 128x128 : badge rond du tableau de bord Xbox (xbox_icon_title.xbx) + VITA -->
+<div class="plan" id="icon0" style="width:128px;height:128px">
+  <img class="fond" src="src_icon0.png" style="width:128px;left:0;top:0">
+  <div class="vita" style="left:40px;top:93px;width:48px;height:19px;transform:rotate(-4deg)">
+    <div class="ombre"></div><div class="plaque"></div><div class="txt" style="font-size:19px">VITA</div>
+  </div>
+</div>
+</body></html>
