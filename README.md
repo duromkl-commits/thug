@@ -91,7 +91,7 @@ The Vita has no L2/R2, which the game uses a lot. Here's where everything went:
 | **L** | L2 | Nollie (tap while rolling) |
 | **R** | R2 | Switch stance (tap while rolling), reverts, spine transfers |
 | **Bottom-left corner** of the screen | L1 | Spin left |
-| **Bottom-right corner** of the screen | R1 | Spin right |
+| **Bottom-right corner** of the screen | R1 | Spin right. Off the board: hold it to grab ledges and ladders (push the left stick up to climb) |
 | **Both bottom corners** at once | L1 + R1 | Get off the board, or back on |
 | START | START | Pause menu |
 
