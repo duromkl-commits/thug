@@ -102,6 +102,19 @@ The rear touchpad does nothing, so you can rest your fingers on it.
 Saves go to `ux0:data/thug/save/`. They're separate from the game itself:
 deleting or reinstalling the game doesn't touch them.
 
+## RetroFlow cover
+
+If you use [RetroFlow Launcher](https://github.com/jimbob4000/RetroFlow-Launcher),
+there's a cover in [`covers/THUG00001.png`](covers/THUG00001.png), made by
+[u/BlazeRed16](https://www.reddit.com/user/BlazeRed16). Copy it to:
+
+```
+ux0:data/RetroFlow/COVERS/Sony - PlayStation Vita/THUG00001.png
+```
+
+In RetroFlow, open the game's settings with △, set its category to *PS Vita*,
+then rescan your games.
+
 ## Good to know
 
 - **No videos.** The intro and the cutscene videos use a format (Bink) that the
@@ -157,5 +170,6 @@ It needs an internet connection the first time, to fetch a font.
   port builds on.
 - [vitaGL](https://github.com/Rinnegatamante/vitaGL) by Rinnegatamante, and
   the [vitasdk](https://vitasdk.org) team.
+- [u/BlazeRed16](https://www.reddit.com/user/BlazeRed16) for the RetroFlow cover.
 - [Anthropic](https://www.anthropic.com), whose Claude models did most of the
   porting work through the harness.
