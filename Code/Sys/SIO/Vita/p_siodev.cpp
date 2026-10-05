@@ -422,7 +422,8 @@ static void injection_analyser( char *buf )
 			VitaSetCfuncTrace( false );
 		}
 		// « qb <script> [nom=valeur ...] » lance un script QB du jeu, les
-		// valeurs etant des checksums (« qb change_level level=load_tampa »).
+		// valeurs etant des checksums (« qb change_level level=load_tampa »)
+		// ou des chaines entre guillemets, sans espace (« name="a\b.cut" »).
 		// Meme chemin qu'un menu : SpawnScript, execute au prochain passage du
 		// gestionnaire de scripts, pas au milieu de la lecture manette.
 		// Depuis un niveau : « qb level_select_change_level level=load_nj ».
@@ -447,6 +448,16 @@ static void injection_analyser( char *buf )
 					if( eg )
 					{
 						*eg = 0;
+						// "nom=\"texte\"" : chaine (view_cutscene
+						// name="cutscenes\NJ_03.cut", trailer).
+						if( eg[1] == '"' )
+						{
+							char *fin = strrchr( eg + 2, '"' );
+							if( fin )
+								*fin = 0;
+							p_params->AddString( Script::GenerateCRC( mots[k] ), eg + 2 );
+							continue;
+						}
 						// "nom=0x1234abcd" : checksum brut (objectifs sans nom
 						// lisible, "goals all").
 						const uint32 v = ( eg[1] == '0' && ( eg[2] == 'x' || eg[2] == 'X' ))
@@ -2258,9 +2269,13 @@ static unsigned int injection_bits( void )
 #endif
 		}
 
+		// Build public : pas de commandes par fichier. Tout le sondage est sous
+		// le #ifndef : avec le seul appel dedans, le if gardait le return 0 et
+		// 29 images sur 30 tombaient dans la lecture d'une sequence vide, index
+		// croissant hors du tableau -> touches fantomes au bout de ~10 min.
+#ifndef THUG_RELEASE
 		static int s_poll = 0;
 		if(( ++s_poll % 30 ) == 0 )
-#ifndef THUG_RELEASE	// build public : pas de commandes par fichier
 			injection_relire();
 #endif
 		return 0;
