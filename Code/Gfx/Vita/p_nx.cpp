@@ -702,7 +702,7 @@ void	CEngine::s_plat_pre_render()
 			      s_f, (unsigned)( plus_gros >> 10 ),
 			      (unsigned)( vglMemFree( VGL_MEM_RAM ) >> 10 ),
 			      (unsigned)( vglMemFree( VGL_MEM_VRAM ) >> 10 ),
-			      (unsigned)( vglMemFree( VGL_MEM_SLOW ) >> 10 ));
+			      (unsigned)( vglMemFree( VGL_MEM_PHYCONT ) >> 10 ));
 		}
 	}
 	// celui de la frame precedente et plus rien ne se dessine correctement.
