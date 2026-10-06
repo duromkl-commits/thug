@@ -650,6 +650,7 @@ static SceUInt64 s_acc_fin_prec = 0;
 #define ACC( i )	( s_acc[ i ] = sceKernelGetProcessTimeWide() )
 static void acc_bilan()
 {
+	NxVita::TeinteSceneBilanImage();	// issue #15
 	const SceUInt64 tot = s_acc[ ACC_SWAP ] - s_acc_fin_prec;
 	if( s_acc_fin_prec && ( tot > 50000 ) && ( tot < 2000000 ))
 	{
@@ -702,7 +703,7 @@ void	CEngine::s_plat_pre_render()
 			      s_f, (unsigned)( plus_gros >> 10 ),
 			      (unsigned)( vglMemFree( VGL_MEM_RAM ) >> 10 ),
 			      (unsigned)( vglMemFree( VGL_MEM_VRAM ) >> 10 ),
-			      (unsigned)( vglMemFree( VGL_MEM_PHYCONT ) >> 10 ));
+			      (unsigned)( vglMemFree( (vglMemType)2 ) >> 10 ));	// VGL_MEM_SLOW, renomme VGL_MEM_PHYCONT dans vitaGL le 2026-08-11 (meme index ; PR publique #10, rreha) : compile avec les deux
 		}
 	}
 	// celui de la frame precedente et plus rien ne se dessine correctement.
@@ -760,6 +761,7 @@ void	CEngine::s_plat_post_render()
 	// reste au-dessus du sprite (ordre d'avant).
 	{
 		static float s_pri[256];
+		const SceUInt64 t2d = sceKernelGetProcessTimeWide();
 		const int n = NxVita::TextePriorites( s_pri, 256 );
 		float bas = -FLT_MAX;
 		for( int i = 0; i < n; ++i )
@@ -769,6 +771,29 @@ void	CEngine::s_plat_post_render()
 			bas = s_pri[i];
 		}
 		NxVita::RenderSprites2D( bas, FLT_MAX );
+
+		// Issue #17 (menu View Stats) : cout CPU de la tranche 2D, en moyenne
+		// sur 120 images, avec le nombre de tranches de priorite, de glyphes
+		// et d'appels de dessin du texte. Le [ACC] ne la ventile que pour les
+		// images de plus de 50 ms.
+		static SceUInt64 s_2d_us = 0, s_2d_max = 0;
+		static int s_2d_img = 0, s_2d_pri = 0, s_2d_gly = 0, s_2d_app = 0;
+		const SceUInt64 d2d = sceKernelGetProcessTimeWide() - t2d;
+		s_2d_us += d2d;
+		if( d2d > s_2d_max ) s_2d_max = d2d;
+		s_2d_pri += n;
+		s_2d_gly += NxVita::g_vita_2d_glyphes;
+		s_2d_app += NxVita::g_vita_2d_appels_txt;
+		NxVita::g_vita_2d_glyphes = NxVita::g_vita_2d_appels_txt = 0;
+		if( ++s_2d_img == 120 )
+		{
+			VLOG( "2D", "bilan 120 images : 2d %d.%d ms/image (max %d.%d), %d priorites, %d glyphes, %d appels texte (xgl %d)",
+			      (int)( s_2d_us / 120000 ), (int)(( s_2d_us / 12000 ) % 10 ),
+			      (int)( s_2d_max / 1000 ), (int)(( s_2d_max / 100 ) % 10 ),
+			      s_2d_pri / 120, s_2d_gly / 120, s_2d_app / 120, NxVita::g_vita_lots_glyphes );
+			s_2d_us = s_2d_max = 0;
+			s_2d_img = s_2d_pri = s_2d_gly = s_2d_app = 0;
+		}
 	}
 	ACC( ACC_2D );
 

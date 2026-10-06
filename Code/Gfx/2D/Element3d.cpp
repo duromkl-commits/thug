@@ -2,6 +2,12 @@
 #include "vita_log.h"
 #endif
 #include <core/defines.h>
+#ifdef __PLAT_VITA__
+#include <core/allmath.h>
+// p_world_render.cpp : camera de la vue figee de l'image (#12). Declare ici
+// plutot qu'en incluant p_world_render.h, qui tire le chargeur de scenes.
+namespace NxVita { bool GetDisplayedCamera( Mth::Matrix *p_mat, Mth::Vector *p_pos ); }
+#endif
 #include <gfx/2D/Element3d.h>
 #include <gfx/2D/ScreenElemMan.h>
 #include <gel/assman/assman.h>
@@ -108,6 +114,14 @@ static void sGetWorldMatrixFromScreenPosition(int camera_num, Mth::Matrix *p_wor
 	if (p_camera)
 	{
 		Mth::Matrix cam_matrix=p_camera->GetMatrix();
+#ifdef __PLAT_VITA__
+		// #12 : se placer devant la camera avec laquelle l'image est VRAIMENT
+		// dessinee (vue figee au premier modele de la frame), pas devant la
+		// camera active, deja deplacee depuis. Voir GetDisplayedCamera.
+		Mth::Vector vita_cam_pos;
+		const bool vita_vue_figee = ( camera_num == 0 )
+		                            && NxVita::GetDisplayedCamera( &cam_matrix, &vita_cam_pos );
+#endif
 		
 		// Camera matrix might have been incorrectly set up with a translation in W
 		// so clear it out to be safe
@@ -118,6 +132,21 @@ static void sGetWorldMatrixFromScreenPosition(int camera_num, Mth::Matrix *p_wor
 		Mth::Vector world_pos = camera_space_pos * cam_matrix;
 		// and add the camera position to get the final world position.
 		Mth::Vector cam_pos = p_camera->GetPos();
+#ifdef __PLAT_VITA__
+		// Ecart entre camera active et camera dessinee : la mesure du #12.
+		// Non nul en mouvement = la fleche aurait ete decalee d'autant.
+		float vita_ecart = 0.0f;
+		if( vita_vue_figee )
+		{
+			const Mth::Vector d = cam_pos - vita_cam_pos;
+			vita_ecart = sqrtf( d[X] * d[X] + d[Y] * d[Y] + d[Z] * d[Z] );
+			cam_pos = vita_cam_pos;
+			static int s_e = 0;
+			if(( vita_ecart > 0.5f ) && (( s_e++ % 60 ) == 0 ))
+				VLOG( "E3D", "fleche : camera dessinee a %.1f unites de la camera active -- repere aligne (#12)",
+				      vita_ecart );
+		}
+#endif
 		cam_pos[W] = 0.0f;
 		world_pos += cam_pos;
 		world_pos[W] = 0.0f;
@@ -139,12 +168,13 @@ static void sGetWorldMatrixFromScreenPosition(int camera_num, Mth::Matrix *p_wor
 			if(( s_n++ % 1200 ) < 4 )
 				VLOG( "E3D", "demande ecran (%.0f %.0f) z=%.0f -> camera "
 				             "(%.0f %.0f %.0f) monde (%.0f %.0f %.0f) "
-				             "| cam (%.0f %.0f %.0f) aspect %.3f",
+				             "| cam (%.0f %.0f %.0f) aspect %.3f | vue figee %d ecart %.1f",
 				      screenX, screenY, zOffset,
 				      camera_space_pos[X], camera_space_pos[Y], camera_space_pos[Z],
 				      world_pos[X], world_pos[Y], world_pos[Z],
 				      cam_pos[X], cam_pos[Y], cam_pos[Z],
-				      Nx::CViewportManager::sGetScreenAspect());
+				      Nx::CViewportManager::sGetScreenAspect(),
+				      (int)vita_vue_figee, vita_ecart );
 		}
 #endif
 	}	

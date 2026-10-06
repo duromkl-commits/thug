@@ -478,6 +478,69 @@ int TextePriorites( float *p_out, int max )
 	return n;
 }
 
+// --- Lot de glyphes (issue #17) ---------------------------------------------
+//
+// Un glDrawArrays PAR CARACTERE : vitaGL recopie a chaque appel les tableaux
+// cote client dans sa memoire temporaire et repasse par la selection du
+// shader du pipeline fixe. L'ecran View Stats du menu pause (stats.qb,
+// create_stats_menu / build_stat_goals_menu) affiche des centaines de glyphes
+// (10 statistiques, description en textBlockElement, liste des objectifs de
+// la statistique en police dialog) : autant d'appels par image.
+//
+// Les glyphes consecutifs de meme planche et de meme couleur partent
+// maintenant en UN glDrawArrays( GL_TRIANGLES ), y compris d'un texte au
+// suivant dans la meme tranche de priorite. Le lot est vide avant tout
+// changement de texture ou de couleur, donc l'ordre de dessin ne change pas.
+// " xgl 0/1 " : lots (1, defaut) ou un appel par glyphe (0), pour l'A/B.
+int g_vita_lots_glyphes = 1;
+int g_vita_2d_glyphes = 0;		// glyphes et appels de l'image (bilan [2D], p_nx.cpp)
+int g_vita_2d_appels_txt = 0;
+
+#define LOT_GLYPHES_MAX	128
+static float  s_lot_xyz[LOT_GLYPHES_MAX * 6 * 3];
+static float  s_lot_uv[LOT_GLYPHES_MAX * 6 * 2];
+static int    s_lot_n = 0;
+static GLuint s_lot_tex = 0;		// planche liee (0 : inconnue, a lier)
+static float  s_lot_rgba[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+
+static void lot_vider( void )
+{
+	if( !s_lot_n )
+		return;
+	glVertexPointer( 3, GL_FLOAT, 0, s_lot_xyz );
+	glTexCoordPointer( 2, GL_FLOAT, 0, s_lot_uv );
+	glDrawArrays( GL_TRIANGLES, 0, s_lot_n * 6 );
+	++g_vita_2d_appels_txt;
+	s_lot_n = 0;
+}
+
+static void lot_texture( GLuint tex )
+{
+	if( tex == s_lot_tex )
+		return;
+	lot_vider();
+	glBindTexture( GL_TEXTURE_2D, tex );
+	s_lot_tex = tex;
+}
+
+static void lot_glyphe( float x0, float y0, float x1, float y1,
+                        float u0, float v0, float u1, float v1 )
+{
+	float *p = s_lot_xyz + s_lot_n * 18;
+	float *t = s_lot_uv + s_lot_n * 12;
+	// Deux triangles (x0,y0)(x1,y0)(x1,y1) et (x0,y0)(x1,y1)(x0,y1) : le
+	// meme quad que l'eventail d'avant.
+	const float xyz[18] = { x0, y0, 0.0f, x1, y0, 0.0f, x1, y1, 0.0f,
+	                        x0, y0, 0.0f, x1, y1, 0.0f, x0, y1, 0.0f };
+	const float uv[12]  = { u0, v0, u1, v0, u1, v1,
+	                        u0, v0, u1, v1, u0, v1 };
+	memcpy( p, xyz, sizeof( xyz ));
+	memcpy( t, uv, sizeof( uv ));
+	++g_vita_2d_glyphes;
+	if(( ++s_lot_n == LOT_GLYPHES_MAX ) || !g_vita_lots_glyphes )
+		lot_vider();
+}
+
 // Couleur courante du texte : echelle PS2 (128 = 1,0), comme m_rgba.
 static void couleur_texte( const Image::RGBA &c, float kc )
 {
@@ -487,6 +550,10 @@ static void couleur_texte( const Image::RGBA &c, float kc )
 	if( cg > 1.0f ) cg = 1.0f;
 	if( cb > 1.0f ) cb = 1.0f;
 	if( ca > 1.0f ) ca = 1.0f;
+	if(( cr == s_lot_rgba[0] ) && ( cg == s_lot_rgba[1] ) && ( cb == s_lot_rgba[2] ) && ( ca == s_lot_rgba[3] ))
+		return;
+	lot_vider();
+	s_lot_rgba[0] = cr; s_lot_rgba[1] = cg; s_lot_rgba[2] = cb; s_lot_rgba[3] = ca;
 	glColor4f( cr, cg, cb, ca );
 }
 
@@ -543,6 +610,12 @@ void RenderText2D( float pri )
 
 	int drawn = 0;
 
+	// Les sprites ont lie d'autres textures et pose d'autres couleurs depuis
+	// la tranche precedente : etat du lot inconnu.
+	s_lot_n = 0;
+	s_lot_tex = 0;
+	s_lot_rgba[0] = s_lot_rgba[1] = s_lot_rgba[2] = s_lot_rgba[3] = -1.0f;
+
 	for( int i = 0; i < s_num; ++i )
 	{
 		Nx::CVitaText *p = sp_texts[i];
@@ -559,7 +632,7 @@ void RenderText2D( float pri )
 		if( !p_font || !p_font->GetTexture())
 			continue;
 
-		glBindTexture( GL_TEXTURE_2D, p_font->GetTexture());
+		lot_texture( p_font->GetTexture());
 
 		Image::RGBA c = p->Color();
 		const float kc = g_vita_mx2 ? 255.0f : 128.0f;	// mx2 (#52)
@@ -653,27 +726,20 @@ void RenderText2D( float pri )
 			// lettres a l'envers, l'autre des morceaux de planche pris au
 			// hasard. « Convention D3D contre OpenGL » n'est donc pas une
 			// regle globale : elle se decide FORMAT PAR FORMAT.
-			const float verts[12] = { x0, y0, 0.0f, x1, y0, 0.0f,
-			                          x1, y1, 0.0f, x0, y1, 0.0f };
-			const float uvs[8]    = { g->u0, g->v0, g->u1, g->v0,
-			                          g->u1, g->v1, g->u0, g->v1 };
-
 			// Une icone vient d'une autre planche : on la lie le temps d'un
 			// glyphe, comme la Xbox change de police pour un caractere
-			// (chars.cpp:866).
+			// (chars.cpp:866). lot_texture vide le lot a chaque changement.
+			lot_texture( p_gfont->GetTexture());
+			lot_glyphe( x0, y0, x1, y1, g->u0, g->v0, g->u1, g->v1 );
 			if( p_gfont != p_font )
-				glBindTexture( GL_TEXTURE_2D, p_gfont->GetTexture());
-			glVertexPointer( 3, GL_FLOAT, 0, verts );
-			glTexCoordPointer( 2, GL_FLOAT, 0, uvs );
-			glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
-			if( p_gfont != p_font )
-				glBindTexture( GL_TEXTURE_2D, p_font->GetTexture());
+				lot_texture( p_font->GetTexture());
 
 			pen += (float)( g->w + spacing ) * p->ScaleX();
 			++drawn;
 		}
 	}
 
+	lot_vider();
 	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
 	glDisableClientState( GL_VERTEX_ARRAY );
 	if( g_vita_mx2 )

@@ -1,4 +1,7 @@
 #include <core/defines.h>
+#ifdef __PLAT_VITA__
+#include "vita_log.h"
+#endif
 #include <sk/ParkEditor/EdRail.h>
 #include <sk/ParkEditor2/EdMap.h>
 #include <sk/ParkEditor2/ParkEd.h>
@@ -1472,8 +1475,18 @@ void CParkManager::AccessDisk(bool save, int fileSlot)
 //		printf("I am loading park %s\n", fullname);
 		void *fp = File::Open(fullname, "rb");
 		Dbg_MsgAssert(fp, ("failed to open file %s for read", fullname));
+		#ifdef __PLAT_VITA__
+		if (!fp)
+		{
+			VLOG("PARK", "chargement '%s' : ECHEC d'ouverture", fullname);
+			return;
+		}
+		#endif
 		
 		int size=File::GetFileSize(fp);
+		#ifdef __PLAT_VITA__
+		VLOG("PARK", "chargement '%s' : %d octets", fullname, size);
+		#endif
 
 		uint8 *p_buffer=(uint8*)Mem::Malloc(size);
 		
@@ -1495,6 +1508,15 @@ void CParkManager::AccessDisk(bool save, int fileSlot)
 		m_compressed_map_flags = ECompressedMapFlags(m_compressed_map_flags | (mIS_NEWER_THAN_PARK + mIS_VALID));
 		m_compressed_map_flags = ECompressedMapFlags(m_compressed_map_flags & ~mIN_SYNC_WITH_PARK);
 		m_compressed_map_flags = ECompressedMapFlags(m_compressed_map_flags & ~mNOT_SAVED_LOCAL);
+		#ifdef __PLAT_VITA__
+		{
+			CompressedMapHeader *p_header = (CompressedMapHeader *) mp_compressed_map_buffer;
+			VLOG("PARK", "charge : version %d (attendu %d), theme %d, x %d z %d w %d l %d, %d metas, %d gaps, joueurs max %d, nom '%.32s'",
+			     p_header->mVersion, (int) VERSION, p_header->mTheme, p_header->mX, p_header->mZ,
+			     p_header->mW, p_header->mL, p_header->mNumMetas, p_header->mNumGaps,
+			     GetGenerator()->GetMaxPlayers(), p_header->mParkName);
+		}
+		#endif
 	}	
 }
 
@@ -2706,6 +2728,11 @@ bool CParkManager::EnoughMemoryToResize(GridDims new_dims)
 
 	if (new_num_tiles - current_num_tiles > GetGenerator()->GetResourceSize("max_dma_pieces") - GetDMAPieceCount())
 	{
+		#ifdef __PLAT_VITA__
+		VLOG("PARK", "resize %dx%d -> %dx%d REFUSE : pieces DMA %d + %d tuiles > max_dma_pieces %d",
+		     m_park_near_bounds.GetW(), m_park_near_bounds.GetL(), new_dims.GetW(), new_dims.GetL(),
+		     GetDMAPieceCount(), new_num_tiles - current_num_tiles, GetGenerator()->GetResourceSize("max_dma_pieces"));
+		#endif
 		return false;
 	}
 		
@@ -2713,6 +2740,13 @@ bool CParkManager::EnoughMemoryToResize(GridDims new_dims)
 	int main_add_amount = (new_num_tiles - current_num_tiles) * mp_generator->GetResourceSize("floor_piece_size_main");
 
 	CParkGenerator::MemUsageInfo usage_info = mp_generator->GetResourceUsageInfo();
+	#ifdef __PLAT_VITA__
+	VLOG("PARK", "resize %dx%d -> %dx%d : pieces DMA %d/%d, park besoin %d libre %d, main besoin %d libre %d -> %s",
+	     m_park_near_bounds.GetW(), m_park_near_bounds.GetL(), new_dims.GetW(), new_dims.GetL(),
+	     GetDMAPieceCount(), GetGenerator()->GetResourceSize("max_dma_pieces"),
+	     park_add_amount, usage_info.mParkHeapFree, main_add_amount, usage_info.mMainHeapFree,
+	     (usage_info.mParkHeapFree < park_add_amount || usage_info.mMainHeapFree < main_add_amount) ? "REFUSE" : "ok");
+	#endif
 	if (usage_info.mParkHeapFree < park_add_amount) 
 	{
 		Ryan("not enough memory for resize on park heap, need %d, have %d\n", park_add_amount, usage_info.mParkHeapFree);

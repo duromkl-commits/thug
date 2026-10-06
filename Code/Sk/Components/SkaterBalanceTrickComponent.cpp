@@ -15,6 +15,11 @@
 #include <gel/scripting/struct.h>
 #include <gel/scripting/symboltable.h>
 
+#ifdef __PLAT_VITA__
+#include "vita_log.h"
+extern int g_vita_trace_trk;	// trickcomponent.cpp, issue #6 (« trk 1 »)
+#endif
+
 namespace Obj
 {
 
@@ -171,6 +176,12 @@ CBaseComponent::EMemberFunctionResult CSkaterBalanceTrickComponent::CallMemberFu
 			// a balance trick from another balance trick where there is no StopBalanceTrick script command in between.
 			if (mBalanceTrickType == NewBalanceTrickType) break;
 			mBalanceTrickType = NewBalanceTrickType;
+#ifdef __PLAT_VITA__
+			// #6 : Manual = 0xef24413b, NoseManual = 0x0ac90769 (trk 1).
+			if( g_vita_trace_trk )
+				VLOG( "TRK", "equilibre DEBUT type 0x%08x t=%u", (unsigned)NewBalanceTrickType,
+				      (unsigned)Tmr::GetTime());
+#endif
 			
 			bool DoFlipCheck = pParams->ContainsFlag(CRCD(0x1304e677, "DoFlipCheck"));
 			bool PlayRangeAnimBackwards = pParams->ContainsFlag(CRCD(0x8fe31ed, "PlayRangeAnimBackwards"));
@@ -504,6 +515,11 @@ void CSkaterBalanceTrickComponent::ClearBalanceParameters (   )
 
 void CSkaterBalanceTrickComponent::stop_balance_trick (   )
 {
+#ifdef __PLAT_VITA__
+	if( g_vita_trace_trk && mBalanceTrickType )
+		VLOG( "TRK", "equilibre FIN type 0x%08x t=%u", (unsigned)mBalanceTrickType,
+		      (unsigned)Tmr::GetTime());
+#endif
 	// Stops doing any balance trick.
 	// Called when going into the lip state, and also called by the StopBalanceTrick script command.
 	mManual.Stop();	

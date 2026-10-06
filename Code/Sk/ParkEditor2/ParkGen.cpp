@@ -27,6 +27,11 @@
 #include <gfx/NxGeom.h>
 #include <gfx/NxScene.h>
 #include <sk/heap_sizes.h>
+#ifdef __PLAT_VITA__
+#include <malloc.h>
+#include <psp2/kernel/processmgr.h>
+extern "C" int _newlib_heap_size_user;	// vita/src/vita_runtime.cpp
+#endif
 
 //#define	DEBUG_RESTARTS
 
@@ -525,6 +530,68 @@ CParkGenerator::MemUsageInfo CParkGenerator::GetResourceUsageInfo(bool printInfo
 {
 	Dbg_Assert(mp_mem_heap);
 	Dbg_Assert(this);
+
+#if defined(__PLAT_VITA__) && !defined(KISAK_ORIGINAL_ALLOCATOR)
+	// [VERIFIE sur le code] Issue #5. Sans l'allocateur d'origine, les tas
+	// lus plus bas sont les bouchons de memman.h : mFreeMem.m_count = 0,
+	// MemAvailable() = INT_MAX/2, LargestFreeBlock() = 1. Avec les valeurs
+	// XBox de Ed_Resources_Info (main_heap_pad -994112, 2 joueurs ->
+	// main_padding_size = 145888 > 1), le test "tas fragmente" est TOUJOURS
+	// vrai et ramene mMainHeapFree a LargestFreeBlock() = 1 ; avec un theme
+	// autre que Suburbia, theme_pad le rend negatif. D'ou :
+	//  - EnoughMemoryToResize : 1 < delta_tuiles * floor_piece_size_main
+	//    (1400) -> agrandir echoue toujours, reduire (delta < 0) passe ;
+	//  - ParkEd::Update : m_pct_resources_used = 1 - mMainHeapFree /
+	//    main_heap_base -> 1.0 des que le theme != 0 -> IsParkFull() vrai :
+	//    plus aucune piece posable dans les parcs a theme (6 des 9 parcs
+	//    tout faits) ;
+	//  - m_last_main_heap_free jamais mis a jour -> copier/coller refuse.
+	// Ici la memoire reelle est le tas newlib (192 Mo). On garde le budget
+	// d'origine (main_heap_base / park_heap_base : la jauge part de 0 % pour
+	// un parc vide comme sur XBox) et on ne le reduit que si le tas reel
+	// descend sous ce budget, marge de securite deduite.
+	{
+		enum { MARGE_TAS = 32 * 1024 * 1024 };
+		static SceUInt64 s_t_mesure = 0;
+		static int s_utilise = 0;
+		SceUInt64 t = sceKernelGetProcessTimeWide();
+		// mallinfo parcourt les listes libres : une mesure par demi-seconde
+		// suffit (appele a chaque image par CParkEditor::Update).
+		if (s_t_mesure == 0 || t - s_t_mesure > 500000)
+		{
+			struct mallinfo mi = mallinfo();
+			s_utilise = (int) mi.uordblks;
+			s_t_mesure = t;
+		}
+		int reel_libre = _newlib_heap_size_user - s_utilise - MARGE_TAS;
+		int base_main = GetResourceSize("main_heap_base");
+		int base_park = GetResourceSize("park_heap_base");
+
+		if (m_mem_usage_info.mMainHeapUsed != s_utilise)
+		{
+			m_mem_usage_info.mLastMainUsed = m_mem_usage_info.mMainHeapUsed;
+		}
+		m_mem_usage_info.mMainHeapUsed = s_utilise;
+		m_mem_usage_info.mMainHeapFree = (reel_libre < base_main) ? reel_libre : base_main;
+		m_mem_usage_info.mParkHeapUsed = 0;
+		m_mem_usage_info.mParkHeapFree = (reel_libre < base_park) ? reel_libre : base_park;
+		m_mem_usage_info.mIsFragmented = false;
+		m_mem_usage_info.mTotalClonedPieces = m_num_cloned_pieces;
+		m_mem_usage_info.mTotalRailPoints = m_total_rail_points;
+		m_mem_usage_info.mTotalLinkedRailPoints = m_total_rail_linked_points;
+
+		static int s_libre_trace = -1;
+		if (printInfo || m_mem_usage_info.mMainHeapFree != s_libre_trace)
+		{
+			s_libre_trace = m_mem_usage_info.mMainHeapFree;
+			VLOG("PARK", "memoire : tas newlib utilise %d Ko / %d Ko, libre editeur main %d (base %d) park %d (base %d), joueurs max %d",
+			     s_utilise >> 10, _newlib_heap_size_user >> 10,
+			     m_mem_usage_info.mMainHeapFree, base_main,
+			     m_mem_usage_info.mParkHeapFree, base_park, m_max_players);
+		}
+		return m_mem_usage_info;
+	}
+#endif
 	
 	//int base_park_heap = 0;
 	//int max_base_park_heap = 0;

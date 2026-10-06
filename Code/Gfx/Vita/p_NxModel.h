@@ -27,6 +27,7 @@
 namespace NxVita
 {
 	struct SVitaSceneGeom;
+	struct SVitaSommets;		// p_world_render.h (#5)
 	// Incremente a chaque TRANSITION d'etat actif d'un geom : le rendu du
 	// decor s'en sert pour savoir que ses plages sont inchangees (issue #18).
 	extern unsigned int g_vita_gen_actif;
@@ -199,6 +200,27 @@ struct SGpuMesh
 	unsigned char	add_uvw;
 	unsigned char	add_locked;
 	float			add_uvw_par[8];
+
+	// MATRICE D'UV DU CAS (issue #16) : position, echelle et rotation des
+	// tatouages, logos de t-shirt et graphismes de planche. [SOURCE]
+	// ModelBuilder.cpp:857 geom_set_uv_offset -> CModel::SetUVMatrix ->
+	// XBox/p_NxGeom.cpp:1131 plat_set_uv_matrix, applique par le vertex shader
+	// *_UVTransform (XBox/NX/material.cpp:431) : u' = m00 u + m10 v + m30,
+	// v' = m01 u + m11 v + m31. Ici on recalcule le uvbo de la piece depuis
+	// ses UV d'origine, gardees cote CPU (pieces skinnees seulement) : tous
+	// les chemins de dessin (shader vitaGL, GXM direct, reportes) en profitent
+	// sans toucher aux shaders. uvm_nom : NOM du materiau ; uvm_passe : passe
+	// du materiau que porte la piece (0 base, 1 decalque #55).
+	float		   *p_uv_src;
+	unsigned int	uvm_nom;
+	unsigned char	uvm_passe;
+	// uvbo actuellement transforme (matrice != identite) et derniere matrice
+	// posee (m00 m01 m30 m31) : trace sans doublon, et retour aux UV
+	// d'origine quand le modele est reconstruit (reset CAS : le maillage vient
+	// du gestionnaire d'assets et survit a la reconstruction ; avec
+	// use_default_uv, geom_set_uv_offset ne rappelle pas SetUVMatrix).
+	unsigned char	uvm_actif;
+	float			uvm_m[4];
 };
 
 // Une entree CAS designe UN triangle a retirer quand le masque correspond.
@@ -320,7 +342,8 @@ public:
 	              mp_vita_modele( NULL ), mp_vita_pose_os( NULL ), m_vita_pose_nos( 0 ),
 	              m_vita_pose_image( 0 ), m_vita_rejeu_image( 0 ), m_vita_pose_ok( false ), m_vita_pose_inscrit( false ), m_vita_os_vus( false ),
 	              m_vita_scene( -1 ), m_vita_bbox_ok( false ),
-	              mp_vita_lum( NULL ), m_vita_lum_n( 0 ), mp_vita_lum_mesh( NULL )
+	              mp_vita_lum( NULL ), m_vita_lum_n( 0 ), mp_vita_lum_mesh( NULL ),
+	              m_vita_expose( false ), mp_vita_sommets( NULL )
 	{
 		m_vita_rgba[0] = m_vita_rgba[1] = m_vita_rgba[2] = m_vita_rgba[3] = 1.0f;
 		m_vita_color = Image::RGBA( 0x80, 0x80, 0x80, 0x80 );
@@ -373,6 +396,13 @@ public:
 
 	CVitaMesh *	Mesh() const	{ return mp_mesh; }
 
+	// #5 : sommets de rendu des secteurs, sur DEMANDE (rails et poteaux de
+	// l'editeur de parc, RailEditorComponent). Les autres geoms gardent le
+	// comportement #56 (aucun sommet expose) : FakeLights et l'eclairage des
+	// pieces de parc ne doivent pas se mettre a tout recalculer.
+	void			VitaExposerSommets()			{ m_vita_expose = true; }
+	const NxVita::SVitaSommets *	VitaSommets() const	{ return mp_vita_sommets; }
+
 private:
 	virtual bool plat_load_geom_data( CMesh *pMesh, CModel *pModel,
 	                                  bool color_per_material );
@@ -401,6 +431,10 @@ private:
 	// raison de le supposer bon. Cette trace le dira au moment ou une mission
 	// reclamera ses barrieres.
 	virtual bool	plat_set_material_color( uint32 mat_checksum, int pass, Image::RGBA rgba );
+	// Issue #16 : la version de base est un STUB (NxGeom.cpp:488) -- les
+	// tatouages et logos du CAS restaient a leur place par defaut.
+	virtual bool	plat_set_uv_matrix( uint32 mat_checksum, int pass, const Mth::Matrix &mat );
+	void			restaurer_uv_cas();
 	virtual void	plat_set_active( bool active )
 	{
 		if( active != m_vita_active )
@@ -461,10 +495,12 @@ private:
 	// sommet expose, rien n'est reeclaire), sans impression.
 	virtual int		plat_get_num_render_polys()				{ return 0; }
 	virtual int		plat_get_num_render_base_polys()		{ return 0; }
-	virtual int		plat_get_num_render_verts()				{ return 0; }
-	virtual void	plat_get_render_verts( Mth::Vector * )	{}
-	virtual void	plat_get_render_colors( Image::RGBA * )	{}
-	virtual void	plat_set_render_verts( Mth::Vector * )	{}
+	// #5 : reels pour un geom de secteur expose (VitaExposerSommets), 0 sinon.
+	virtual int		plat_get_num_render_verts();
+	virtual void	plat_get_render_verts( Mth::Vector *p_verts );
+	virtual void	plat_get_render_colors( Image::RGBA *p_colors );
+	virtual void	plat_set_render_verts( Mth::Vector *p_verts );
+	NxVita::SVitaSommets *	vita_sommets();
 	virtual void	plat_set_render_colors( Image::RGBA * )	{}
 
 	virtual void				plat_set_world_position( const Mth::Vector &pos );
@@ -532,6 +568,9 @@ private:
 	int				m_vita_lum_n;
 	const CVitaMesh *	mp_vita_lum_mesh;
 	void			liberer_lum();
+	// #5 : voir VitaExposerSommets.
+	bool			m_vita_expose;
+	NxVita::SVitaSommets *	mp_vita_sommets;
 };
 
 

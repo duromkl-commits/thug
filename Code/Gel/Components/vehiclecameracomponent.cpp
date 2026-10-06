@@ -20,6 +20,15 @@
 #include <gel/scripting/script.h>
 #include <gel/scripting/struct.h>
 
+#ifdef __PLAT_VITA__
+#include <sk/engine/feeler.h>
+#include <gfx/camera.h>
+#include <gfx/nxviewman.h>
+#include <gfx/nxviewport.h>
+#include "vita_log.h"
+namespace Obj { extern int g_vita_veh_log; }	// "vlg 0/1", vehiclecomponent.cpp
+#endif
+
 #define MESSAGE(a) { printf("M:%s:%i: %s\n", __FILE__ + 15, __LINE__, a); }
 #define DUMPI(a) { printf("D:%s:%i: " #a " = %i\n", __FILE__ + 15, __LINE__, a); }
 #define DUMPB(a) { printf("D:%s:%i: " #a " = %s\n", __FILE__ + 15, __LINE__, a ? "true" : "false"); }
@@ -169,6 +178,58 @@ void CVehicleCameraComponent::Update()
 	);
 	
 	apply_state();
+
+#ifdef __PLAT_VITA__
+	// Issue #14 (camera de conduite " trop basse "), mesure sous " vlg 1 ".
+	// Lecture du source : la camera se pose a offset_height au-dessus de
+	// GetPos() du vehicule (point le plus bas des colliders, Finalize), a
+	// offset_distance derriere, et regarde a l'HORIZONTALE (Y = 0,1,0, pas
+	// d'inclinaison ; 'angle' = roulis). Parametres du qb.prx XBox identiques
+	// au source (55 / 240 / 0). Ce journal dit ce qui differe a l'execution :
+	// parametres lus, hauteur reelle de la camera au-dessus de la voiture et
+	// du sol, garde au sol de la voiture, recul apres collision, champ.
+	if (g_vita_veh_log)
+	{
+		static int s_n = 0;
+		if (++s_n >= 30)
+		{
+			s_n = 0;
+			const Mth::Vector& sp = mp_subject->GetPos();
+			const float dx = m_pos[X] - sp[X];
+			const float dz = m_pos[Z] - sp[Z];
+
+			CFeeler feeler;
+			feeler.SetIgnore(mFD_NON_COLLIDABLE, 0);
+			float sol_voiture = -1.0f;
+			float sol_camera = -1.0f;
+			if (feeler.GetCollision(sp + Mth::Vector(0.0f, 60.0f, 0.0f), sp - Mth::Vector(0.0f, 600.0f, 0.0f), false))
+			{
+				sol_voiture = sp[Y] - feeler.GetPoint()[Y];
+			}
+			if (feeler.GetCollision(m_pos, m_pos - Mth::Vector(0.0f, 1200.0f, 0.0f), false))
+			{
+				sol_camera = m_pos[Y] - feeler.GetPoint()[Y];
+			}
+
+			Gfx::Camera* p_actif = Nx::CViewportManager::sGetActiveCamera(0);
+			Gfx::Camera* p_moi = GetCameraComponentFromObject(GetObject())->GetCamera();
+			Nx::CViewport* p_vp = Nx::CViewportManager::sGetActiveViewport(0);
+
+			// Les modeles sont dessines pendant la logique (CModelComponent::
+			// Update), avec la vue figee au PREMIER modele de l'image
+			// (p_world_render.cpp RefreshViewFromCamera), donc AVANT que cette
+			// camera (priorite -1000, mise a jour en dernier) ait bouge. La
+			// voiture est donc vue depuis la camera de l'image precedente :
+			// " avance " = de combien elle est en avant de sa place XBox.
+			VLOG("VEH", "camera : hauteur %.1f (script %.1f) recul %.1f (script %.1f) angle %.1f | camera-sol %.1f, voiture-sol %.1f | avance %.1f | hfov %.1f aspect %.3f | active %d",
+				m_pos[Y] - sp[Y], m_offset_height, sqrtf(dx * dx + dz * dz), m_offset_distance, m_angle,
+				sol_camera, sol_voiture,
+				mp_subject_vehicle_component->GetVel().Length() * Tmr::FrameLength(),
+				p_moi ? p_moi->GetAdjustedHFOV() : -1.0f, p_vp ? p_vp->GetAspectRatio() : -1.0f,
+				(int)(p_actif == p_moi));
+		}
+	}
+#endif
 }
 
 /******************************************************************/

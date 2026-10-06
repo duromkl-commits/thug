@@ -70,6 +70,13 @@ int SceneMondeCourante( void );
 // CVitaGeom::plat_set_color). neutre = 0x80/0x81 : couleurs d'origine.
 void TeinterSecteur( unsigned int checksum, const unsigned char rgb[3], bool neutre );
 void TeinteSceneReappliquer( void );
+// Issue #15 : bilan par image du cout de la teinte (p_nx.cpp, acc_bilan) ;
+// " tix 0..3 " : parcours complet / index / index etale (defaut) / tout etale.
+void TeinteSceneBilanImage( void );
+extern int  g_vita_teinte_index;
+// " tbu N " : budget de l'etalement en ms par image ; " tvn 0/1 " : NEON.
+extern int  g_vita_teinte_budget_us;
+extern bool g_vita_teinte_neon;
 extern bool g_vita_teinte_scene;
 extern bool g_vita_ignore_vertex_alpha;
 // Tri par profondeur des translucides que le materiau marque « tries »
@@ -154,6 +161,25 @@ bool RefreshViewFromCamera( void );
 // A appeler en DEBUT de frame : invalide la vue figee, pour que le premier
 // modele rendu la recalcule -- une seule vue par frame pour tous.
 void BeginRenderFrame( void );
+
+// Sommets de rendu d'un secteur du decor (#5, rails et poteaux de l'editeur
+// de parc). Ordre XBox : maillages du secteur dans l'ordre du fichier, et pour
+// chacun ses sommets UTILISES par ordre croissant -- [SOURCE] XBox/NX/mesh.cpp
+// :1120-1153 (sMesh::Initialize) et XBox/p_NxGeom.cpp:770 (concatenation).
+// Une ecriture donne au geom des tampons de positions PRIVES (positions
+// finales, dessinees sans matrice de placement) ; les autres clones gardent
+// le maillage source partage (#56).
+struct SVitaSommets;
+SVitaSommets *	VitaSommetsCreer( unsigned int cs, int scene );
+void			VitaSommetsDetruire( SVitaSommets *s );
+int				VitaSommetsNombre( const SVitaSommets *s );
+bool			VitaSommetsPrives( const SVitaSommets *s );
+// out : 3 flottants par sommet. Sans positions privees : R x source + pos,
+// R = quarts de tour (rot), comme le dessin des clones.
+void			VitaSommetsLire( const SVitaSommets *s, int rot, const float *pos, float *out );
+void			VitaSommetsEcrire( SVitaSommets *s, const float *in );
+// Tampon prive du maillage mesh_no, 0 s'il n'y en a pas.
+unsigned int	VitaSommetsVbo( const SVitaSommets *s, unsigned short mesh_no );
 
 } // namespace NxVita
 

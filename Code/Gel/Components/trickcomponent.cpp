@@ -34,6 +34,26 @@
 #include <sk/components/skaterstatecomponent.h>
 #include <sk/components/skaterruntimercomponent.h>
 
+#ifdef __PLAT_VITA__
+#include <sk/objects/skatercareer.h>
+#include "vita_log.h"
+// ISSUE PUBLIQUE #6 « Can't manual » : trace du chemin complet d'un manual,
+// muette par defaut, armee par la commande « trk 1 » (p_siodev.cpp).
+//   [TRK] +Up / +Down ...      evenements de direction ENREGISTRES (ou ignores)
+//   [TRK] SetManualTricks ...  tableaux de manuals armes par les scripts
+//   [TRK] manual en file ...   un declencheur InOrder Up,Down a ete reconnu
+//   [TRK] manual declenche     DoNextManualTrick l'a lance
+//   [TRK] equilibre ...        le skater est entre (ou sorti) en manual
+// La premiere etape qui manque dans le journal designe la cause.
+int g_vita_trace_trk = 0;
+static const char *trk_nom_direction( uint Button )
+{
+	static const char *s_noms[9] = { "?", "Up", "Down", "Left", "Right",
+	                                 "UpLeft", "UpRight", "DownLeft", "DownRight" };
+	return ( Button <= PAD_DR ) ? s_noms[Button] : "?";
+}
+#endif
+
 namespace Obj
 {
 
@@ -579,6 +599,11 @@ void CTrickComponent::ButtonRecord(uint Button, bool Pressed)
 		}
 		else
 		{
+#ifdef __PLAT_VITA__
+			if( g_vita_trace_trk && ( Button <= PAD_DR ) && ( mButtonState[Button] != Pressed ))
+				VLOG( "TRK", "%c%s IGNORE (anti-rebond) t=%u", Pressed ? '+' : '-',
+				      trk_nom_direction( Button ), (unsigned)Tmr::GetTime());
+#endif
 			return;
 		}
 	}
@@ -601,9 +626,19 @@ void CTrickComponent::ButtonRecord(uint Button, bool Pressed)
 	{
 		if (ButtonChecksum==mpButtonsToIgnore[i])
 		{
+#ifdef __PLAT_VITA__
+			if( g_vita_trace_trk && ( Button <= PAD_DR ))
+				VLOG( "TRK", "%c%s IGNORE (boutons d'equilibre) t=%u", Pressed ? '+' : '-',
+				      trk_nom_direction( Button ), (unsigned)Tmr::GetTime());
+#endif
 			return;
 		}
 	}
+#ifdef __PLAT_VITA__
+	if( g_vita_trace_trk && ( Button <= PAD_DR ))
+		VLOG( "TRK", "%c%s t=%u", Pressed ? '+' : '-', trk_nom_direction( Button ),
+		      (unsigned)Tmr::GetTime());
+#endif
 			
 	// Generate an event.
 	if (Pressed)
@@ -2204,6 +2239,12 @@ void CTrickComponent::TriggerAnyManualTrick(Script::CStruct *pExtraParams)
 	
 	if (mGotManualTrick)
 	{
+#ifdef __PLAT_VITA__
+		if( g_vita_trace_trk )
+			VLOG( "TRK", "manual declenche : tableau 0x%08x #%d t=%u",
+			      (unsigned)mManualTrick.ArrayChecksum, mManualTrick.Index,
+			      (unsigned)Tmr::GetTime());
+#endif
 		// Now that the trick is being done, remove it.
 		// Removing it before changing the script rather than after to
 		// prevent any possibility of infinite recursion.
@@ -2338,6 +2379,12 @@ void CTrickComponent::CheckManualTrickArray(uint32 ArrayChecksum, uint32 IgnoreM
 					mManualTrick.UseSpecialTrickText=UseSpecialTrickText;
 					pStruct->GetInteger(0x79a07f3f/*Duration*/,(int*)&mManualTrick.Duration);
 					mGotManualTrick=true;
+#ifdef __PLAT_VITA__
+					if( g_vita_trace_trk )
+						VLOG( "TRK", "manual en file : tableau 0x%08x #%d duree %u t=%u",
+						      (unsigned)ArrayChecksum, t, (unsigned)mManualTrick.Duration,
+						      (unsigned)Tmr::GetTime());
+#endif
 				}
 			}	
 		}
@@ -2383,6 +2430,10 @@ void CTrickComponent::MaybeExpireManualTrick()
 	{
 		if (Tmr::ElapsedTime(mManualTrick.Time)>mManualTrick.Duration)
 		{
+#ifdef __PLAT_VITA__
+			if( g_vita_trace_trk )
+				VLOG( "TRK", "manual EXPIRE sans etre declenche (%u ms)", (unsigned)mManualTrick.Duration );
+#endif
 			mGotManualTrick=false;
 		}	
 	}	
@@ -3343,6 +3394,22 @@ CBaseComponent::EMemberFunctionResult CTrickComponent::CallMemberFunction( uint3
 			// Set any special manual tricks array required.
 			mSpecialManualTricksArrayChecksum=0;
 			pParams->GetChecksum(CRCD(0xb394c01c,"Special"),&mSpecialManualTricksArrayChecksum);
+#ifdef __PLAT_VITA__
+			// GroundManualTricks = 0x7704fb58, ManualTricks = 0xd6db8a01.
+			// Drapeau 227 = FLAG_EXPERT_MODE_NO_MANUALS (global_flags.q:401) :
+			// a 1, les scripts n'arment jamais ces tableaux (tricks.q:346).
+			if( g_vita_trace_trk )
+			{
+				Mdl::Skate *p_skate = Mdl::Skate::Instance();
+				Obj::CSkaterCareer *p_career = p_skate ? p_skate->GetCareer() : NULL;
+				VLOG( "TRK", "SetManualTricks : %d tableau(x) [0x%08x 0x%08x] special=0x%08x | NO_MANUALS(227)=%d",
+				      mNumManualTrickArrays,
+				      mNumManualTrickArrays > 0 ? (unsigned)mpManualTrickArrays[0] : 0u,
+				      mNumManualTrickArrays > 1 ? (unsigned)mpManualTrickArrays[1] : 0u,
+				      (unsigned)mSpecialManualTricksArrayChecksum,
+				      p_career ? (int)p_career->GetGlobalFlag( 227 ) : -1 );
+			}
+#endif
 			break;
 		}
 				

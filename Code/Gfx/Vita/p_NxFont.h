@@ -111,6 +111,10 @@ namespace NxVita
 // des textes inscrits, croissantes (#54).
 void RenderText2D( float pri );
 int  TextePriorites( float *p_out, int max );
+// Issue #17 : lots de glyphes (" xgl 0/1 ") et compteurs de l'image.
+extern int g_vita_lots_glyphes;
+extern int g_vita_2d_glyphes;
+extern int g_vita_2d_appels_txt;
 void JournaliserTextes( void );
 
 } // namespace NxVita

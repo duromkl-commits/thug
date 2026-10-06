@@ -41,6 +41,21 @@
 
 #include <core/math/slerp.h>
 
+#ifdef __PLAT_VITA__
+#include "vita_log.h"
+
+namespace Obj
+{
+	// "vss 0/1" (issue #13) : sous-pas de la physique des vehicules des que
+	// l'image depasse 1/60 s (1, defaut) ; 0 = regle d'origine (sous-pas
+	// seulement au-dela de 1/30 s).
+	int g_vita_veh_sous_pas = 1;
+	// "vlg 0/1" (issues #13 / #14) : journal [VEH] periodique du vehicule
+	// conduit et de sa camera.
+	int g_vita_veh_log = 0;
+}
+#endif
+
 #define MESSAGE(a) { printf("M:%s:%i: %s\n", __FILE__ + 15, __LINE__, a); }
 #define DUMPI(a) { printf("D:%s:%i: " #a " = %i\n", __FILE__ + 15, __LINE__, a); }
 #define DUMPF(a) { printf("D:%s:%i: " #a " = %g\n", __FILE__ + 15, __LINE__, a); }
@@ -672,6 +687,35 @@ void CVehicleComponent::Update()
 	
 	// the physics is unstable at low frame rates, so we take multiple physics steps during long frame; if vehicle physics is a significant fraction
 	// of CPU time, this could exacerbate whatever frame rate problems are occuring
+#ifdef __PLAT_VITA__
+	// Issue #13 (conduite plus saccadee que sur XBox). Le seuil d'origine
+	// (1/30 s) suppose la cadence XBox : 60 images/s verrouillees, donc un pas
+	// de 1/60 s presque toujours (XBox/p_timer.cpp compte des vsync entieres).
+	// Ici la cadence flotte entre 40 et 60 images/s et Tmr::FrameLength() est
+	// fractionnaire (Sys/Vita/p_timer.cpp) : TOUTE la plage 17-33 ms tombait
+	// dans le cas " un seul pas ", de 1,0 a 2,0 fois le pas pour lequel la
+	// voiture a ete reglee. Or ce modele est explicite et raide : ressorts de
+	// suspension et de caisse (body_spring), frottement des pneus qui monte
+	// lineairement depuis une vitesse de glissement nulle (amortisseur raide),
+	// couple d'arret en 1 / m_time_step (calculate_stopping_torque). Un pas
+	// 1,5 fois plus long y donne oscillations et tremblements -- ce que le
+	// commentaire d'origine ci-dessus appelle " unstable at low frame rates ".
+	//
+	// On garde donc le pas sous ~1/60 s : sous-pas des que l'image depasse
+	// 1,1/60 s (marge : a 60 images/s la duree lissee flotte autour de 1,00-
+	// 1,05 vsync, il ne faut pas doubler le cout pour rien). Meme plafond de
+	// 6 pas que l'original.
+	if (g_vita_veh_sous_pas && frame_length * 60.0f > 1.1f)
+	{
+		num_time_steps = static_cast< int >(ceilf(frame_length * 60.0f - 0.1f));
+		if (num_time_steps > 6)
+		{
+			num_time_steps = 6;
+		}
+		m_time_step = frame_length / num_time_steps;
+	}
+	else
+#endif
 	if (frame_length >= (1.0f / 30.0f))
 	{
 		num_time_steps = static_cast< int >(ceilf(frame_length / (1.0f / 60.0f)));
@@ -767,6 +811,41 @@ void CVehicleComponent::Update()
 	
 	// HACK: get player proximity checks, triggers, driving animations, and the like working
 	control_skater();
+
+#ifdef __PLAT_VITA__
+	// Mesure pour #13 / #14 (" vlg 1 ") : pas de temps reel, roues au sol,
+	// hauteur de caisse (y_offset moyen des roues, en pouces : plus petit =
+	// suspension plus enfoncee) et nombre de changements du nombre de roues
+	// au sol sur la fenetre (rebonds de suspension = tremblement).
+	if (g_vita_veh_log)
+	{
+		static int s_n = 0;
+		static int s_bascules = 0;
+		static int s_contact_prec = -1;
+		static float s_dt_min = 1.0f, s_dt_max = 0.0f;
+		if (s_contact_prec >= 0 && s_contact_prec != m_num_wheels_in_contact)
+			++s_bascules;
+		s_contact_prec = m_num_wheels_in_contact;
+		if (m_time_step < s_dt_min) s_dt_min = m_time_step;
+		if (m_time_step > s_dt_max) s_dt_max = m_time_step;
+		if (++s_n >= 30)
+		{
+			float y_off = 0.0f;
+			for (int n = m_num_wheels; n--; )
+			{
+				y_off += mp_wheels[n].y_offset - mp_wheels[n].y_offset_hang;
+			}
+			y_off /= m_num_wheels;
+			VLOG("VEH", "image %.1f ms, %d pas de %.1f ms (min %.1f max %.1f) | roues au sol %d, bascules %d/30 | enfoncement %.2f in | pos y %.1f | vitesse %.0f in/s | rotvel %.3f",
+				frame_length * 1000.0f, num_time_steps, m_time_step * 1000.0f, s_dt_min * 1000.0f, s_dt_max * 1000.0f,
+				m_num_wheels_in_contact, s_bascules, y_off, m_pos[Y], m_vel.Length(), m_rotvel.Length());
+			s_n = 0;
+			s_bascules = 0;
+			s_dt_min = 1.0f;
+			s_dt_max = 0.0f;
+		}
+	}
+#endif
 }
 
 /******************************************************************/

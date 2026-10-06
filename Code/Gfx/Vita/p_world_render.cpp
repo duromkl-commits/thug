@@ -34,6 +34,8 @@ extern "C" void vita_memspy_niveau( void );
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdint.h>
+#include <arm_neon.h>	// teinte de scene (#15)
 
 #include "vita_log.h"
 #include "p_NxModel.h"
@@ -156,6 +158,9 @@ struct SWorldMesh
 	// peupler que de SES secteurs : la coquille de l'editeur de parc, chargee
 	// apres la bibliotheque de pieces, s'appropriait les secteurs de celle-ci.
 	unsigned short scene_no;
+	// Rang du maillage dans sa scene, donc ordre du fichier (#5) : sp_world est
+	// trie ensuite, et les sommets de rendu suivent l'ordre XBox des maillages.
+	unsigned short mesh_no;
 	// Scene DICTIONNAIRE (bibliotheque de pieces de l'editeur de parc) :
 	// jamais dessinee a sa place, seulement par ses clones.
 	// [SOURCE] XBox/NX/render.cpp:2474, render_scene : « Don't render
@@ -2186,6 +2191,7 @@ void AddSceneToWorld( SVitaSceneGeom *p_geom, Nx::CTexDict *p_tex_dict,
 		p_dst->sector_checksum = p_src->sector_checksum;
 		p_dst->p_sector_actif  = NULL;
 		p_dst->scene_no        = (unsigned short)s_scene_no;		// #65
+		p_dst->mesh_no         = (unsigned short)i;				// #5
 		p_dst->dico            = is_dictionary;
 		for( int k = 0; k < 6; ++k )
 			p_dst->sect_bb[k] = p_src->sector_bb[k];
@@ -2406,6 +2412,8 @@ static bool  s_cam_models_ok = false;
 int g_vita_cam_modeles = 1;
 // Matrice de vue complete utilisee par les modeles cette frame-ci.
 static float s_view_models[16];
+// Et la camera d'ou elle vient (orientation monde), pour les Element3d (#12).
+static Mth::Matrix s_cam_models_mat;
 // Projection x vue de l'image, pour le shader du decor (p_shader_decor.h).
 static float s_pv_shader[16];
 // Tampon « lot deja dessine a cette image » (passe translucide, issue #18).
@@ -2643,6 +2651,7 @@ bool RefreshViewFromCamera( void )
 	s_cam_models[0] = pos[0];
 	s_cam_models[1] = pos[1];
 	s_cam_models[2] = pos[2];
+	s_cam_models_mat = cm;
 	memcpy( s_view_models, v, sizeof( s_view_models ));
 	s_cam_models_ok = true;
 
@@ -2657,6 +2666,46 @@ bool RefreshViewFromCamera( void )
 	extract_frustum( pv );
 
 	s_frame_view_fresh = true;
+	return true;
+}
+
+
+// FLECHE D'OBJECTIF DECALEE (#12).
+//
+// CElement3d pose ses modeles (fleche de course/film, Create3dArrowPointer :
+// CameraZ=-6, soit 6 unites devant l'objectif) en espace CAMERA, d'apres la
+// camera active AU MOMENT de sa mise a jour : tache FrontEnd, priorite -2000,
+// donc APRES le gestionnaire d'objets composites (-900) qui a deplace la
+// camera du skater.
+//
+// Or decor et modeles ne sont pas dessines avec cette camera-la : la vue est
+// figee au PREMIER modele rendu de la frame (RefreshViewFromCamera), et la
+// camera est mise a jour ENTRE deux modeles. Le decor reprend cette vue figee
+// (RenderWorld, g_vita_cam_modeles). La fleche, placee avec la camera d'apres
+// le mouvement mais dessinee avec la vue d'avant, se decale de tout le
+// deplacement de camera de l'image -- enorme a 6 unites de l'objectif : elle
+// recule, rapetisse et derive des que le skater roule ou tourne.
+//
+// Sur XBox la question ne se pose pas : tout est dessine apres la logique,
+// avec la camera finale. Ici on rend a CElement3d la camera REELLEMENT
+// utilisee pour dessiner cette image, sous la meme condition que RenderWorld
+// (meme camera a moins de 100 unites, sinon camera active -- #65).
+//
+// Rend false si aucune vue n'est encore figee cette frame : le modele de
+// l'element la figera lui-meme avec la camera active, donc coherente.
+bool GetDisplayedCamera( Mth::Matrix *p_mat, Mth::Vector *p_pos )
+{
+	if( !s_frame_view_fresh || !s_cam_models_ok || !g_vita_cam_modeles )
+		return false;
+	Gfx::Camera *p_cam = Nx::CViewportManager::sGetActiveCamera( 0 );
+	if( !p_cam )
+		return false;
+	const Mth::Vector &cp = p_cam->GetPos();
+	const float dx = cp[0] - s_cam_models[0], dy = cp[1] - s_cam_models[1], dz = cp[2] - s_cam_models[2];
+	if(( dx * dx + dy * dy + dz * dz ) >= ( 100.0f * 100.0f ))
+		return false;
+	*p_mat = s_cam_models_mat;
+	p_pos->Set( s_cam_models[0], s_cam_models[1], s_cam_models[2], 0.0f );
 	return true;
 }
 
@@ -3906,6 +3955,10 @@ static void dessiner_instances( void )
 			continue;
 		}
 		const unsigned int cs = g->VitaSecteur();
+		// #5 : sommets prives (rail, poteau) = positions finales, sans
+		// matrice de placement, comme les sommets ecrits par XBox.
+		const SVitaSommets *sv = g->VitaSommets();
+		const bool prive = sv && VitaSommetsPrives( sv );
 		int lo = 0, hi = s_idx_sect_n;
 		while( lo < hi )
 		{
@@ -3946,7 +3999,7 @@ static void dessiner_instances( void )
 		// M : rotation Y par quarts de tour, puis translation (colonnes).
 		// Un quart de tour : (x, z) -> (z, -x)  [mesh.cpp:514].
 		float c = 1.0f, s = 0.0f;
-		switch( g->VitaRot())
+		switch( prive ? 0 : g->VitaRot())
 		{
 			case 1: c =  0.0f; s =  1.0f; break;
 			case 2: c = -1.0f; s =  0.0f; break;
@@ -3954,10 +4007,11 @@ static void dessiner_instances( void )
 			default: break;
 		}
 		const Mth::Vector &pos = g->VitaPos();
+		const float px = prive ? 0.0f : pos[X], py = prive ? 0.0f : pos[Y], pz = prive ? 0.0f : pos[Z];
 		const float M[16] = { c, 0.0f, -s, 0.0f,
 		                      0.0f, 1.0f, 0.0f, 0.0f,
 		                      s, 0.0f, c, 0.0f,
-		                      pos[X], pos[Y], pos[Z], 1.0f };
+		                      px, py, pz, 1.0f };
 		mat_mul( mvp, s_pv_shader, M );
 		}
 		if( !ouvert )
@@ -3985,6 +4039,12 @@ static void dessiner_instances( void )
 			}
 			SShaderMateriau m;
 			materiau_shader_prepare( p, &m );
+			if( sv )
+			{
+				const unsigned int v = VitaSommetsVbo( sv, p->mesh_no );
+				if( v )
+					m.vbo = v;
+			}
 			m.env = 0;
 			m.nbo = 0;
 			if( !p->cbo_brut )
@@ -4063,7 +4123,15 @@ static void dessiner_instances( void )
 // la derniere passe. Le masque alpha est TOUJOURS pose (texture et UV
 // presentes) : le test alpha a 1 de la reference ne depend pas du materiau,
 // et sur un translucide c'est lui qui evite d'ombrer les texels vides.
-int g_vita_ombre_transp = 0;	// "omt 0/1" (p_siodev.cpp) ; a 1 une fois valide a l'ecran
+//
+// Issue #8 (ombre absente sur certains sols) : par defaut a 1 depuis le
+// 2026-10-06. Mesure sur table (sol sous une grille de 100 unites autour des
+// points du banc, 9 niveaux) : la surface horizontale du dessus est un
+// translucide MATFLAG_TRANSPARENT -- sol lui-meme, ou calque coplanaire pose
+// sur un sol opaque, qui recouvre l'ombre recue dessous -- en 3 a 37 % des
+// points (SJ 37, SE 21, NJ 18, VC 15, NY 12, RU 12, HI 9). XBox y dessine
+// l'ombre (render.cpp:2793) ; "omt 0" ne l'y dessinait pas.
+int g_vita_ombre_transp = 1;	// "omt 0/1" (p_siodev.cpp)
 
 #define OMB_MAX_CAND 256
 static int s_omb_cand[OMB_MAX_CAND];
@@ -4137,9 +4205,15 @@ static void ombre_reception( bool translucides = false, int rang_transp = -1, in
 				continue;
 			if( p->is_sky || p->no_ombre || !p->vbo || !p->ibo || ( p->num_indices < 3 ))
 				continue;
-			// Meme classement que construire_listes : seuls les opaques.
+			// Meme classement que construire_listes : seuls les opaques. Issue
+			// #8 : y compris les opaques A MELANGE ("bop", #71), que
+			// construire_listes envoie dans la passe translucide. Recus ici,
+			// ils l'etaient AVANT d'etre dessines, et leur dessin effacait
+			// l'ombre ; ils la recoivent maintenant avec les translucides.
 			const bool translucide = !g_vita_force_opaque
-			    && ( g_vita_transp_flag ? (( p->mat_flags0 & 0x40 ) != 0 ) : ( p->blend != 0 ));
+			    && ( g_vita_transp_flag ? ((( p->mat_flags0 & 0x40 ) != 0 )
+			                               || ( g_vita_melange_opaques && melange_hors_drapeau( p->blend, p->mat_flags0 )))
+			                            : ( p->blend != 0 ));
 			if( translucide )
 				continue;
 			if( p->p_sector_actif && !*p->p_sector_actif )
@@ -4230,6 +4304,235 @@ static bool s_vcw_ecrit = false;		// des couleurs animees sont en place
 static inline unsigned char *vcw_donnees( GLuint nom )
 {
 	return nom ? *(unsigned char * const *)nom : NULL;
+}
+
+// --- Sommets de rendu des secteurs (#5), voir p_world_render.h --------------
+#define VS_MAX_MAILLAGES 16
+struct SVitaSommets
+{
+	unsigned int	cs;
+	int				scene;
+	int				n;				// sommets de rendu
+	unsigned short *p_mesh;		// mesh_no de chaque sommet de rendu
+	unsigned short *p_idx;		// son indice dans le tampon du secteur
+	int				nm;
+	unsigned short	mesh_no[VS_MAX_MAILLAGES];
+	GLuint			vbo[VS_MAX_MAILLAGES];	// prive, 0 tant que non ecrit
+	bool			prive;
+};
+
+// Maillage (cs, scene, mesh_no) du monde courant. Recherche lineaire : appele
+// a l'edition d'un rail, pas a chaque image.
+static const SWorldMesh *vs_maillage( unsigned int cs, int scene, unsigned short mesh_no )
+{
+	for( int i = 0; i < s_num_world; ++i )
+	{
+		const SWorldMesh *p = &sp_world[i];
+		if(( p->sector_checksum == cs ) && ( p->mesh_no == mesh_no ) && !p->is_sky
+		   && (( scene < 0 ) || ( p->scene_no == scene )))
+			return p;
+	}
+	return NULL;
+}
+
+SVitaSommets *VitaSommetsCreer( unsigned int cs, int scene )
+{
+	// Maillages du secteur, ranges dans l'ordre du fichier.
+	unsigned short nos[VS_MAX_MAILLAGES];
+	const SWorldMesh *mm[VS_MAX_MAILLAGES];
+	int nm = 0;
+	for( int i = 0; i < s_num_world; ++i )
+	{
+		const SWorldMesh *p = &sp_world[i];
+		if(( p->sector_checksum != cs ) || p->is_sky || (( scene >= 0 ) && ( p->scene_no != scene )))
+			continue;
+		if( nm >= VS_MAX_MAILLAGES )
+		{
+			static int s_tr_max = 0;	// plafonne : rappele a chaque image en edition de rail
+			if( s_tr_max++ < 4 )
+				VLOG( "PARK", "!! sommets %08x : plus de %d maillages", cs, VS_MAX_MAILLAGES );
+			return NULL;
+		}
+		int k = nm++;
+		while(( k > 0 ) && ( nos[k - 1] > p->mesh_no ))
+		{
+			nos[k] = nos[k - 1]; mm[k] = mm[k - 1]; --k;
+		}
+		nos[k] = p->mesh_no; mm[k] = p;
+	}
+	if( !nm )
+		return NULL;
+
+	// Sommets utilises par maillage, par ordre croissant.
+	int total = 0;
+	unsigned char *p_util[VS_MAX_MAILLAGES];
+	for( int k = 0; k < nm; ++k )
+	{
+		const SWorldMesh *p = mm[k];
+		const unsigned short *p_ind = (const unsigned short *)vcw_donnees( p->ibo );
+		p_util[k] = ( p->num_vertices > 0 ) ? (unsigned char *)calloc( p->num_vertices, 1 ) : NULL;
+		if( !p_ind || !p_util[k] || !vcw_donnees( p->vbo ))
+		{
+			static int s_tr_ill = 0;	// plafonne : rappele a chaque image en edition de rail
+			if( s_tr_ill++ < 4 )
+				VLOG( "PARK", "!! sommets %08x : maillage %d illisible (ibo %p, %d sommets)",
+				      cs, nos[k], (const void *)p_ind, p->num_vertices );
+			for( int j = 0; j <= k; ++j ) free( p_util[j] );
+			return NULL;
+		}
+		for( int i = 0; i < p->num_indices; ++i )
+			if( p_ind[i] < p->num_vertices )
+				p_util[k][p_ind[i]] = 1;
+		for( int v = 0; v < p->num_vertices; ++v )
+			total += p_util[k][v];
+	}
+
+	SVitaSommets *s = (SVitaSommets *)calloc( 1, sizeof( SVitaSommets ));
+	if( s && total )
+	{
+		s->p_mesh = (unsigned short *)malloc( sizeof( unsigned short ) * total );
+		s->p_idx  = (unsigned short *)malloc( sizeof( unsigned short ) * total );
+	}
+	if( !s || !total || !s->p_mesh || !s->p_idx )
+	{
+		if( s ) { free( s->p_mesh ); free( s->p_idx ); free( s ); }
+		for( int k = 0; k < nm; ++k ) free( p_util[k] );
+		return NULL;
+	}
+	s->cs = cs;
+	s->scene = scene;
+	s->nm = nm;
+	int r = 0;
+	for( int k = 0; k < nm; ++k )
+	{
+		s->mesh_no[k] = nos[k];
+		for( int v = 0; v < mm[k]->num_vertices; ++v )
+			if( p_util[k][v] )
+			{
+				s->p_mesh[r] = nos[k];
+				s->p_idx[r]  = (unsigned short)v;
+				++r;
+			}
+		free( p_util[k] );
+	}
+	s->n = r;
+	VLOG( "PARK", "sommets de rendu %08x (scene %d) : %d maillage(s), %d sommets", cs, scene, nm, r );
+	return s;
+}
+
+void VitaSommetsDetruire( SVitaSommets *s )
+{
+	if( !s )
+		return;
+	for( int k = 0; k < s->nm; ++k )
+		if( s->vbo[k] )
+			glDeleteBuffers( 1, &s->vbo[k] );
+	free( s->p_mesh );
+	free( s->p_idx );
+	free( s );
+}
+
+int VitaSommetsNombre( const SVitaSommets *s )
+{
+	return s ? s->n : 0;
+}
+
+bool VitaSommetsPrives( const SVitaSommets *s )
+{
+	return s && s->prive;
+}
+
+void VitaSommetsLire( const SVitaSommets *s, int rot, const float *pos, float *out )
+{
+	if( !s )
+		return;
+	// Positions privees : relues dans le tampon prive, telles qu'ecrites.
+	// Sinon la source, placee comme le dessin des clones (dessiner_instances).
+	float c = 1.0f, sn = 0.0f;
+	switch( s->prive ? 0 : ( rot & 3 ))
+	{
+		case 1: c =  0.0f; sn =  1.0f; break;
+		case 2: c = -1.0f; sn =  0.0f; break;
+		case 3: c =  0.0f; sn = -1.0f; break;
+		default: break;
+	}
+	const float px = s->prive ? 0.0f : pos[0], py = s->prive ? 0.0f : pos[1], pz = s->prive ? 0.0f : pos[2];
+	for( int k = 0; k < s->nm; ++k )
+	{
+		const float *p_src = NULL;
+		int nv = 0;
+		if( s->prive && s->vbo[k] )
+		{
+			p_src = (const float *)vcw_donnees( s->vbo[k] );
+			const SWorldMesh *p = vs_maillage( s->cs, s->scene, s->mesh_no[k] );
+			nv = p ? p->num_vertices : 0;
+		}
+		else
+		{
+			const SWorldMesh *p = vs_maillage( s->cs, s->scene, s->mesh_no[k] );
+			if( p ) { p_src = (const float *)vcw_donnees( p->vbo ); nv = p->num_vertices; }
+		}
+		for( int r = 0; r < s->n; ++r )
+		{
+			if( s->p_mesh[r] != s->mesh_no[k] )
+				continue;
+			float *o = out + 3 * r;
+			if( !p_src || ( s->p_idx[r] >= nv ))
+			{
+				o[0] = o[1] = o[2] = 0.0f;
+				continue;
+			}
+			const float *v = p_src + 3 * s->p_idx[r];
+			o[0] = c * v[0] + sn * v[2] + px;
+			o[1] = v[1] + py;
+			o[2] = -sn * v[0] + c * v[2] + pz;
+		}
+	}
+}
+
+void VitaSommetsEcrire( SVitaSommets *s, const float *in )
+{
+	if( !s )
+		return;
+	for( int k = 0; k < s->nm; ++k )
+	{
+		const SWorldMesh *p = vs_maillage( s->cs, s->scene, s->mesh_no[k] );
+		const float *p_src = p ? (const float *)vcw_donnees( p->vbo ) : NULL;
+		if( !p_src || ( p->num_vertices <= 0 ))
+			continue;
+		// Tampon complet du secteur (l'ibo l'indexe tel quel) : source pour
+		// les sommets non utilises, positions ecrites pour les autres.
+		float *tmp = (float *)malloc( sizeof( float ) * 3 * p->num_vertices );
+		if( !tmp )
+			continue;
+		memcpy( tmp, p_src, sizeof( float ) * 3 * p->num_vertices );
+		for( int r = 0; r < s->n; ++r )
+			if(( s->p_mesh[r] == s->mesh_no[k] ) && ( s->p_idx[r] < p->num_vertices ))
+			{
+				tmp[3 * s->p_idx[r] + 0] = in[3 * r + 0];
+				tmp[3 * s->p_idx[r] + 1] = in[3 * r + 1];
+				tmp[3 * s->p_idx[r] + 2] = in[3 * r + 2];
+			}
+		if( !s->vbo[k] )
+			glGenBuffers( 1, &s->vbo[k] );
+		// glBufferData remplace le stockage (l'ancien part au ramasse-miettes
+		// de vitaGL) : l'image en vol garde ses sommets.
+		glBindBuffer( GL_ARRAY_BUFFER, s->vbo[k] );
+		glBufferData( GL_ARRAY_BUFFER, sizeof( float ) * 3 * p->num_vertices, tmp, GL_STATIC_DRAW );
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		free( tmp );
+		s->prive = true;
+	}
+}
+
+unsigned int VitaSommetsVbo( const SVitaSommets *s, unsigned short mesh_no )
+{
+	if( !s || !s->prive )
+		return 0;
+	for( int k = 0; k < s->nm; ++k )
+		if( s->mesh_no[k] == mesh_no )
+			return s->vbo[k];
+	return 0;
 }
 
 static void vcw_couleur_seq( const SVitaVcw *w, int s, int maintenant, unsigned char out[4] )
@@ -4575,6 +4878,33 @@ static void facteur_teinte( const float c0[3], unsigned int flags0,
 
 // Sommets [premier, premier + nombre) du tampon `nom` = origine x f. La copie
 // d'origine (n_total sommets) est prise au premier besoin.
+//
+// Issue #15 : ce calcul porte sur TOUT le decor a chaque pas d'un changement
+// d'heure progressif (dynamic_tod, un pas toutes les 10 images) : 1,13 million
+// de sommets a NJ, 118 ms par pas mesures (~105 ns par sommet, quasi tout en
+// ecritures dans la memoire NON CACHEE des tampons, voir vcw_donnees).
+// D'ou : NEON, 4 sommets par ecriture de 16 octets alignee (facteurs sur 7
+// bits de fraction, arrondi et saturation par vqrshrn) quand les trois
+// facteurs sont < 2 -- le cas normal, c0 valant 0,5 le plus souvent ; sinon
+// virgule fixe 8.8 et une ecriture de 32 bits par sommet. Et l'etalement sur
+// plusieurs images (TeinteSceneAvancer, plus bas).
+static int s_teinte_sommets = 0;	// sommets recrits (bilan #15)
+
+static inline unsigned int teinte_sommet( const unsigned char *o, unsigned int fr,
+                                          unsigned int fg, unsigned int fb )
+{
+	unsigned int r = ( o[0] * fr + 128 ) >> 8;
+	unsigned int g = ( o[1] * fg + 128 ) >> 8;
+	unsigned int b = ( o[2] * fb + 128 ) >> 8;
+	if( r > 255 ) r = 255;
+	if( g > 255 ) g = 255;
+	if( b > 255 ) b = 255;
+	return r | ( g << 8 ) | ( b << 16 ) | ((unsigned int)o[3] << 24 );
+}
+
+// " tvn 0/1 " : chemin NEON (1, defaut) ou scalaire (0), pour la mesure.
+bool g_vita_teinte_neon = true;
+
 static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
                             int premier, int nombre, const float f[3] )
 {
@@ -4594,16 +4924,44 @@ static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
 		premier = 0;
 	if( premier + nombre > n_total )
 		nombre = n_total - premier;
-	const unsigned char *o = *pp_orig;
-	for( int v = premier; v < premier + nombre; ++v )
+	if( nombre <= 0 )
+		return;
+	s_teinte_sommets += nombre;
+	const unsigned int fr = (unsigned int)( f[0] * 256.0f + 0.5f );
+	const unsigned int fg = (unsigned int)( f[1] * 256.0f + 0.5f );
+	const unsigned int fb = (unsigned int)( f[2] * 256.0f + 0.5f );
+	const unsigned char *o = *pp_orig + 4 * premier;
+	unsigned int *w = (unsigned int *)( d + 4 * premier );
+	int v = 0;
+	// Facteurs sur 7 bits de fraction : NEON si tous tiennent sur un octet.
+	const unsigned int f7r = (unsigned int)( f[0] * 128.0f + 0.5f );
+	const unsigned int f7g = (unsigned int)( f[1] * 128.0f + 0.5f );
+	const unsigned int f7b = (unsigned int)( f[2] * 128.0f + 0.5f );
+	if( g_vita_teinte_neon && ( f7r <= 255 ) && ( f7g <= 255 ) && ( f7b <= 255 ))
 	{
-		for( int k = 0; k < 3; ++k )
+		// Tete scalaire jusqu'a une adresse de destination alignee sur 16.
+		while(( v < nombre ) && ((uintptr_t)( w + v ) & 15 ))
 		{
-			const int e = (int)(( (float)o[v * 4 + k] * f[k] ) + 0.5f );
-			d[v * 4 + k] = ( e > 255 ) ? 255 : (unsigned char)e;
+			w[v] = teinte_sommet( o + 4 * v, fr, fg, fb );
+			++v;
 		}
-		d[v * 4 + 3] = o[v * 4 + 3];
+		const uint8_t fac[16] = { (uint8_t)f7r, (uint8_t)f7g, (uint8_t)f7b, 128,
+		                          (uint8_t)f7r, (uint8_t)f7g, (uint8_t)f7b, 128,
+		                          (uint8_t)f7r, (uint8_t)f7g, (uint8_t)f7b, 128,
+		                          (uint8_t)f7r, (uint8_t)f7g, (uint8_t)f7b, 128 };
+		const uint8x16_t vf = vld1q_u8( fac );
+		const uint8x8_t vf_lo = vget_low_u8( vf ), vf_hi = vget_high_u8( vf );
+		for( ; v + 4 <= nombre; v += 4 )
+		{
+			const uint8x16_t s = vld1q_u8( o + 4 * v );
+			// (s x f + 64) >> 7, sature a 255 ; alpha x 128 >> 7 = alpha.
+			const uint8x8_t lo = vqrshrn_n_u16( vmull_u8( vget_low_u8( s ), vf_lo ), 7 );
+			const uint8x8_t hi = vqrshrn_n_u16( vmull_u8( vget_high_u8( s ), vf_hi ), 7 );
+			vst1q_u8( (uint8_t *)( w + v ), vcombine_u8( lo, hi ));
+		}
 	}
+	for( ; v < nombre; ++v )
+		w[v] = teinte_sommet( o + 4 * v, fr, fg, fb );
 }
 
 static void teinte_maillage( SWorldMesh *p )
@@ -4623,41 +4981,292 @@ static void teinte_plage( SLot *L, SPlageLot *q )
 		teinter_tampon( L->cbo, &L->p_teinte_orig, L->num_vertices, q->vfirst, q->vcount, f );
 }
 
-void TeinterSecteur( unsigned int checksum, const unsigned char rgb[3], bool neutre )
+// --- Index secteur -> maillages et plages de lot (issue #15) ----------------
+//
+// TeinterSecteur parcourait TOUT sp_world et TOUTES les plages de lot pour
+// UN secteur. Or SetSceneColor (cfuncs.cpp:4257, set_all_colors) l'appelle
+// pour chaque secteur du groupe "outdoor" -- tous les secteurs sur Vita
+// (NxSector.cpp:31, groupe par defaut) : secteurs x maillages, ~1350 x 4441
+// a New Jersey, SWorldMesh de plusieurs centaines d'octets (un defaut de cache
+// par maillage, voir SCullEntree). Un changement d'heure instantane passait
+// encore, mais dynamic_tod (timeofday.qb) refait 3 SetSceneColor toutes les
+// 10 images pendant 17 a 40 pas (NJ_StageSwitch_*, NY_Null2, SD_Null2) : le
+// jeu ramait pendant tout le fondu (mesure NJ : 726 ms par pas).
+//
+// Sur XBox (p_NxGeom.cpp:575) SetColor ne touche que les maillages du geom,
+// la couleur passe en constante de shader au dessin (mesh.cpp:596). Ici les
+// lots fusionnent plusieurs secteurs dans un meme tampon, et le decor passe
+// par cinq chemins de dessin (pipeline fixe a deux unites, shader de l'etape
+// 1, shader materiau vitaGL, GXM direct, lots GXM precalcules) : la teinte
+// reste dans les couleurs de sommets. On ne visite plus que les maillages et
+// plages du secteur, trouves par dichotomie dans un index trie.
+// lot = -1 : i est un indice de sp_world ; sinon plage i du lot `lot`.
+struct SIdxTeinte { unsigned int cs; int lot; int i; };
+static SIdxTeinte  *sp_idx_teinte = NULL;
+static int          s_idx_teinte_n = 0;
+static unsigned int s_idx_teinte_gen = 0xFFFFFFFFu;
+static int          s_idx_teinte_nw = -1, s_idx_teinte_nl = -1;
+static const void  *sp_idx_teinte_w = NULL, *sp_idx_teinte_l = NULL;
+// " tix N " : 0 = ancien parcours complet, synchrone ; 1 = index, synchrone ;
+// 2 (defaut) = index, petits changements ETALES sur plusieurs images (gros
+// changements synchrones) ; 3 = index, tout etale.
+int g_vita_teinte_index = 2;
+// Budget CPU par image de l'etalement, en microsecondes (" tbu N ", en ms).
+int g_vita_teinte_budget_us = 3000;
+// Bilan par image (TeinteSceneBilanImage) : secteurs teints, temps CPU.
+static int       s_teinte_secteurs = 0;
+static SceUInt64 s_teinte_us = 0;
+
+// --- Etalement (issue #15, " tix 2 ") ----------------------------------------
+//
+// Meme avec l'index, un pas de dynamic_tod recrit tout le decor (118 ms a NJ,
+// une image sur dix). TeinterSecteur ne fait plus que noter la couleur
+// demandee et mettre les maillages et plages du secteur en FILE (une fois :
+// drapeau par entree d'index) ; TeinteSceneAvancer, une fois par image au
+// debut de RenderWorld, en traite pendant g_vita_teinte_budget_us. Une entree
+// encore en file quand arrive le pas suivant n'est traitee qu'une fois, avec
+// la DERNIERE couleur : si le budget ne suit pas, des pas sont sautes, jamais
+// accumules. Pendant la vague, des secteurs ont deja la nouvelle couleur et
+// d'autres pas encore : sans importance pour un pas de fondu (1/40 de
+// l'ecart jour-nuit), visible pour un changement brusque -- d'ou le seuil :
+// un ecart de plus de TEINTE_ECART_SYNC sur une composante est applique tout
+// de suite, comme avant (changement d'heure instantane, en general derriere
+// un ecran de transition).
+#define TEINTE_ECART_SYNC	24
+static int          *sp_file_teinte = NULL;	// indices dans sp_idx_teinte
+static unsigned char *sp_en_file    = NULL;	// drapeau par entree d'index
+static int           s_file_tete = 0, s_file_n = 0;
+// Vague en cours (du premier ajout a la file vide) : pour le bilan.
+static int       s_vague_images = 0, s_vague_entrees = 0, s_vague_sommets = 0;
+static SceUInt64 s_vague_us = 0, s_vague_max_us = 0;
+
+static void file_teinte_vider( void )
 {
-	if( !checksum )
+	s_file_tete = s_file_n = 0;
+	if( sp_en_file )
+		memset( sp_en_file, 0, s_idx_teinte_n );
+}
+
+static void file_teinte_pousser( int j )
+{
+	if( !sp_file_teinte || sp_en_file[j] )
 		return;
-	int n_m = 0, n_p = 0;
+	sp_en_file[j] = 1;
+	sp_file_teinte[( s_file_tete + s_file_n ) % s_idx_teinte_n] = j;
+	++s_file_n;
+	++s_vague_entrees;
+}
+
+static int cmp_idx_teinte( const void *a, const void *b )
+{
+	const unsigned int x = ((const SIdxTeinte *)a )->cs, y = ((const SIdxTeinte *)b )->cs;
+	return ( x < y ) ? -1 : ( x > y ) ? 1 : 0;
+}
+
+static bool idx_teinte_a_jour( void )
+{
+	if( sp_idx_teinte && ( s_idx_teinte_gen == s_world_gen ) && ( s_idx_teinte_nw == s_num_world )
+	    && ( s_idx_teinte_nl == s_num_lots ) && ( sp_idx_teinte_w == sp_world ) && ( sp_idx_teinte_l == sp_lots ))
+		return true;
+	// Le monde a change : la file designe d'anciennes entrees. Ce qui y
+	// attendait est remis en file par la nouvelle (tout ce qui est teinte).
+	const bool file_pendante = ( s_file_n > 0 );
+	free( sp_idx_teinte );
+	free( sp_file_teinte );
+	free( sp_en_file );
+	sp_idx_teinte  = NULL;
+	sp_file_teinte = NULL;
+	sp_en_file     = NULL;
+	s_idx_teinte_n = 0;
+	s_file_tete = s_file_n = 0;
+	int n = s_num_world;
+	for( int l = 0; l < s_num_lots; ++l )
+		n += sp_lots[l].num_plages;
+	sp_idx_teinte  = (SIdxTeinte *)malloc( sizeof( SIdxTeinte ) * ( n ? n : 1 ));
+	sp_file_teinte = (int *)malloc( sizeof( int ) * ( n ? n : 1 ));
+	sp_en_file     = (unsigned char *)calloc( n ? n : 1, 1 );
+	if( !sp_idx_teinte || !sp_file_teinte || !sp_en_file )
+	{
+		free( sp_idx_teinte ); free( sp_file_teinte ); free( sp_en_file );
+		sp_idx_teinte = NULL; sp_file_teinte = NULL; sp_en_file = NULL;
+		return false;
+	}
 	for( int i = 0; i < s_num_world; ++i )
 	{
-		SWorldMesh *p = &sp_world[i];
-		if( p->sector_checksum != checksum )
-			continue;
-		p->teinte_dem[0] = rgb[0]; p->teinte_dem[1] = rgb[1]; p->teinte_dem[2] = rgb[2];
-		p->teinte_dem[3] = neutre ? 0 : 1;
-		teinte_maillage( p );
-		++n_m;
+		SIdxTeinte *e = &sp_idx_teinte[s_idx_teinte_n++];
+		e->cs = sp_world[i].sector_checksum; e->lot = -1; e->i = i;
 	}
 	for( int l = 0; l < s_num_lots; ++l )
 		for( int k = 0; k < sp_lots[l].num_plages; ++k )
 		{
-			SPlageLot *q = &sp_lots[l].p_plages[k];
-			if( q->checksum != checksum )
-				continue;
-			q->teinte_dem[0] = rgb[0]; q->teinte_dem[1] = rgb[1]; q->teinte_dem[2] = rgb[2];
-			q->teinte_dem[3] = neutre ? 0 : 1;
-			teinte_plage( &sp_lots[l], q );
-			++n_p;
+			SIdxTeinte *e = &sp_idx_teinte[s_idx_teinte_n++];
+			e->cs = sp_lots[l].p_plages[k].checksum; e->lot = l; e->i = k;
 		}
+	qsort( sp_idx_teinte, s_idx_teinte_n, sizeof( SIdxTeinte ), cmp_idx_teinte );
+	s_idx_teinte_gen = s_world_gen;
+	s_idx_teinte_nw  = s_num_world;
+	s_idx_teinte_nl  = s_num_lots;
+	sp_idx_teinte_w  = sp_world;
+	sp_idx_teinte_l  = sp_lots;
+	if( file_pendante )
+		for( int j = 0; j < s_idx_teinte_n; ++j )
+			file_teinte_pousser( j );
+	VLOG( "SCN", "teinte de scene : index reconstruit (%d maillages + plages)", s_idx_teinte_n );
+	return true;
+}
+
+static void teinte_entree( int j )
+{
+	const SIdxTeinte &e = sp_idx_teinte[j];
+	if( e.lot < 0 )
+		teinte_maillage( &sp_world[e.i] );
+	else
+		teinte_plage( &sp_lots[e.lot], &sp_lots[e.lot].p_plages[e.i] );
+}
+
+// Couleur effective d'une demande : neutre = 128 (facteur 1 pour c0 = 0,5).
+static inline int teinte_ecart( const unsigned char *ancien, const unsigned char rgb[3], bool neutre )
+{
+	int m = 0;
+	for( int k = 0; k < 3; ++k )
+	{
+		const int a = ancien[3] ? ancien[k] : 128;
+		const int b = neutre ? 128 : rgb[k];
+		const int d = ( a > b ) ? ( a - b ) : ( b - a );
+		if( d > m ) m = d;
+	}
+	return m;
+}
+
+void TeinterSecteur( unsigned int checksum, const unsigned char rgb[3], bool neutre )
+{
+	if( !checksum )
+		return;
+	const SceUInt64 t0 = sceKernelGetProcessTimeWide();
+	int n_m = 0, n_p = 0;
+	if(( g_vita_teinte_index > 0 ) && idx_teinte_a_jour())
+	{
+		int lo = 0, hi = s_idx_teinte_n;
+		while( lo < hi )
+		{
+			const int mid = ( lo + hi ) >> 1;
+			if( sp_idx_teinte[mid].cs < checksum ) lo = mid + 1; else hi = mid;
+		}
+		for( int j = lo; ( j < s_idx_teinte_n ) && ( sp_idx_teinte[j].cs == checksum ); ++j )
+		{
+			const SIdxTeinte &e = sp_idx_teinte[j];
+			unsigned char *dem = ( e.lot < 0 ) ? sp_world[e.i].teinte_dem
+			                                   : sp_lots[e.lot].p_plages[e.i].teinte_dem;
+			const bool etale = ( g_vita_teinte_index >= 3 )
+			    || (( g_vita_teinte_index == 2 ) && ( teinte_ecart( dem, rgb, neutre ) <= TEINTE_ECART_SYNC ));
+			dem[0] = rgb[0]; dem[1] = rgb[1]; dem[2] = rgb[2];
+			dem[3] = neutre ? 0 : 1;
+			if( etale )
+				file_teinte_pousser( j );
+			else
+				teinte_entree( j );
+			if( e.lot < 0 ) ++n_m; else ++n_p;
+		}
+	}
+	else
+	{
+		for( int i = 0; i < s_num_world; ++i )
+		{
+			SWorldMesh *p = &sp_world[i];
+			if( p->sector_checksum != checksum )
+				continue;
+			p->teinte_dem[0] = rgb[0]; p->teinte_dem[1] = rgb[1]; p->teinte_dem[2] = rgb[2];
+			p->teinte_dem[3] = neutre ? 0 : 1;
+			teinte_maillage( p );
+			++n_m;
+		}
+		for( int l = 0; l < s_num_lots; ++l )
+			for( int k = 0; k < sp_lots[l].num_plages; ++k )
+			{
+				SPlageLot *q = &sp_lots[l].p_plages[k];
+				if( q->checksum != checksum )
+					continue;
+				q->teinte_dem[0] = rgb[0]; q->teinte_dem[1] = rgb[1]; q->teinte_dem[2] = rgb[2];
+				q->teinte_dem[3] = neutre ? 0 : 1;
+				teinte_plage( &sp_lots[l], q );
+				++n_p;
+			}
+	}
+	++s_teinte_secteurs;
+	s_teinte_us += sceKernelGetProcessTimeWide() - t0;
 	static int s_n = 0;
 	if( s_n++ < 12 )
 		VLOG( "SCN", "teinte de scene : secteur %08x -> %s %d %d %d (%d maillages, %d plages de lot)",
 		      checksum, neutre ? "neutre" : "teinte", rgb[0], rgb[1], rgb[2], n_m, n_p );
 }
 
+// Une fois par image, au debut de RenderWorld : traite la file d'etalement
+// pendant g_vita_teinte_budget_us au plus (au moins une entree).
+void TeinteSceneAvancer( void )
+{
+	if( !s_file_n )
+		return;
+	if( !idx_teinte_a_jour() || !s_file_n )
+		return;
+	const SceUInt64 t0 = sceKernelGetProcessTimeWide();
+	const int som0 = s_teinte_sommets;
+	SceUInt64 t = t0;
+	int n = 0;
+	while( s_file_n )
+	{
+		const int j = sp_file_teinte[s_file_tete];
+		s_file_tete = ( s_file_tete + 1 ) % s_idx_teinte_n;
+		--s_file_n;
+		sp_en_file[j] = 0;
+		teinte_entree( j );
+		++n;
+		// L'horloge toutes les 8 entrees (~100 sommets chacune).
+		if(( n & 7 ) == 0 )
+		{
+			t = sceKernelGetProcessTimeWide();
+			if(( t - t0 ) >= (SceUInt64)g_vita_teinte_budget_us )
+				break;
+		}
+	}
+	t = sceKernelGetProcessTimeWide();
+	const SceUInt64 d = t - t0;
+	++s_vague_images;
+	s_vague_us += d;
+	s_vague_sommets += s_teinte_sommets - som0;
+	if( d > s_vague_max_us )
+		s_vague_max_us = d;
+	s_teinte_sommets = som0;	// compte dans la vague, pas dans le bilan d'image
+	if( !s_file_n )
+	{
+		VLOG( "SCN", "teinte etalee : vague de %d entrees, %d sommets, %d.%d ms en %d images (max %d.%d ms/image, budget %d ms, neon %d)",
+		      s_vague_entrees, s_vague_sommets, (int)( s_vague_us / 1000 ), (int)(( s_vague_us / 100 ) % 10 ),
+		      s_vague_images, (int)( s_vague_max_us / 1000 ), (int)(( s_vague_max_us / 100 ) % 10 ),
+		      g_vita_teinte_budget_us / 1000, g_vita_teinte_neon ? 1 : 0 );
+		s_vague_images = s_vague_entrees = s_vague_sommets = 0;
+		s_vague_us = s_vague_max_us = 0;
+	}
+}
+
+// Une fois par image (p_nx.cpp, acc_bilan) : ce que la teinte de scene a
+// coute dans l'image, s'il y en a eu. Le travail etale est compte a part
+// (TeinteSceneAvancer, bilan par vague).
+void TeinteSceneBilanImage( void )
+{
+	if( !s_teinte_secteurs )
+		return;
+	static const char *const s_mode[4] = { "parcours complet", "index", "index, etale", "index, tout etale" };
+	VLOG( "SCN", "teinte de scene : %d secteurs, %d sommets, %d.%d ms (%s), %d en file",
+	      s_teinte_secteurs, s_teinte_sommets, (int)( s_teinte_us / 1000 ),
+	      (int)(( s_teinte_us / 100 ) % 10 ), s_mode[g_vita_teinte_index & 3], s_file_n );
+	s_teinte_secteurs = 0;
+	s_teinte_sommets  = 0;
+	s_teinte_us       = 0;
+}
+
 // " tsc 0/1 " : reapplique toutes les teintes demandees (ou les retire).
 void TeinteSceneReappliquer( void )
 {
+	file_teinte_vider();
 	for( int i = 0; i < s_num_world; ++i )
 		teinte_maillage( &sp_world[i] );
 	for( int l = 0; l < s_num_lots; ++l )
@@ -4799,6 +5408,7 @@ void RenderWorld( void )
 		VLOG( "SCN", "lots de billboards (bbl) : %s, %d maillages", s_bbl_applique ? "OUI" : "non", n );
 	}
 
+	TeinteSceneAvancer();		// teinte de scene etalee (#15, " tix 2 ")
 	vcw_mettre_a_jour();
 
 	Gfx::Camera *p_cam = Nx::CViewportManager::sGetActiveCamera( 0 );

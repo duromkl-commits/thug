@@ -775,7 +775,22 @@ uint8 *ReadFromBuffer(CStruct *p_structure, uint8 *p_buffer)
 		{
 			Dbg_MsgAssert(!(type&MASK_16_BIT_NAME_LOOKUP),("Eh? Both lookup-table flags set ?"));
 			
-			#ifdef __PLAT_WN32__
+			#if defined(__PLAT_WN32__) && defined(__PLAT_VITA__)
+			// #5 : les parcs tout faits (Data/customparks/custom1-9.prk) ont
+			// ete ecrits par la version console, avec noms compresses
+			// (compress.qb, 253 entrees chargees ici avec qb.prx). Sous WN32
+			// tout nom compresse devenait "CompressedName" : les buts du parc
+			// perdaient level/spin/height (custom1.prk : 29 noms compresses)
+			// et ReadFromStructure les ignorait. L'ecriture reste sans
+			// compression (sWriteCompressedName), la lecture accepte les deux.
+			{
+				CArray *p_table=GetArray(0x35115a20/*WriteToBuffer_CompressionLookupTable_8*/,NO_ASSERT);
+				if (p_table && *p_buffer < p_table->GetSize())
+					name=p_table->GetChecksum(*p_buffer);
+				else
+					name=CRCD(0xef5f3f41,"CompressedName");
+			}
+			#elif defined(__PLAT_WN32__)
 			// The lookup table is not loaded when compiling on PC
 			name=CRCD(0xef5f3f41,"CompressedName");
 			#else
@@ -786,7 +801,16 @@ uint8 *ReadFromBuffer(CStruct *p_structure, uint8 *p_buffer)
 		}
 		else if (type&MASK_16_BIT_NAME_LOOKUP)			
 		{
-			#ifdef __PLAT_WN32__
+			#if defined(__PLAT_WN32__) && defined(__PLAT_VITA__)
+			{
+				CArray *p_table=GetArray(0x25231f42/*WriteToBuffer_CompressionLookupTable_16*/,NO_ASSERT);
+				uint32 index=Read2Bytes(p_buffer).mUInt;
+				if (p_table && index < p_table->GetSize())
+					name=p_table->GetChecksum(index);
+				else
+					name=CRCD(0xef5f3f41,"CompressedName");
+			}
+			#elif defined(__PLAT_WN32__)
 			name=CRCD(0xef5f3f41,"CompressedName");
 			#else
 			CArray *p_table=GetArray(0x25231f42/*WriteToBuffer_CompressionLookupTable_16*/);

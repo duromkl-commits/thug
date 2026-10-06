@@ -446,6 +446,33 @@ void FrontEnd::AddEntriesToEventButtonMap(Script::CStruct *pParams)
 				break;
 			}
 		}
+#ifdef __PLAT_VITA__
+		// La table "xbox" (choisie via __PLAT_WN32__) met pad_alt2 sur White et
+		// pad_alt sur Black, que la manette Vita n'a pas : le Reset du
+		// Create-a-Skater (posmenu_reset_uv, pad_alt2) etait inaccessible alors
+		// que l'aide affiche "L2=Reset". Comme la table "ps2" : L2 -> pad_alt2,
+		// R2 -> pad_alt, en plus de pad_l2/pad_r2 (index 0/1 = left/right_trigger_full).
+		{
+			int j_vita = -1;
+			if (button_crc == Script::GenerateCRC("white") && event_crc == Script::GenerateCRC("pad_alt2"))
+				j_vita = 0;
+			else if (button_crc == Script::GenerateCRC("black") && event_crc == Script::GenerateCRC("pad_alt"))
+				j_vita = 1;
+			if (j_vita >= 0)
+			{
+				for (int x = 0; x < MAX_BUTTON_EVENT_MAP_ENTRIES; x++)
+				{
+					if (m_digital_button_event_map[x].mEventType == DEAD_ENTRY)
+					{
+						m_digital_button_event_map[x].mDigitalButtonIndex = j_vita;
+						m_digital_button_event_map[x].mEventType = event_crc;
+						VLOG( "FE", "bouton %s -> aussi sur %s (Vita, comme PS2)", j_vita ? "pad_alt" : "pad_alt2", j_vita ? "R2" : "L2" );
+						break;
+					}
+				}
+			}
+		}
+#endif
 	}
 
 

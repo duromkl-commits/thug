@@ -6,6 +6,10 @@
 //****************************************************************************
 
 #include <sk/components/RailEditorComponent.h>
+#ifdef __PLAT_VITA__
+#include "vita_log.h"
+namespace Nx { class CGeom; void VitaExposerSommets( CGeom *p_geom ); }	// Gfx/Vita/p_NxModel.cpp (#5)
+#endif
 #include <sk/components/EditorCameraComponent.h>
 #include <gel/components/inputcomponent.h>
 #include <gel/object/compositeobject.h>
@@ -159,7 +163,7 @@ static void s_calculate_rail_sector_vertex_coords(Mth::Vector &lastPos, Mth::Vec
 		6, 8, 16, 18,       // Bottom  
 	};
 #else
-#	ifdef __PLAT_XBOX__
+#	if defined(__PLAT_XBOX__) || defined(__PLAT_VITA__)	// Vita : secteurs de l'ISO XBox
 	int p_end_verts_a[]=
 	{
 		1,9,             	// Top
@@ -196,9 +200,52 @@ static void s_calculate_rail_sector_vertex_coords(Mth::Vector &lastPos, Mth::Vec
 	Nx::CGeom *p_source_geom=p_source_sector->GetGeom();
 	Dbg_MsgAssert(p_source_geom,("NULL p_source_geom ?"));
 	
+	#ifdef __PLAT_VITA__
+	// #5 : les geoms Vita n'exposent leurs sommets de rendu que sur demande
+	// (CVitaGeom::VitaExposerSommets) : source, clone et rail precedent.
+	Nx::VitaExposerSommets(p_source_geom);
+	if (p_clonedSector)
+		Nx::VitaExposerSommets(p_clonedSector->GetGeom());
+	if (p_lastRailSector)
+		Nx::VitaExposerSommets(p_lastRailSector->GetGeom());
+	#endif
 	int num_render_verts=p_source_geom->GetNumRenderVerts();
 	Dbg_MsgAssert(num_render_verts==num_indices*2,("Unexpected extra vertices in rail sector, expected %d, got %d",2*num_indices,num_render_verts));
 	
+	#ifdef __PLAT_VITA__
+	// [VERIFIE psp2core] #5 : quand le geom n'exposait aucun sommet,
+	// Mem::Malloc(0) rendait un bloc de 16 octets ou
+	// s_generate_end_vert_positions ecrivait jusqu'a l'indice 21 : tas
+	// corrompu, data abort dans _free_r <- UpdateRailGeometry (custom1.prk).
+	// Les sommets sont maintenant exposes ; cette garde reste pour le cas ou
+	// le secteur source serait introuvable dans le monde Vita : on cache alors
+	// le clone (sinon un rail fantome et sa collision a l'origine du secteur).
+	{
+		int needed=0;
+		for (int i=0; i<num_indices; ++i)
+		{
+			if (p_end_verts_a[i] >= needed) needed=p_end_verts_a[i]+1;
+			if (p_end_verts_b[i] >= needed) needed=p_end_verts_b[i]+1;
+		}
+		if (num_render_verts < needed)
+		{
+			static int s_traces=0;
+			if (s_traces < 4)
+			{
+				++s_traces;
+				VLOG("PARK", "rail %08x : %d sommets de rendu exposes, %d requis -- secteur cache, sans collision",
+				     sourceSectorChecksum, num_render_verts, needed);
+			}
+			if (p_clonedSector)
+			{
+				p_clonedSector->SetVisibility(0);
+				p_clonedSector->SetCollidable(false);
+			}
+			return;
+		}
+	}
+	#endif
+
 	// SPEEDOPT: If necessary, could use a static buffer for the verts
 	Mth::Vector *p_modified_render_verts=(Mth::Vector*)Mem::Malloc(num_render_verts * sizeof(Mth::Vector));
 	p_source_geom->GetRenderVerts(p_modified_render_verts);
@@ -234,6 +281,9 @@ static void s_calculate_rail_sector_vertex_coords(Mth::Vector &lastPos, Mth::Vec
 		for (int i=0; i<num_indices; ++i)
 		{
 			Dbg_MsgAssert(p_end_verts_b[i] < last_num_render_verts,("Bad index into p_last_verts"));
+			#ifdef __PLAT_VITA__
+			if (p_end_verts_b[i] >= last_num_render_verts) continue;	// #5 : jamais hors du bloc
+			#endif
 			p_last_verts[p_end_verts_b[i]]=p_modified_render_verts[p_end_verts_a[i]];
 		}	
 
@@ -326,6 +376,19 @@ static void s_calculate_rail_sector_vertex_coords(Mth::Vector &lastPos, Mth::Vec
 				{
 					// If no match was found, then maybe the sector got re-exported in a strange manner.
 					pos.PrintContents();
+					#ifdef __PLAT_VITA__
+					{
+						// #5 : collision non recalee si les positions Vita ne sont
+						// pas exactement celles du fichier.
+						static int s_traces=0;
+						if (s_traces < 4)
+						{
+							++s_traces;
+							VLOG("PARK", "!! rail %08x : sommet de collision %d (%.3f %.3f %.3f) sans sommet de rendu correspondant",
+							     sourceSectorChecksum, i, pos[X], pos[Y], pos[Z]);
+						}
+					}
+					#endif
 					Dbg_MsgAssert(0,("Could not find a render-vert match for collision vert %d",i));
 				}	
 			}
@@ -516,7 +579,27 @@ void CEditedRailPoint::UpdatePostGeometry(Mth::Vector& rotateCentre, Mth::Vector
 	Nx::CGeom *p_source_geom=p_source_sector->GetGeom();
 	Dbg_MsgAssert(p_source_geom,("NULL p_source_geom ?"));
 	
+	#ifdef __PLAT_VITA__
+	Nx::VitaExposerSommets(p_source_geom);	// #5
+	#endif
 	int num_verts=p_source_geom->GetNumRenderVerts();
+	#ifdef __PLAT_VITA__
+	// #5 : garde, comme dans s_calculate_rail_sector_vertex_coords -- sans
+	// sommets exposes, p_verts[p_bottom_vert_indices[i]] (indices jusqu'a 11)
+	// ecrirait hors d'un bloc Malloc(0). Pas de poteau plutot qu'un tas
+	// corrompu.
+	if (num_verts < 12)
+	{
+		static int s_traces=0;
+		if (s_traces < 2)
+		{
+			++s_traces;
+			VLOG("PARK", "poteau de rail : %d sommets de rendu exposes, 12 requis -- pas de poteau", num_verts);
+		}
+		DestroyPostGeometry();
+		return;
+	}
+	#endif
 	// SPEEDOPT: If necessary, could use a static buffer for the verts
 	Mth::Vector *p_verts=(Mth::Vector*)Mem::Malloc(num_verts * sizeof(Mth::Vector));
 	p_source_geom->GetRenderVerts(p_verts);
@@ -582,7 +665,7 @@ void CEditedRailPoint::UpdatePostGeometry(Mth::Vector& rotateCentre, Mth::Vector
 		8,9,10,11		// Base plate
 	};
 #else
-#	ifdef __PLAT_XBOX__
+#	if defined(__PLAT_XBOX__) || defined(__PLAT_VITA__)	// Vita : secteurs de l'ISO XBox
 	int p_bottom_vert_indices[]=
 	{
 		8,9,10,11,		// Post bottom
@@ -638,6 +721,9 @@ void CEditedRailPoint::UpdatePostGeometry(Mth::Vector& rotateCentre, Mth::Vector
 	
 	Nx::CGeom *p_geom=mpPostSector->GetGeom();
 	Dbg_MsgAssert(p_geom,("NULL p_geom ?"));
+	#ifdef __PLAT_VITA__
+	Nx::VitaExposerSommets(p_geom);	// #5
+	#endif
 	Dbg_MsgAssert(p_geom->GetNumRenderVerts()==p_source_geom->GetNumRenderVerts(),("Source geom num verts mismatch"));
 	p_geom->SetRenderVerts(p_verts);
 	Mem::Free(p_verts);	

@@ -26,6 +26,7 @@ namespace Nx { class CVitaGeom; }
 namespace NxVita { extern bool g_vita_sprite_dump; }
 namespace NxVita { extern bool g_vita_uvw; }	// "uvw" (#43), p_world_render.cpp
 namespace NxVita { void EnregistrerInstance( Nx::CVitaGeom * ); void OublierInstance( Nx::CVitaGeom * ); }
+#include "p_world_render.h"		// sommets de rendu des secteurs (#5)
 #include "p_NxTexture.h"
 #include "p_scene_load.h"
 #include "p_world_render.h"
@@ -464,6 +465,7 @@ CVitaMesh::~CVitaMesh()
 		free( mp_pieces[i].p_c_base );
 		free( mp_pieces[i].p_c_lit );
 		free( mp_pieces[i].p_lum_idx );
+		free( mp_pieces[i].p_uv_src );		// #16, propre a la piece
 		if( mp_pieces[i].cbo_rig )
 			glDeleteBuffers( 1, &mp_pieces[i].cbo_rig );
 		if( mp_pieces[i].nbo_rig )		// #67, propre a la piece
@@ -479,17 +481,59 @@ CVitaMesh::~CVitaMesh()
 // une couche en reflet, p_scene_load.cpp), son jeu d'UV, et un melange BLEND
 // (5) -- 96 % des passes 1 des pieces de skater_male, mesure sur table. Les
 // autres modes (11 GLOSS_MAP, 6 BLEND_FIXED : 2 materiaux) restent ignores.
-static bool passe1_dessinable( const NxVita::SVitaMesh *p_src, CTexDict *p_tex_dict )
+//
+// Issue #16 : meme chose pour la PASSE 2, dessinee apres la passe 1. Le CAS y
+// place le tatouage du dos, ceux des avant-bras, le logo du dos du t-shirt et
+// deux calques de planche (cas_parts.q:138, master_uv_list) : sans elle, ils
+// n'apparaissaient pas du tout. Champs de la passe k (1 ou 2) :
+struct SPasseDecal
+{
+	unsigned int	tex;		// checksum de texture
+	const float *	p_uv;		// jeu d'UV consomme
+	unsigned int	blend, flags;
+	const float *	color;		// 0.5 = neutre
+	unsigned char	au, av;
+};
+
+static bool passe_decal( const NxVita::SVitaMesh *p_src, int k, SPasseDecal *d )
+{
+	if( k == 1 )
+	{
+		d->tex = p_src->texture_checksum2;   d->p_uv  = p_src->p_uvs_couche1;
+		d->blend = p_src->blend_mode2;       d->flags = p_src->mat_flags2;
+		d->color = p_src->mat_color2;
+		d->au = p_src->addr2_u;              d->av = p_src->addr2_v;
+	}
+	else
+	{
+		const NxVita::SVitaPasse *x = &p_src->passe_x[k - 2];
+		d->tex = x->texture_checksum;        d->p_uv  = x->p_uvs;
+		d->blend = x->blend;                 d->flags = x->flags;
+		d->color = x->color;
+		d->au = x->addr_u;                   d->av = x->addr_v;
+	}
+	return true;
+}
+
+static bool passe_k_dessinable( const NxVita::SVitaMesh *p_src, int k, CTexDict *p_tex_dict )
 {
 	if( !p_tex_dict || !p_src->p_weights || !p_src->p_bones )
 		return false;
-	if(( p_src->num_passes < 2 ) || !p_src->texture_checksum2 || !p_src->p_uvs_couche1 )
+	if( p_src->num_passes < (unsigned int)( k + 1 ))
 		return false;
-	if( p_src->blend_mode2 != 5 )
+	SPasseDecal d;
+	passe_decal( p_src, k, &d );
+	if( !d.tex || !d.p_uv )
+		return false;
+	if( d.blend != 5 )
+		return false;
+	// Passe 2 : seulement par-dessus une passe 1 BLEND dessinee, le cas du
+	// CAS (tatouages, logos, calques) -- pas de saut de passe a interpreter.
+	if(( k == 2 ) && !passe_k_dessinable( p_src, 1, p_tex_dict ))
 		return false;
 	if( !p_src->p_indices || ( p_src->num_indices <= 0 ))
 		return false;
-	CTexture *p_tex = p_tex_dict->GetTexture( p_src->texture_checksum2 );
+	CTexture *p_tex = p_tex_dict->GetTexture( d.tex );
 	return p_tex && ((CVitaTexture *)p_tex )->GetGLTexture();
 }
 
@@ -520,11 +564,12 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 	mp_texDict = p_tex_dict;
 
 	// Une piece de plus par maillage skinne dont la passe 1 est dessinable
-	// (#55, voir passe1_dessinable).
+	// (#55, voir passe_k_dessinable), et une par passe 2 (#16).
 	int num_passes1 = 0;
 	for( int i = 0; i < p_geom->num_meshes; ++i )
-		if( passe1_dessinable( &p_geom->p_meshes[i], p_tex_dict ))
-			++num_passes1;
+		for( int k = 1; k <= 2; ++k )		// passe 2 : #16
+			if( passe_k_dessinable( &p_geom->p_meshes[i], k, p_tex_dict ))
+				++num_passes1;
 	mp_pieces = (SGpuMesh *)calloc( p_geom->num_meshes + num_passes1, sizeof( SGpuMesh ));
 	if( !mp_pieces )
 		return;
@@ -547,6 +592,17 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 			glBindBuffer( GL_ARRAY_BUFFER, p_dst->uvbo );
 			glBufferData( GL_ARRAY_BUFFER, sizeof( float ) * 2 * p_src->num_vertices,
 			              p_src->p_uvs, GL_STATIC_DRAW );
+		}
+		// Matrice d'UV du CAS (#16) : UV d'origine de la passe 0, gardees
+		// pour les pieces skinnees (skater, planche, pietons).
+		p_dst->uvm_nom   = p_src->mat_nom;
+		p_dst->uvm_passe = 0;
+		p_dst->p_uv_src  = NULL;
+		if( p_src->p_uvs && p_src->p_weights && ( p_src->num_vertices > 0 ))
+		{
+			p_dst->p_uv_src = (float *)malloc( sizeof( float ) * 2 * p_src->num_vertices );
+			if( p_dst->p_uv_src )
+				memcpy( p_dst->p_uv_src, p_src->p_uvs, sizeof( float ) * 2 * p_src->num_vertices );
 		}
 
 		glGenBuffers( 1, &p_dst->ibo );
@@ -906,15 +962,20 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 	if( num_passes1 > 0 )
 	{
 		const int num_base = m_num;
-		int faites = 0;
+		int faites = 0, faites2 = 0;
+		// Toutes les passes 1, puis toutes les passes 2 : les pieces sont
+		// dessinees dans l'ordre du tableau, la passe 2 recouvre la passe 1.
+		for( int kp = 1; kp <= 2; ++kp )
 		for( int i = 0; ( i < p_geom->num_meshes ) && ( i < num_base ); ++i )
 		{
 			NxVita::SVitaMesh *p_src = &p_geom->p_meshes[i];
-			if( !passe1_dessinable( p_src, p_tex_dict ))
+			if( !passe_k_dessinable( p_src, kp, p_tex_dict ))
 				continue;
+			SPasseDecal dk;
+			passe_decal( p_src, kp, &dk );
 			const SGpuMesh *p_base = &mp_pieces[i];
 			SGpuMesh       *p_dst  = &mp_pieces[m_num];
-			const float    *p_uv1  = p_src->p_uvs_couche1;
+			const float    *p_uv1  = dk.p_uv;
 			const int       nv     = p_src->num_vertices;
 
 			// Sommets, poids, os, normales, tampons skinnes : ceux de la base,
@@ -943,8 +1004,8 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 			// passe 1 n'a pas a suivre la couleur CAS du vetement.
 			p_dst->mat_checksum = 0;
 			p_dst->decal        = 1;
-			p_dst->decal_au     = p_src->addr2_u;
-			p_dst->decal_av     = p_src->addr2_v;
+			p_dst->decal_au     = dk.au;
+			p_dst->decal_av     = dk.av;
 			// #77 : ni UV wibble ni passe ADD heritees de la base (tampons
 			// propres a celle-ci, liberes par elle seule).
 			p_dst->uvw0         = 0;
@@ -952,22 +1013,30 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 			p_dst->add_uvbo     = 0;
 			p_dst->add_cbo      = 0;
 			p_dst->add_uvw      = 0;
-			p_dst->blend        = p_src->blend_mode2;
+			p_dst->blend        = dk.blend;
 			// [SOURCE] XBox/NX/mesh.cpp:603 : le verrou de couleur est PAR
 			// PASSE (logos du t-shirt : 0xa4, verrouilles).
-			p_dst->color_locked = ( p_src->mat_flags2 & 0x80 ) ? 1 : 0;
-			p_dst->texture      = ((CVitaTexture *)p_tex_dict->GetTexture( p_src->texture_checksum2 ))->GetGLTexture();
+			p_dst->color_locked = ( dk.flags & 0x80 ) ? 1 : 0;
+			p_dst->texture      = ((CVitaTexture *)p_tex_dict->GetTexture( dk.tex ))->GetGLTexture();
 
 			glGenBuffers( 1, &p_dst->uvbo );
 			glBindBuffer( GL_ARRAY_BUFFER, p_dst->uvbo );
 			glBufferData( GL_ARRAY_BUFFER, sizeof( float ) * 2 * nv, p_uv1, GL_STATIC_DRAW );
+			// Matrice d'UV du CAS (#16) : tatouages et logos sont des passes 1
+			// (cas_parts.q:138, master_uv_list). UV d'origine de la couche 1.
+			p_dst->uvm_nom   = p_src->mat_nom;
+			p_dst->uvm_passe = (unsigned char)kp;
+			p_dst->uvm_actif = 0;
+			p_dst->p_uv_src  = (float *)malloc( sizeof( float ) * 2 * nv );
+			if( p_dst->p_uv_src )
+				memcpy( p_dst->p_uv_src, p_uv1, sizeof( float ) * 2 * nv );
 
 			// Couleurs de sommets teintes par la couleur de la PASSE 1.
 			if( p_src->p_colors )
 			{
-				const float mat_f[3] = { p_src->mat_color2[0] * 2.0f,
-				                         p_src->mat_color2[1] * 2.0f,
-				                         p_src->mat_color2[2] * 2.0f };
+				const float mat_f[3] = { dk.color[0] * 2.0f,
+				                         dk.color[1] * 2.0f,
+				                         dk.color[2] * 2.0f };
 				const unsigned char *p_up = p_src->p_colors;
 				if(( mat_f[0] != 1.0f ) || ( mat_f[1] != 1.0f ) || ( mat_f[2] != 1.0f ))
 					p_up = NxVita::TeindreCouleursMateriau( p_src->p_colors, nv, mat_f );
@@ -999,9 +1068,9 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 			p_dst->num_indices = p_src->num_indices;
 
 			++m_num;
-			++faites;
+			if( kp == 1 ) ++faites; else ++faites2;
 		}
-		VLOG( "CAS", "passe 1 (logos/decalques, #55) : %d pieces ajoutees", faites );
+		VLOG( "CAS", "passe 1 (logos/decalques, #55) : %d pieces ajoutees, passe 2 (#16) : %d", faites, faites2 );
 	}
 
 	{
@@ -3585,6 +3654,112 @@ bool CVitaGeom::plat_set_material_color( uint32 mat_name_checksum, int pass, Ima
 	return change;
 }
 
+// Issue #16. [SOURCE] XBox/p_NxGeom.cpp:1131 : meme recherche du materiau par
+// nom (materiaux scindes a la conversion : bits 0-2 = passe isolee, bits 3-6 =
+// passes retenues), puis la matrice ne garde que m00, m01 (rotation x echelle)
+// et m30, m31 (translation) ; le shader *_UVTransform reconstruit
+// u' = m00 u - m01 v + m30, v' = m01 u + m00 v + m31 (material.cpp:431).
+// Le uvbo de la piece est recalcule depuis ses UV d'origine : le resultat ne
+// depend que de la DERNIERE matrice, comme sur XBox.
+bool CVitaGeom::plat_set_uv_matrix( uint32 mat_name_checksum, int pass, const Mth::Matrix &mat )
+{
+	if( !mp_mesh )
+		return false;
+	const float m00 = mat[0][0], m01 = mat[0][1], m30 = mat[3][0], m31 = mat[3][1];
+	int n = 0;
+	for( int i = 0; i < mp_mesh->NumPieces(); ++i )
+	{
+		SGpuMesh *p = const_cast< SGpuMesh * >( &mp_mesh->Pieces()[i] );
+		if( !p->p_uv_src || !p->uvbo || ( p->num_vertices <= 0 ))
+			continue;
+		bool voulu = false;
+		int  passe = pass;
+		if( p->uvm_nom == mat_name_checksum )
+			voulu = true;
+		else if(( p->uvm_nom > mat_name_checksum ) && (( p->uvm_nom - mat_name_checksum ) <= 0x7F ))
+		{
+			const uint32 d = p->uvm_nom - mat_name_checksum;
+			const uint32 sep = d & 0x07, drapeaux = d >> 3;
+			if( sep )
+			{
+				if( sep == (uint32)( pass + 1 )) { voulu = true; passe = 0; }
+			}
+			else if( drapeaux & ( 1 << pass ))
+			{
+				voulu = true;
+				for( int q = 0; q < pass; ++q )
+					if(( drapeaux & ( 1 << q )) == 0 )
+						--passe;
+			}
+		}
+		if( !voulu || ( passe != (int)p->uvm_passe ))
+			continue;
+		++n;
+		const float m[4] = { m00, m01, m30, m31 };
+		const bool ident = ( m00 == 1.0f ) && ( m01 == 0.0f ) && ( m30 == 0.0f ) && ( m31 == 0.0f );
+		// Meme matrice que celle deja posee : rien a refaire ni a tracer.
+		if( p->uvm_actif ? ( memcmp( p->uvm_m, m, sizeof( m )) == 0 ) : ident )
+			continue;
+		const int nv = p->num_vertices;
+		float *p_uv = (float *)malloc( sizeof( float ) * 2 * nv );
+		if( !p_uv )
+			continue;
+		// TOUJOURS depuis les UV d'origine (p_uv_src), jamais depuis le uvbo
+		// deja transforme : pas d'accumulation.
+		float b[4] = { 1e30f, 1e30f, -1e30f, -1e30f };
+		for( int v = 0; v < nv; ++v )
+		{
+			const float u = p->p_uv_src[v * 2 + 0], w = p->p_uv_src[v * 2 + 1];
+			const float u2 = m00 * u - m01 * w + m30, w2 = m01 * u + m00 * w + m31;
+			p_uv[v * 2 + 0] = u2;
+			p_uv[v * 2 + 1] = w2;
+			if( u2 < b[0] ) b[0] = u2;
+			if( w2 < b[1] ) b[1] = w2;
+			if( u2 > b[2] ) b[2] = u2;
+			if( w2 > b[3] ) b[3] = w2;
+		}
+		glBindBuffer( GL_ARRAY_BUFFER, p->uvbo );
+		glBufferData( GL_ARRAY_BUFFER, sizeof( float ) * 2 * nv, p_uv, GL_STATIC_DRAW );
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		free( p_uv );
+		memcpy( p->uvm_m, m, sizeof( m ));
+		p->uvm_actif = ident ? 0 : 1;
+		// Une ligne par CHANGEMENT de matrice d'une piece, sans plafond. Les
+		// UV transformees (u0..u1, v0..v1) disent ou tombe le decalque : la
+		// texture n'est lue que dans [0,1] (bloquee au bord si adr=1).
+		VLOG( "CAS", "matrice d'UV materiau %08x passe %d -> piece %d (%s passe %d, adr %d/%d, %d sommets) "
+		      "m00 %.3f m01 %.3f m30 %.3f m31 %.3f : UV u %.2f..%.2f v %.2f..%.2f (%s)",
+		      (unsigned)mat_name_checksum, pass, i, p->decal ? "decalque" : "base", (int)p->uvm_passe,
+		      (int)p->decal_au, (int)p->decal_av, nv, m00, m01, m30, m31, b[0], b[2], b[1], b[3],
+		      mp_mesh->Name());
+	}
+	return n > 0;
+}
+
+// Retour aux UV d'origine des pieces transformees du maillage. Appele quand un
+// geom est (re)lie a son maillage (reconstruction du modele) : le script de
+// construction rappelle ensuite set_uv_from_appearance, qui ne repose que les
+// matrices des parties hors use_default_uv.
+void CVitaGeom::restaurer_uv_cas()
+{
+	if( !mp_mesh )
+		return;
+	int n = 0;
+	for( int i = 0; i < mp_mesh->NumPieces(); ++i )
+	{
+		SGpuMesh *p = const_cast< SGpuMesh * >( &mp_mesh->Pieces()[i] );
+		if( !p->uvm_actif || !p->p_uv_src || !p->uvbo || ( p->num_vertices <= 0 ))
+			continue;
+		glBindBuffer( GL_ARRAY_BUFFER, p->uvbo );
+		glBufferData( GL_ARRAY_BUFFER, sizeof( float ) * 2 * p->num_vertices, p->p_uv_src, GL_STATIC_DRAW );
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		p->uvm_actif = 0;
+		++n;
+	}
+	if( n )
+		VLOG( "CAS", "UV d'origine restaurees : %d piece(s) (%s, modele reconstruit)", n, mp_mesh->Name());
+}
+
 CGeom *	CVitaGeom::plat_clone( bool instance, CScene *pDestScene )
 {
 	(void)pDestScene;
@@ -3625,8 +3800,87 @@ CVitaGeom::~CVitaGeom()
 	NxVita::OmbreOublierGeom( this );	// sa pose ne doit plus aller a la carte d'ombre
 	VitaOublierPose();
 	liberer_lum();
+	NxVita::VitaSommetsDetruire( mp_vita_sommets );
+	mp_vita_sommets = NULL;
 	if( mp_mesh )
 		mp_mesh->Lacher();
+}
+
+// --- Sommets de rendu (#5) ---------------------------------------------------
+// Point d'entree pour le code de jeu (RailEditorComponent, sous __PLAT_VITA__).
+void VitaExposerSommets( CGeom *p_geom )
+{
+	if( p_geom )
+		static_cast< CVitaGeom * >( p_geom )->VitaExposerSommets();
+}
+
+// [SOURCE] XBox/p_NxGeom.cpp:770-900. XBox lit et ecrit le tampon de sommets
+// du maillage, positions deja placees (sMesh::SetPosition les translate) ;
+// un clone XBox a sa propre copie (sMesh::Clone). Ici le clone partage le
+// maillage source et est place par une matrice : sans ecriture on rend donc
+// R x source + position ; une ecriture cree des tampons PRIVES de positions
+// finales, dessines sans matrice (p_world_render.cpp, dessiner_instances).
+NxVita::SVitaSommets *CVitaGeom::vita_sommets()
+{
+	if( !m_vita_expose || !m_vita_secteur )
+		return NULL;
+	if( !mp_vita_sommets )
+		mp_vita_sommets = NxVita::VitaSommetsCreer( m_vita_secteur, m_vita_scene );
+	return mp_vita_sommets;
+}
+
+int CVitaGeom::plat_get_num_render_verts()
+{
+	return NxVita::VitaSommetsNombre( vita_sommets());
+}
+
+void CVitaGeom::plat_get_render_verts( Mth::Vector *p_verts )
+{
+	NxVita::SVitaSommets *s = vita_sommets();
+	const int n = NxVita::VitaSommetsNombre( s );
+	if( !n || !p_verts )
+		return;
+	float *tmp = (float *)malloc( sizeof( float ) * 3 * n );
+	if( !tmp )
+		return;
+	const float pos[3] = { m_vita_pos[X], m_vita_pos[Y], m_vita_pos[Z] };
+	NxVita::VitaSommetsLire( s, m_vita_rot, pos, tmp );
+	for( int i = 0; i < n; ++i )
+		p_verts[i].Set( tmp[3 * i], tmp[3 * i + 1], tmp[3 * i + 2] );
+	free( tmp );
+}
+
+void CVitaGeom::plat_get_render_colors( Image::RGBA *p_colors )
+{
+	// Couleurs cuites non relues : neutre (FakeLights les rend telles quelles,
+	// plat_set_render_colors ne fait rien).
+	const int n = NxVita::VitaSommetsNombre( vita_sommets());
+	for( int i = 0; i < n; ++i )
+		p_colors[i] = Image::RGBA( 0x80, 0x80, 0x80, 0x80 );
+}
+
+void CVitaGeom::plat_set_render_verts( Mth::Vector *p_verts )
+{
+	NxVita::SVitaSommets *s = vita_sommets();
+	const int n = NxVita::VitaSommetsNombre( s );
+	if( !n || !p_verts )
+		return;
+	float *tmp = (float *)malloc( sizeof( float ) * 3 * n );
+	if( !tmp )
+		return;
+	Mth::CBBox bbox;
+	for( int i = 0; i < n; ++i )
+	{
+		tmp[3 * i]     = p_verts[i][X];
+		tmp[3 * i + 1] = p_verts[i][Y];
+		tmp[3 * i + 2] = p_verts[i][Z];
+		bbox.AddPoint( p_verts[i] );
+	}
+	NxVita::VitaSommetsEcrire( s, tmp );
+	free( tmp );
+	// Boite du geom : XBox recalcule la sphere du maillage (p_NxGeom.cpp:888).
+	m_vita_bbox    = bbox;
+	m_vita_bbox_ok = true;
 }
 
 // #78 : couleurs eclairees propres a l'instance.
@@ -3646,6 +3900,26 @@ void CVitaGeom::liberer_lum()
 
 void CVitaGeom::plat_set_world_position( const Mth::Vector &pos )
 {
+	// #5 : positions privees = positions finales ; XBox translate ses sommets
+	// (sMesh::SetPosition), on fait de meme.
+	if( mp_vita_sommets && NxVita::VitaSommetsPrives( mp_vita_sommets ))
+	{
+		const int n = NxVita::VitaSommetsNombre( mp_vita_sommets );
+		float *tmp = (float *)malloc( sizeof( float ) * 3 * n );
+		if( tmp )
+		{
+			const float zero[3] = { 0.0f, 0.0f, 0.0f };
+			NxVita::VitaSommetsLire( mp_vita_sommets, 0, zero, tmp );
+			for( int i = 0; i < n; ++i )
+			{
+				tmp[3 * i]     += pos[X] - m_vita_pos[X];
+				tmp[3 * i + 1] += pos[Y] - m_vita_pos[Y];
+				tmp[3 * i + 2] += pos[Z] - m_vita_pos[Z];
+			}
+			NxVita::VitaSommetsEcrire( mp_vita_sommets, tmp );
+			free( tmp );
+		}
+	}
 	m_vita_pos.Set( pos[X], pos[Y], pos[Z], 1.0f );
 }
 
@@ -3677,6 +3951,7 @@ bool CVitaGeom::plat_load_geom_data( CMesh *pMesh, CModel *pModel,
 	if( mp_mesh )
 		mp_mesh->Retenir();
 	mp_vita_modele = pModel;
+	restaurer_uv_cas();		// #16 : reset CAS
 	return ( mp_mesh != NULL );
 }
 

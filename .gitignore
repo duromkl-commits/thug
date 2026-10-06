@@ -26,7 +26,7 @@ vita/build_*/
 *.self
 eboot.bin
 
-# --- CMake ---
+# --- CMake (PR publique #10, rreha) ---
 CMakeLists.txt.user
 CMakeCache.txt
 CMakeFiles

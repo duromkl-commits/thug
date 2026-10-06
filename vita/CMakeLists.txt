@@ -16,7 +16,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "THUG")
 set(VITA_TITLEID  "THUG00001")
-set(VITA_VERSION  "01.02")
+set(VITA_VERSION  "01.03")
 
 # ATTRIBUTE2=12 débloque les 109 Mio de RAM supplémentaires (365 au lieu des
 # 256 par défaut). Le moteur tenait dans les 32 Mo de la PS2, donc c'est de la

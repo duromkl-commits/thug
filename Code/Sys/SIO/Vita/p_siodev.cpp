@@ -46,6 +46,7 @@
 namespace NxVita { extern float g_vita_plan_loin; extern int g_vita_cam_modeles; extern float g_vita_ombre_douce; extern int g_vita_ombre_decoupe; extern int g_vita_ombre_region; }
 #include "vita_dbgsrv.h"
 namespace Sfx { void VitaListeVoix( void ); }	// "voix" (#57)
+extern int g_vita_trace_trk;	// trickcomponent.cpp, "trk" (#6)
 
 #include <sk/modules/skate/skate.h>
 #include <sk/objects/skatercareer.h>
@@ -72,6 +73,7 @@ namespace NxVita { extern bool g_vita_zeq; }	// test de profondeur du decor (LEQ
 namespace NxVita { extern int g_vita_mx2; void JournaliserTextes( void ); }
 namespace NxVita { extern int g_vita_sprites_sans_tex; }
 namespace Nx { extern bool g_vita_rigide_gpu; }	// "rgp" (#67)
+namespace Obj { extern int g_vita_veh_sous_pas; extern int g_vita_veh_log; }	// "vss" / "vlg" (#13, #14)
 namespace Nx { extern bool g_vita_lum_instance; extern bool g_vita_lum_atomique; }	// "lpi", "lpa" (#78)
 namespace Nx { extern int g_vita_rejeu; extern bool g_vita_rigide_lum; extern int g_vita_os_persist; extern int g_vita_zw_modeles; extern int g_vita_differer_lib; }
 namespace NxVita { extern float g_vita_lum_k; extern int g_vita_alpha_x2; }
@@ -82,6 +84,8 @@ namespace NxVita { extern bool g_vita_bbl; }	// "bbl" (#69)
 namespace Nx { extern bool g_vita_mro; }		// "mro" (#69)
 namespace Nx { extern bool g_vita_gyr; extern bool g_vita_pad; }	// "gyr", "pad" (#77)
 namespace NxVita { extern bool g_vita_teinte_scene; void TeinteSceneReappliquer( void ); }	// "tsc" (#63)
+namespace NxVita { extern int g_vita_teinte_index; extern int g_vita_teinte_budget_us; extern bool g_vita_teinte_neon; }	// "tix" "tbu" "tvn" (#15)
+namespace NxVita { extern int g_vita_lots_glyphes; }	// "xgl" (#17)
 namespace Nx { extern bool g_vita_vis; }
 namespace NxVita { extern bool g_vita_melange_opaques; }	// "bop" (banc #69, beige d'Hawaii)
 namespace NxVita { extern int g_vita_bfc; extern bool g_vita_zbias; void VitaListeReflets( float, float ); void VitaListeUVAnimes( void ); }
@@ -1223,6 +1227,18 @@ static void injection_analyser( char *buf )
 			p = (char *)q;
 			continue;
 		}
+		// "trk 0/1" : trace du chemin d'un manual, Up/Down -> file -> declenchement
+		// -> equilibre (issue #6, trickcomponent.cpp). Muette par defaut.
+		else if( strncmp( p, "trk", 3 ) == 0 )
+		{
+			const char *q = p + 3;
+			while( *q == ' ' ) ++q;
+			g_vita_trace_trk = atoi( q );
+			VLOG( "TRK", "trace des manuals (#6) : %d", g_vita_trace_trk );
+			while( *q && *q != ' ' && *q != '\n' && *q != '\r' ) ++q;
+			p = (char *)q;
+			continue;
+		}
 		// "inv 0/1" : gachettes L/R = L2/R2 et pave arriere = L1/R1 (#59, #60).
 		else if( strncmp( p, "inv", 3 ) == 0 )
 		{
@@ -1272,6 +1288,29 @@ static void injection_analyser( char *buf )
 			while( *q == ' ' ) ++q;
 			Nx::g_vita_os_persist = atoi( q );
 			VLOG( "PROF", "pose d'os persistante : %d", Nx::g_vita_os_persist );
+			while( *q && *q != ' ' && *q != '\n' && *q != '\r' ) ++q;
+			p = (char *)q;
+			continue;
+		}
+		// "vss 0/1" : sous-pas de la physique des vehicules au-dela de 1/60 s
+		// (#13) ; 0 = regle d'origine (au-dela de 1/30 s seulement).
+		else if( strncmp( p, "vss", 3 ) == 0 )
+		{
+			const char *q = p + 3;
+			while( *q == ' ' ) ++q;
+			Obj::g_vita_veh_sous_pas = atoi( q );
+			VLOG( "VEH", "sous-pas au-dela de 1/60 s : %d", Obj::g_vita_veh_sous_pas );
+			while( *q && *q != ' ' && *q != '\n' && *q != '\r' ) ++q;
+			p = (char *)q;
+			continue;
+		}
+		// "vlg 0/1" : journal [VEH] du vehicule conduit et de sa camera (#13, #14).
+		else if( strncmp( p, "vlg", 3 ) == 0 )
+		{
+			const char *q = p + 3;
+			while( *q == ' ' ) ++q;
+			Obj::g_vita_veh_log = atoi( q );
+			VLOG( "VEH", "journal vehicule : %d", Obj::g_vita_veh_log );
 			while( *q && *q != ' ' && *q != '\n' && *q != '\r' ) ++q;
 			p = (char *)q;
 			continue;
@@ -1535,7 +1574,7 @@ static void injection_analyser( char *buf )
 		// d'ecran, 3 = comme 2, carte lue a l'envers en V (diagnostic). f u
 		// optionnels : glPolygonOffset de la reception (XBox -2 -4).
 		// "omt 0/1" : reception de l'ombre portee sur les translucides
-		// (XBox/NX/render.cpp:2793 ; p_world_render.cpp). Defaut 0.
+		// (XBox/NX/render.cpp:2793 ; p_world_render.cpp). Defaut 1 (#8).
 		else if(( p[0] == 'o' || p[0] == 'O' ) && ( p[1] == 'm' || p[1] == 'M' )
 		        && ( p[2] == 't' || p[2] == 'T' ))
 		{
@@ -1736,6 +1775,68 @@ static void injection_analyser( char *buf )
 				++q;
 			NxVita::g_vita_teinte_scene = ( *q != '0' );
 			NxVita::TeinteSceneReappliquer();
+			while( *q && *q != ' ' && *q != '\n' && *q != '\r' && *q != '\t' )
+				++q;
+			p = (char *)q;
+			continue;
+		}
+		// "tix N" : teinte de scene (issue #15). 0 ancien parcours complet,
+		// 1 index synchrone, 2 (defaut) index + petits changements etales sur
+		// plusieurs images, 3 tout etale.
+		else if(( p[0] == 't' || p[0] == 'T' ) && ( p[1] == 'i' || p[1] == 'I' )
+		        && ( p[2] == 'x' || p[2] == 'X' ))
+		{
+			const char *q = p + 3;
+			while( *q == ' ' || *q == '=' )
+				++q;
+			const int v = ( *q >= '0' && *q <= '3' ) ? ( *q - '0' ) : 2;
+			NxVita::g_vita_teinte_index = v;
+			VLOG( "SCN", "teinte de scene (tix) : mode %d", v );
+			while( *q && *q != ' ' && *q != '\n' && *q != '\r' && *q != '\t' )
+				++q;
+			p = (char *)q;
+			continue;
+		}
+		// "tbu N" : budget de l'etalement de la teinte, en ms par image (#15).
+		else if(( p[0] == 't' || p[0] == 'T' ) && ( p[1] == 'b' || p[1] == 'B' )
+		        && ( p[2] == 'u' || p[2] == 'U' ))
+		{
+			const char *q = p + 3;
+			while( *q == ' ' || *q == '=' )
+				++q;
+			int ms = atoi( q );
+			if( ms < 1 ) ms = 1;
+			NxVita::g_vita_teinte_budget_us = ms * 1000;
+			VLOG( "SCN", "teinte de scene : budget %d ms par image", ms );
+			while( *q && *q != ' ' && *q != '\n' && *q != '\r' && *q != '\t' )
+				++q;
+			p = (char *)q;
+			continue;
+		}
+		// "tvn 0/1" : reecriture des couleurs par NEON (1) ou scalaire (0) (#15).
+		else if(( p[0] == 't' || p[0] == 'T' ) && ( p[1] == 'v' || p[1] == 'V' )
+		        && ( p[2] == 'n' || p[2] == 'N' ))
+		{
+			const char *q = p + 3;
+			while( *q == ' ' || *q == '=' )
+				++q;
+			NxVita::g_vita_teinte_neon = ( *q != '0' );
+			VLOG( "SCN", "teinte de scene : NEON %s", NxVita::g_vita_teinte_neon ? "OUI" : "non" );
+			while( *q && *q != ' ' && *q != '\n' && *q != '\r' && *q != '\t' )
+				++q;
+			p = (char *)q;
+			continue;
+		}
+		// "xgl 0/1" : lots de glyphes du texte 2D (1) ou un glDrawArrays par
+		// caractere (0), pour l'A/B de l'issue #17 (menu View Stats).
+		else if(( p[0] == 'x' || p[0] == 'X' ) && ( p[1] == 'g' || p[1] == 'G' )
+		        && ( p[2] == 'l' || p[2] == 'L' ))
+		{
+			const char *q = p + 3;
+			while( *q == ' ' || *q == '=' )
+				++q;
+			NxVita::g_vita_lots_glyphes = ( *q != '0' );
+			VLOG( "2D", "lots de glyphes (xgl) : %s", NxVita::g_vita_lots_glyphes ? "OUI" : "non" );
 			while( *q && *q != ' ' && *q != '\n' && *q != '\r' && *q != '\t' )
 				++q;
 			p = (char *)q;

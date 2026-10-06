@@ -1,4 +1,7 @@
 #include <core/defines.h>
+#ifdef __PLAT_VITA__
+#include "vita_log.h"
+#endif
 #include <gel/mainloop.h>
 #include <gel/objtrack.h>
 #include <gel/event.h>
@@ -989,13 +992,20 @@ void CParkEditor::Update()
 			// est compile a vide -- y compris la mise a l'echelle de la jauge
 			// (percent_bar_colored_part). On reprend les mesures qui ne
 			// dependent pas des tas (composants, vecteurs, pieces), memes
-			// formules ; la part "memoire" des tas d'origine n'a pas
-			// d'equivalent ici. m_pct_resources_used (IsParkFull) n'est pas
-			// touche.
+			// formules.
+			// #5 : la part "memoire" (m_pct_resources_used calcule plus haut
+			// depuis mMainHeapFree, cf. ParkGen GetResourceUsageInfo Vita)
+			// est maintenant juste : elle entre dans la jauge, et la jauge
+			// complete redevient m_pct_resources_used comme sur XBox --
+			// IsParkFull() == jauge pleine. m_last_main_heap_free (copier/
+			// coller, RoomToCopyOrPaste) etait reste a 0.
 			{
+				m_last_main_heap_free=usage_info.mMainHeapFree;
 				int component_use_est = usage_info.mTotalClonedPieces * 7 + usage_info.mTotalRailPoints * 9 + usage_info.mTotalLinkedRailPoints;
 				int base_component_use = p_generator->GetResourceSize("component_use_base");
 				float shown_pct = (float) (component_use_est - base_component_use) / (float) (p_generator->GetResourceSize("max_components") - base_component_use);
+				if (m_pct_resources_used > shown_pct)
+					shown_pct = m_pct_resources_used;
 				int vector_use_est = usage_info.mTotalClonedPieces * 2 + usage_info.mTotalRailPoints * 2;
 				int base_vector_use = p_generator->GetResourceSize("vector_use_base");
 				float vector_pct = (float) (vector_use_est - base_vector_use) / (float) (p_generator->GetResourceSize("max_vectors") - base_vector_use);
@@ -1004,6 +1014,20 @@ void CParkEditor::Update()
 				float pieces_pct=(float)mp_park_manager->GetDMAPieceCount() / (float)p_generator->GetResourceSize("max_dma_pieces");
 				if (pieces_pct > shown_pct)
 					shown_pct = pieces_pct;
+				{
+					static bool s_plein_trace = false;
+					bool plein = (shown_pct >= 1.0f);
+					if (plein != s_plein_trace)
+					{
+						s_plein_trace = plein;
+						VLOG("PARK", "parc %s : jauge %.3f (memoire %.3f, composants %d/%d, vecteurs %d/%d, pieces DMA %d/%d)",
+						     plein ? "PLEIN" : "non plein", shown_pct, m_pct_resources_used,
+						     component_use_est, p_generator->GetResourceSize("max_components"),
+						     vector_use_est, p_generator->GetResourceSize("max_vectors"),
+						     mp_park_manager->GetDMAPieceCount(), p_generator->GetResourceSize("max_dma_pieces"));
+					}
+				}
+				m_pct_resources_used = shown_pct;
 				if (shown_pct < 0.0f) shown_pct = 0.0f;
 				else if (shown_pct > 1.0f) shown_pct = 1.0f;
 
