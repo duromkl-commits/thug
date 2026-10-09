@@ -38,6 +38,8 @@ aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your s
 ssao=1              ; ambient occlusion: darkens corners and contact points (2 = show only the occlusion, as a test)
 ssao_strength=0.8   ; 0.0 - 1.0
 ssao_radius=28      ; reach, in inches of game world
+sun_shadows=1       ; shadows of buildings and objects from the time-of-day sun
+sun_strength=0.7    ; 0.0 - 1.0, full daylight; evening is lighter, night barely shows
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 
 [paths]

@@ -95,7 +95,13 @@ int   g_vita_ombre_region = 1;
 static bool s_region_posee = false;
 static int  s_region_w = 0, s_region_h = 0;
 static unsigned int s_region_n = 0, s_region_plein = 0, s_region_pix = 0;
+#ifdef THUG_DESKTOP
+// Off on desktop: from a 256x256 map over 96 inches, hard-edged, it laid
+// faceted dark stripes along the skater's limbs at full screen resolution.
+int   g_vita_auto_ombre = 0;
+#else
 int   g_vita_auto_ombre = 1;	// valide sur console le 2026-10-05 (Manhattan, aom 2 sans acne, cout nul)
+#endif
 float g_vita_aom_b0 = 1.5f;
 float g_vita_aom_b1 = 1.0f;
 float g_vita_aom_k  = 0.25f;

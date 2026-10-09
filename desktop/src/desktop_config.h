@@ -15,6 +15,8 @@ struct DesktopConfig
 	float ssao_strength;		// 0..1, how dark creases get
 	float ssao_radius;		// world inches
 	float shadow_softness;		// skater shadow edge blur, shadow-map texels (0 = hard)
+	int  sun_shadows;		// shadows of the level cast by the time-of-day sun
+	float sun_strength;		// 0..1
 	int  voices;			// voice acting streams (pcm.wad)
 	char data_root[1024];		// folder holding "data" (default: the exe's folder)
 };
@@ -24,5 +26,6 @@ const DesktopConfig &desktop_config( void );
 extern "C" int desktop_ecran_43( void );
 extern "C" float desktop_shadow_softness( void );
 extern "C" int desktop_voices( void );
+extern "C" float desktop_sun_strength( void );	// 0 = sun shadows off
 
 #endif

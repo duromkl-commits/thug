@@ -1110,3 +1110,295 @@ extern "C" void desktop_ssao( void )
 	appliquer_vp();
 	appliquer_sc();
 }
+
+// ---------------------------------------------------------------------------
+// Sun shadows. The world (p_world_render.cpp) draws its opaque meshes from
+// the time-of-day sun into a depth map around the camera; after the opaque
+// pass, every screen pixel is put back in the world (from the depth copy)
+// and tested against that map. Shadowed pixels, and surfaces turned away
+// from the sun, are multiplied by the shade colour; lit ones slightly by the
+// sun colour.
+// ---------------------------------------------------------------------------
+
+static const int SUN_TAILLE = 4096;
+static GLuint s_sun_tex = 0, s_sun_fbo = 0, s_sun_prog = 0, s_sun_app = 0;
+static GLint  s_sun_l_lvp = -1, s_sun_l_seuil = -1;
+static GLint  s_sa_l_proj = -1, s_sa_l_vw = -1, s_sa_l_lvp = -1, s_sa_l_lv = -1;
+static GLint  s_sa_l_ombre = -1, s_sa_l_soleil = -1, s_sa_l_tx = -1, s_sa_l_tm = -1;
+static int    s_sun_etat = 0;		// 0 not tried, 1 ready, -1 off
+static bool   s_sun_carte = false;	// a map has been drawn since the level loaded
+
+static const char *s_sun_vs =
+	"#version 120\n"
+	"attribute vec3 a_pos;\n"
+	"attribute vec2 a_uv;\n"
+	"uniform mat4 lvp;\n"
+	"varying vec2 uv;\n"
+	"void main() { uv = a_uv; gl_Position = lvp * vec4(a_pos, 1.0); }\n";
+
+static const char *s_sun_fs =
+	"#version 120\n"
+	"uniform sampler2D tex;\n"
+	"uniform float seuil;\n"		// alpha test threshold, 0 = none
+	"varying vec2 uv;\n"
+	"void main() {\n"
+	"	if (seuil > 0.0 && texture2D(tex, uv).a < seuil) discard;\n"
+	"	gl_FragColor = vec4(1.0);\n"
+	"}\n";
+
+static const char *s_sun_app_fs =
+	AO_GLSL_COMMUN
+	"uniform sampler2DShadow sm;\n"
+	"uniform mat4 vw;\n"			// view -> world
+	"uniform mat4 lvp;\n"			// world -> sun map
+	"uniform vec3 Lv;\n"			// towards the sun, view space
+	"uniform vec3 ombre;\n"			// multiplier in shade
+	"uniform vec3 soleil;\n"		// multiplier facing the sun
+	"uniform vec2 tx;\n"
+	"uniform float tm;\n"			// one map texel
+	"void main() {\n"
+	"	float d = texture2D(dep, t).r;\n"
+	"	if (d >= 0.99999) { gl_FragColor = vec4(0.5); return; }\n"
+	"	vec3 P = pos(t);\n"
+	"	float z = -P.z;\n"
+	"	vec2 e = 2.0 * tx;\n"
+	"	vec3 pr = pos(t + vec2(e.x, 0.0)) - P, pl = P - pos(t - vec2(e.x, 0.0));\n"
+	"	vec3 pu = pos(t + vec2(0.0, e.y)) - P, pd = P - pos(t - vec2(0.0, e.y));\n"
+	"	vec3 dx = abs(pr.z) < abs(pl.z) ? pr : pl;\n"
+	"	vec3 dy = abs(pu.z) < abs(pd.z) ? pu : pd;\n"
+	"	vec3 N = normalize(cross(dx, dy));\n"
+	"	if (dot(N, P) > 0.0) N = -N;\n"
+	"	float nl = dot(N, Lv);\n"
+	// Pushed off the surface (more when seen from afar or edge-on to the sun):
+	// no self-shadowing acne.
+	"	vec3 Po = P + N * (1.5 + 0.002 * z) + Lv * (1.0 + 2.0 * (1.0 - abs(nl)));\n"
+	"	vec4 S = lvp * (vw * vec4(Po, 1.0));\n"
+	"	vec3 s = S.xyz * 0.5 + 0.5;\n"
+	"	vec2 bd = abs(S.xy);\n"
+	"	float bord = smoothstep(0.8, 0.98, max(bd.x, bd.y));\n"
+	"	float vis = 0.0;\n"
+	"	float a = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
+	"	for (int i = 0; i < 12; ++i) {\n"
+	"		float k = (float(i) + 0.5) / 12.0;\n"
+	"		float g = a + float(i) * 2.3999632;\n"
+	"		vec2 o = vec2(cos(g), sin(g)) * sqrt(k) * 2.5 * tm;\n"
+	"		vis += shadow2D(sm, vec3(s.xy + o, s.z)).r;\n"
+	"	}\n"
+	"	vis /= 12.0;\n"
+	"	float lum = min(vis, smoothstep(-0.05, 0.2, nl));\n"
+	"	lum = mix(lum, 1.0, bord);\n"
+	"	vec3 m = mix(ombre, soleil, lum);\n"
+	"	gl_FragColor = vec4(m * 0.5, 1.0);\n"
+	"}\n";
+
+static bool sun_pret( void )
+{
+	if( s_sun_etat )
+		return s_sun_etat > 0;
+	s_sun_etat = -1;
+	if( !dep_pret())
+		return false;
+
+	s_sun_prog = ao_lier( s_sun_vs, s_sun_fs, "sun map" );
+	s_sun_app  = ao_lier( s_ao_vs, s_sun_app_fs, "sun shadows" );
+	if( !s_sun_prog || !s_sun_app )
+		return false;
+	glBindAttribLocation( s_sun_prog, 0, "a_pos" );
+	glBindAttribLocation( s_sun_prog, 1, "a_uv" );
+	dgl_glLinkProgram( s_sun_prog );
+	GLint ok = 0;
+	glGetProgramiv( s_sun_prog, GL_LINK_STATUS, &ok );
+	if( !ok )
+	{
+		DLOG( "!! sun map program refused" );
+		return false;
+	}
+	GLint avant = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
+	glUseProgram( s_sun_prog );
+	glUniform1i( glGetUniformLocation( s_sun_prog, "tex" ), 0 );
+	s_sun_l_lvp   = glGetUniformLocation( s_sun_prog, "lvp" );
+	s_sun_l_seuil = glGetUniformLocation( s_sun_prog, "seuil" );
+	glUseProgram( s_sun_app );
+	glUniform1i( glGetUniformLocation( s_sun_app, "dep" ), 0 );
+	glUniform1i( glGetUniformLocation( s_sun_app, "sm" ), 1 );
+	s_sa_l_proj   = glGetUniformLocation( s_sun_app, "proj" );
+	s_sa_l_vw     = glGetUniformLocation( s_sun_app, "vw" );
+	s_sa_l_lvp    = glGetUniformLocation( s_sun_app, "lvp" );
+	s_sa_l_lv     = glGetUniformLocation( s_sun_app, "Lv" );
+	s_sa_l_ombre  = glGetUniformLocation( s_sun_app, "ombre" );
+	s_sa_l_soleil = glGetUniformLocation( s_sun_app, "soleil" );
+	s_sa_l_tx     = glGetUniformLocation( s_sun_app, "tx" );
+	s_sa_l_tm     = glGetUniformLocation( s_sun_app, "tm" );
+	glUseProgram( avant );
+
+	GLint tex = 0;
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
+	glGenTextures( 1, &s_sun_tex );
+	glBindTexture( GL_TEXTURE_2D, s_sun_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, SUN_TAILLE, SUN_TAILLE, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL );
+	glBindTexture( GL_TEXTURE_2D, tex );
+
+	dgl_glGenFramebuffers( 1, &s_sun_fbo );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_sun_fbo );
+	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, s_sun_tex, 0 );
+	glDrawBuffer( GL_NONE );
+	glReadBuffer( GL_NONE );
+	const GLenum st = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
+	if( st != GL_FRAMEBUFFER_COMPLETE )
+	{
+		DLOG( "!! sun shadow map incomplete (0x%x), sun shadows off", (unsigned)st );
+		return false;
+	}
+	DLOG( "sun shadows on: %dx%d map", SUN_TAILLE, SUN_TAILLE );
+	s_sun_etat = 1;
+	return true;
+}
+
+// State saved around the map: the game's own caches (bound buffers, enabled
+// attribute arrays) must find GL as they left it.
+static GLint s_sv_prog, s_sv_tex0, s_sv_act, s_sv_ab, s_sv_eab;
+static GLint s_sv_attr[4];
+
+extern "C" int desktop_sun_begin( const float *lvp )
+{
+	if( !s_window || !on_screen() || !sun_pret())
+		return 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &s_sv_prog );
+	glGetIntegerv( GL_ACTIVE_TEXTURE, &s_sv_act );
+	glActiveTexture( GL_TEXTURE0 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &s_sv_tex0 );
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &s_sv_ab );
+	glGetIntegerv( GL_ELEMENT_ARRAY_BUFFER_BINDING, &s_sv_eab );
+	for( int i = 0; i < 4; ++i )
+		dgl_glGetVertexAttribiv( i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &s_sv_attr[i] );
+	// Bound BEFORE the push (see desktop_ssao): the pop then lands on s_fbo.
+	glPushAttrib( GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT
+	              | GL_SCISSOR_BIT | GL_POLYGON_BIT );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_sun_fbo );
+	glViewport( 0, 0, SUN_TAILLE, SUN_TAILLE );
+	glDisable( GL_SCISSOR_TEST );
+	glDisable( GL_BLEND );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glDisable( GL_CULL_FACE );
+	glEnable( GL_DEPTH_TEST );
+	glDepthFunc( GL_LESS );
+	glDepthMask( GL_TRUE );
+	glDepthRange( 0.0, 1.0 );
+	glClearDepth( 1.0 );
+	glClear( GL_DEPTH_BUFFER_BIT );
+	glEnable( GL_POLYGON_OFFSET_FILL );
+	glPolygonOffset( 1.5f, 4.0f );
+	glUseProgram( s_sun_prog );
+	glUniformMatrix4fv( s_sun_l_lvp, 1, GL_FALSE, lvp );
+	dgl_glEnableVertexAttribArray( 0 );
+	for( int i = 2; i < 4; ++i )
+		dgl_glDisableVertexAttribArray( i );
+	return 1;
+}
+
+extern "C" void desktop_sun_mesh( unsigned int vbo, unsigned int uvbo, unsigned int ibo,
+                                  int num_indices, unsigned int texture, float seuil )
+{
+	const bool test = ( seuil > 0.0f ) && texture && uvbo;
+	glBindBuffer( GL_ARRAY_BUFFER, vbo );
+	dgl_glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
+	if( test )
+	{
+		glBindBuffer( GL_ARRAY_BUFFER, uvbo );
+		dgl_glVertexAttribPointer( 1, 2, GL_FLOAT, GL_FALSE, 0, NULL );
+		dgl_glEnableVertexAttribArray( 1 );
+		glBindTexture( GL_TEXTURE_2D, texture );
+	}
+	else
+		dgl_glDisableVertexAttribArray( 1 );
+	glUniform1f( s_sun_l_seuil, test ? seuil : 0.0f );
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo );
+	glDrawElements( GL_TRIANGLE_STRIP, num_indices, GL_UNSIGNED_SHORT, NULL );
+}
+
+extern "C" void desktop_sun_end( void )
+{
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+	glPopAttrib();
+	for( int i = 0; i < 4; ++i )
+	{
+		if( s_sv_attr[i] ) dgl_glEnableVertexAttribArray( i );
+		else               dgl_glDisableVertexAttribArray( i );
+	}
+	glBindBuffer( GL_ARRAY_BUFFER, s_sv_ab );
+	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, s_sv_eab );
+	glBindTexture( GL_TEXTURE_2D, s_sv_tex0 );
+	glActiveTexture( s_sv_act );
+	glUseProgram( s_sv_prog );
+	appliquer_vp();
+	appliquer_sc();
+	s_sun_carte = true;
+}
+
+extern "C" void desktop_sun_forget( void ) { s_sun_carte = false; }
+
+// vw: view -> world; lvp: world -> map clip; lv: towards the sun, view space.
+extern "C" void desktop_sun_apply( const float *vw, const float *lvp, const float *lv,
+                                   const float *ombre, const float *soleil )
+{
+	if( !s_window || !on_screen() || !s_proj_ok || !s_sun_carte || s_sun_etat <= 0 ||
+	    s_vp[0] != 0 || s_vp[1] != 0 || s_vp[2] < VIRT_W || s_vp[3] < VIRT_H )
+		return;
+	copier_profondeur();
+
+	GLint prog = 0, act = 0, tex0 = 0, tex1 = 0, buf = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
+	glGetIntegerv( GL_ACTIVE_TEXTURE, &act );
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &buf );
+	glActiveTexture( GL_TEXTURE1 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex1 );
+	glBindTexture( GL_TEXTURE_2D, s_sun_tex );
+	glActiveTexture( GL_TEXTURE0 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex0 );
+	glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
+	glPushAttrib( GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
+	glDisable( GL_DEPTH_TEST );
+	glDepthMask( GL_FALSE );
+	glDisable( GL_CULL_FACE );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glDisable( GL_SCISSOR_TEST );
+	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
+	glViewport( 0, 0, s_rt_w, s_rt_h );
+	// dst x 2 x src: the shader writes half the multiplier, so it can go
+	// above 1 (sunlit faces).
+	glEnable( GL_BLEND );
+	glBlendEquation( GL_FUNC_ADD );
+	glBlendFunc( GL_DST_COLOR, GL_SRC_COLOR );
+	glUseProgram( s_sun_app );
+	glUniform4f( s_sa_l_proj, s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
+	glUniformMatrix4fv( s_sa_l_vw, 1, GL_FALSE, vw );
+	glUniformMatrix4fv( s_sa_l_lvp, 1, GL_FALSE, lvp );
+	glUniform3f( s_sa_l_lv, lv[0], lv[1], lv[2] );
+	glUniform3f( s_sa_l_ombre, ombre[0], ombre[1], ombre[2] );
+	glUniform3f( s_sa_l_soleil, soleil[0], soleil[1], soleil[2] );
+	glUniform2f( s_sa_l_tx, 1.0f / s_rt_w, 1.0f / s_rt_h );
+	glUniform1f( s_sa_l_tm, 1.0f / SUN_TAILLE );
+	ao_quad();
+
+	glPopAttrib();
+	glBindBuffer( GL_ARRAY_BUFFER, buf );
+	glActiveTexture( GL_TEXTURE1 );
+	glBindTexture( GL_TEXTURE_2D, tex1 );
+	glActiveTexture( GL_TEXTURE0 );
+	glBindTexture( GL_TEXTURE_2D, tex0 );
+	glActiveTexture( act );
+	glUseProgram( prog );
+	appliquer_vp();
+	appliquer_sc();
+}

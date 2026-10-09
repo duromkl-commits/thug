@@ -40,6 +40,10 @@ static const char *s_default_ini =
 	"ssao_radius=28\n"
 	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
 	"shadow_softness=2.5\n"
+	"; shadows of buildings and objects from the sun, following the level's time of day: 0 = off, 1 = on\n"
+	"sun_shadows=1\n"
+	"; how dark they get in full daylight (0.0 - 1.0); evening is lighter, night barely shows\n"
+	"sun_strength=0.7\n"
 	"\n"
 	"[audio]\n"
 	"; voice acting: 0 = off, 1 = on\n"
@@ -98,6 +102,8 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "ssao_strength" )) s_cfg.ssao_strength = (float)atof( v );
 		else if( !strcmp( k, "ssao_radius" ))   s_cfg.ssao_radius = (float)atof( v );
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
+		else if( !strcmp( k, "sun_shadows" ))   s_cfg.sun_shadows = iv;
+		else if( !strcmp( k, "sun_strength" ))  s_cfg.sun_strength = (float)atof( v );
 		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
 		else if( !strcmp( k, "dump_shaders" ))  s_cfg.dump_shaders = iv;
 		else if( !strcmp( k, "data" ))          snprintf( s_cfg.data_root, sizeof( s_cfg.data_root ), "%s", v );
@@ -118,6 +124,8 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.ssao_radius = 28.0f;
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
+	s_cfg.sun_shadows = 1;
+	s_cfg.sun_strength = 0.7f;
 
 	char path[1200];
 	char *base = SDL_GetBasePath();
@@ -203,6 +211,14 @@ extern "C" float desktop_shadow_softness( void )
 {
 	const float v = desktop_config().shadow_softness;
 	return v < 0.0f ? 0.0f : v > 8.0f ? 8.0f : v;
+}
+
+extern "C" float desktop_sun_strength( void )
+{
+	const DesktopConfig &c = desktop_config();
+	if( !c.sun_shadows )
+		return 0.0f;
+	return c.sun_strength < 0.0f ? 0.0f : c.sun_strength > 1.0f ? 1.0f : c.sun_strength;
 }
 
 extern "C" int desktop_voices( void )

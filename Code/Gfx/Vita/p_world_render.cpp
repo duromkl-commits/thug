@@ -4143,6 +4143,223 @@ static void dessiner_instances( void )
 // l'ombre (render.cpp:2793) ; "omt 0" ne l'y dessinait pas.
 int g_vita_ombre_transp = 1;	// "omt 0/1" (p_siodev.cpp)
 
+#ifdef THUG_DESKTOP
+// --- Ombres du soleil (desktop) ---------------------------------------------
+//
+// The time-of-day light 0 (set_level_lights: heading_0/pitch_0, the skater's
+// key light, i.e. the sun or moon) casts the level's shadows: the opaque
+// meshes around the camera go into a sun depth map (shim_gl.cpp), redrawn
+// only when the camera has moved a quarter of the map, the light changed, or
+// every 30 images (sectors switched on and off). Shade colour from the TOD
+// light colours, faded by the level tint (night: lev 50/65/75 -> faint).
+}	// namespace
+#include <gfx/NxLightMan.h>
+#include <gel/scripting/symboltable.h>
+#include <gel/scripting/script.h>
+namespace NxVita {
+extern "C" int   desktop_sun_begin( const float *lvp );
+extern "C" void  desktop_sun_mesh( unsigned int vbo, unsigned int uvbo, unsigned int ibo,
+                                   int num_indices, unsigned int texture, float seuil );
+extern "C" void  desktop_sun_end( void );
+extern "C" void  desktop_sun_forget( void );
+extern "C" void  desktop_sun_apply( const float *vw, const float *lvp, const float *lv,
+                                    const float *ombre, const float *soleil );
+extern "C" float desktop_sun_strength( void );
+
+static const float SOL_R = 3500.0f;		// half width of the map, inches (~90 m)
+static const float SOL_D = 12000.0f;	// half depth along the light
+static float    s_sol_lvp[16];
+static float    s_sol_cle[6];			// centre (r, u, f) + light direction
+static unsigned s_sol_gen = 0xffffffffu;
+static int      s_sol_age = 1 << 20;
+
+static bool inverser44( const float m[16], float o[16] )
+{
+	float inv[16];
+	inv[0]  =  m[5]*m[10]*m[15] - m[5]*m[11]*m[14] - m[9]*m[6]*m[15] + m[9]*m[7]*m[14] + m[13]*m[6]*m[11] - m[13]*m[7]*m[10];
+	inv[4]  = -m[4]*m[10]*m[15] + m[4]*m[11]*m[14] + m[8]*m[6]*m[15] - m[8]*m[7]*m[14] - m[12]*m[6]*m[11] + m[12]*m[7]*m[10];
+	inv[8]  =  m[4]*m[9]*m[15]  - m[4]*m[11]*m[13] - m[8]*m[5]*m[15] + m[8]*m[7]*m[13] + m[12]*m[5]*m[11] - m[12]*m[7]*m[9];
+	inv[12] = -m[4]*m[9]*m[14]  + m[4]*m[10]*m[13] + m[8]*m[5]*m[14] - m[8]*m[6]*m[13] - m[12]*m[5]*m[10] + m[12]*m[6]*m[9];
+	inv[1]  = -m[1]*m[10]*m[15] + m[1]*m[11]*m[14] + m[9]*m[2]*m[15] - m[9]*m[3]*m[14] - m[13]*m[2]*m[11] + m[13]*m[3]*m[10];
+	inv[5]  =  m[0]*m[10]*m[15] - m[0]*m[11]*m[14] - m[8]*m[2]*m[15] + m[8]*m[3]*m[14] + m[12]*m[2]*m[11] - m[12]*m[3]*m[10];
+	inv[9]  = -m[0]*m[9]*m[15]  + m[0]*m[11]*m[13] + m[8]*m[1]*m[15] - m[8]*m[3]*m[13] - m[12]*m[1]*m[11] + m[12]*m[3]*m[9];
+	inv[13] =  m[0]*m[9]*m[14]  - m[0]*m[10]*m[13] - m[8]*m[1]*m[14] + m[8]*m[2]*m[13] + m[12]*m[1]*m[10] - m[12]*m[2]*m[9];
+	inv[2]  =  m[1]*m[6]*m[15]  - m[1]*m[7]*m[14]  - m[5]*m[2]*m[15] + m[5]*m[3]*m[14] + m[13]*m[2]*m[7]  - m[13]*m[3]*m[6];
+	inv[6]  = -m[0]*m[6]*m[15]  + m[0]*m[7]*m[14]  + m[4]*m[2]*m[15] - m[4]*m[3]*m[14] - m[12]*m[2]*m[7]  + m[12]*m[3]*m[6];
+	inv[10] =  m[0]*m[5]*m[15]  - m[0]*m[7]*m[13]  - m[4]*m[1]*m[15] + m[4]*m[3]*m[13] + m[12]*m[1]*m[7]  - m[12]*m[3]*m[5];
+	inv[14] = -m[0]*m[5]*m[14]  + m[0]*m[6]*m[13]  + m[4]*m[1]*m[14] - m[4]*m[2]*m[13] - m[12]*m[1]*m[6]  + m[12]*m[2]*m[5];
+	inv[3]  = -m[1]*m[6]*m[11]  + m[1]*m[7]*m[10]  + m[5]*m[2]*m[11] - m[5]*m[3]*m[10] - m[9]*m[2]*m[7]   + m[9]*m[3]*m[6];
+	inv[7]  =  m[0]*m[6]*m[11]  - m[0]*m[7]*m[10]  - m[4]*m[2]*m[11] + m[4]*m[3]*m[10] + m[8]*m[2]*m[7]   - m[8]*m[3]*m[6];
+	inv[11] = -m[0]*m[5]*m[11]  + m[0]*m[7]*m[9]   + m[4]*m[1]*m[11] - m[4]*m[3]*m[9]  - m[8]*m[1]*m[7]   + m[8]*m[3]*m[5];
+	inv[15] =  m[0]*m[5]*m[10]  - m[0]*m[6]*m[9]   - m[4]*m[1]*m[10] + m[4]*m[2]*m[9]  + m[8]*m[1]*m[6]   - m[8]*m[2]*m[5];
+	const float det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+	if( fabsf( det ) < 1e-12f )
+		return false;
+	for( int i = 0; i < 16; ++i )
+		o[i] = inv[i] / det;
+	return true;
+}
+
+static int lev_composante( const char *p_nom )
+{
+	const int v = Script::GetInteger( Script::GenerateCRC( p_nom ), Script::NO_ASSERT );
+	return v > 0 ? v : 128;
+}
+
+static void soleil_desktop( void )
+{
+	const float force = desktop_sun_strength();
+	if(( force <= 0.0f ) || !s_cur_view_ok || ( s_num_world <= 0 ))
+		return;
+
+	// Towards the light: -direction (p_NxModel.cpp lights models the same
+	// way). Every TOD uses pitch 330, a sun 30 degrees up; keep it above the
+	// horizon whatever the sign convention, and not too low.
+	const Mth::Vector v0 = Nx::CLightManager::sGetLightDirection( 0 );
+	float L[3] = { -v0[0], -v0[1], -v0[2] };
+	if( L[1] < 0.0f ) L[1] = -L[1];
+	if( L[1] < 0.3f ) L[1] = 0.3f;
+	{
+		const float n = sqrtf( L[0] * L[0] + L[1] * L[1] + L[2] * L[2] );
+		if( n < 1e-4f ) return;
+		L[0] /= n; L[1] /= n; L[2] /= n;
+	}
+
+	// Shade = what's left without light 0: (ambient + light 1) / all three,
+	// per channel; faded by the level tint (lev_red/green/blue, 128 = day).
+	const Image::RGBA a  = Nx::CLightManager::sGetLightAmbientColor();
+	const Image::RGBA d0 = Nx::CLightManager::sGetLightDiffuseColor( 0 );
+	const Image::RGBA d1 = Nx::CLightManager::sGetLightDiffuseColor( 1 );
+	const float tout[3]  = { (float)a.r + d0.r + d1.r, (float)a.g + d0.g + d1.g, (float)a.b + d0.b + d1.b };
+	const float reste[3] = { (float)a.r + d1.r, (float)a.g + d1.g, (float)a.b + d1.b };
+	if( tout[0] + tout[1] + tout[2] < 30.0f )
+		return;		// no lights set (front end)
+	float lev = ( lev_composante( "lev_red" ) * 0.3f + lev_composante( "lev_green" ) * 0.59f
+	              + lev_composante( "lev_blue" ) * 0.11f ) / 128.0f;
+	if( lev > 1.0f ) lev = 1.0f;
+	const float k = force * lev * lev;
+	if( k < 0.02f )
+		return;
+	float ombre[3], soleil[3];
+	const float dmax = (float)( d0.r > d0.g ? ( d0.r > d0.b ? d0.r : d0.b ) : ( d0.g > d0.b ? d0.g : d0.b ));
+	for( int c = 0; c < 3; ++c )
+	{
+		float q = tout[c] > 1.0f ? reste[c] / tout[c] : 1.0f;
+		if( q < 0.25f ) q = 0.25f;
+		ombre[c] = 1.0f - k * ( 1.0f - q );
+		const float dc = ( c == 0 ) ? d0.r : ( c == 1 ) ? d0.g : d0.b;
+		soleil[c] = 1.0f + 0.12f * k * ( dmax > 0.0f ? dc / dmax : 1.0f );
+	}
+
+	float vw[16];
+	if( !inverser44( s_cur_view, vw ))
+		return;
+	const float cam[3] = { vw[12], vw[13], vw[14] };
+
+	// Light basis: f = direction of travel, r and u across.
+	const float f[3] = { -L[0], -L[1], -L[2] };
+	float r[3] = { f[1] * 0.0f - f[2] * 1.0f, f[2] * 0.0f - f[0] * 0.0f, f[0] * 1.0f - f[1] * 0.0f };	// f x (0,0,1)
+	{
+		float n = sqrtf( r[0] * r[0] + r[1] * r[1] + r[2] * r[2] );
+		if( n < 1e-3f ) { r[0] = 1.0f; r[1] = 0.0f; r[2] = 0.0f; n = 1.0f; }
+		r[0] /= n; r[1] /= n; r[2] /= n;
+	}
+	const float u[3] = { r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0] };
+
+	const float texel = 2.0f * SOL_R / 4096.0f;
+	float cr = r[0] * cam[0] + r[1] * cam[1] + r[2] * cam[2];
+	float cu = u[0] * cam[0] + u[1] * cam[1] + u[2] * cam[2];
+	float cf = f[0] * cam[0] + f[1] * cam[1] + f[2] * cam[2];
+	const bool meme_lumiere = fabsf( s_sol_cle[3] - L[0] ) < 1e-4f && fabsf( s_sol_cle[4] - L[1] ) < 1e-4f
+	                          && fabsf( s_sol_cle[5] - L[2] ) < 1e-4f;
+	const bool redessiner = !meme_lumiere || ( s_sol_gen != s_world_gen ) || ( ++s_sol_age >= 30 )
+	    || fabsf( cr - s_sol_cle[0] ) > SOL_R * 0.25f || fabsf( cu - s_sol_cle[1] ) > SOL_R * 0.25f
+	    || fabsf( cf - s_sol_cle[2] ) > SOL_D * 0.25f;
+	if( redessiner )
+	{
+		if( meme_lumiere && ( s_sol_gen == s_world_gen ))
+		{
+			// Same light, camera still inside: keep the centre (no swim).
+			if( fabsf( cr - s_sol_cle[0] ) <= SOL_R * 0.25f && fabsf( cu - s_sol_cle[1] ) <= SOL_R * 0.25f
+			    && fabsf( cf - s_sol_cle[2] ) <= SOL_D * 0.25f )
+			{
+				cr = s_sol_cle[0]; cu = s_sol_cle[1]; cf = s_sol_cle[2];
+			}
+		}
+		// Whole texels: a moved map lands on the same texel grid.
+		cr = floorf( cr / texel ) * texel;
+		cu = floorf( cu / texel ) * texel;
+		s_sol_cle[0] = cr; s_sol_cle[1] = cu; s_sol_cle[2] = cf;
+		s_sol_cle[3] = L[0]; s_sol_cle[4] = L[1]; s_sol_cle[5] = L[2];
+		s_sol_gen = s_world_gen;
+		s_sol_age = 0;
+
+		// Columns (OpenGL order): clip = ( r.p - cr, u.p - cu, f.p - cf ) / size.
+		float *m = s_sol_lvp;
+		const float ir = 1.0f / SOL_R, id = 1.0f / SOL_D;
+		m[0] = r[0] * ir; m[4] = r[1] * ir; m[8]  = r[2] * ir; m[12] = -cr * ir;
+		m[1] = u[0] * ir; m[5] = u[1] * ir; m[9]  = u[2] * ir; m[13] = -cu * ir;
+		m[2] = f[0] * id; m[6] = f[1] * id; m[10] = f[2] * id; m[14] = -cf * id;
+		m[3] = 0.0f;      m[7] = 0.0f;      m[11] = 0.0f;      m[15] = 1.0f;
+
+		if( !desktop_sun_begin( s_sol_lvp ))
+			return;
+		int n = 0;
+		for( int i = 0; i < s_num_world; ++i )
+		{
+			const SWorldMesh *p = &sp_world[i];
+			if( p->is_sky || !p->vbo || !p->ibo || ( p->num_indices < 3 ))
+				continue;
+			if( p->p_sector_actif && !*p->p_sector_actif )
+				continue;
+			const bool translucide = !g_vita_force_opaque
+			    && ( g_vita_transp_flag ? ((( p->mat_flags0 & 0x40 ) != 0 )
+			                               || ( g_vita_melange_opaques && melange_hors_drapeau( p->blend, p->mat_flags0 )))
+			                            : ( p->blend != 0 ));
+			const bool decoupe = g_vita_alpha_test && ( p->alpha_cutoff > 0 );
+			if( translucide && !decoupe )
+				continue;
+			// Box against the map: centre and half extents seen along r, u, f.
+			float c[3], e[3];
+			for( int q = 0; q < 3; ++q )
+			{
+				c[q] = 0.5f * ( p->bb_min[q] + p->bb_max[q] );
+				e[q] = 0.5f * ( p->bb_max[q] - p->bb_min[q] );
+			}
+			const float er = fabsf( r[0] ) * e[0] + fabsf( r[1] ) * e[1] + fabsf( r[2] ) * e[2];
+			const float eu = fabsf( u[0] ) * e[0] + fabsf( u[1] ) * e[1] + fabsf( u[2] ) * e[2];
+			const float ef = fabsf( f[0] ) * e[0] + fabsf( f[1] ) * e[1] + fabsf( f[2] ) * e[2];
+			if( fabsf( r[0] * c[0] + r[1] * c[1] + r[2] * c[2] - cr ) > SOL_R + er
+			    || fabsf( u[0] * c[0] + u[1] * c[1] + u[2] * c[2] - cu ) > SOL_R + eu
+			    || fabsf( f[0] * c[0] + f[1] * c[1] + f[2] * c[2] - cf ) > SOL_D + ef )
+				continue;
+			desktop_sun_mesh( p->vbo, p->uvbo, p->ibo, p->num_indices, p->texture,
+			                  decoupe ? (float)p->alpha_cutoff / 255.0f : 0.0f );
+			++n;
+		}
+		desktop_sun_end();
+		// Caches d'etat du decor : polygon offset et culling ont pu changer.
+		s_zbias_cour = 0;
+		s_cull_cour  = -1;
+		static int s_journal = 0;
+		if(( s_journal++ % 60 ) == 0 )
+			VLOG( "DSK", "sun map: %d meshes, light (%.2f %.2f %.2f), shade (%.2f %.2f %.2f), level %.2f",
+			      n, L[0], L[1], L[2], ombre[0], ombre[1], ombre[2], lev );
+	}
+
+	// Towards the sun in view space (rotation part of the view).
+	const float *V = s_cur_view;
+	float lv[3] = { V[0] * L[0] + V[4] * L[1] + V[8]  * L[2],
+	                V[1] * L[0] + V[5] * L[1] + V[9]  * L[2],
+	                V[2] * L[0] + V[6] * L[1] + V[10] * L[2] };
+	{
+		const float n = sqrtf( lv[0] * lv[0] + lv[1] * lv[1] + lv[2] * lv[2] );
+		if( n > 1e-6f ) { lv[0] /= n; lv[1] /= n; lv[2] /= n; }
+	}
+	desktop_sun_apply( vw, s_sol_lvp, lv, ombre, soleil );
+}
+#endif
+
 #define OMB_MAX_CAND 256
 static int s_omb_cand[OMB_MAX_CAND];
 
@@ -6848,8 +7065,9 @@ void RenderWorld( void )
 		VitaMondeEtape( MW_OMBRE );
 		ombre_reception();
 #ifdef THUG_DESKTOP
-		// Ambient occlusion on the opaque world (and the models already
-		// drawn), before translucents and 2D.
+		// Sun shadows, then ambient occlusion, on the opaque world (and the
+		// models already drawn), before translucents and 2D.
+		soleil_desktop();
 		desktop_ssao();
 #endif
 	}
