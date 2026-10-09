@@ -30,5 +30,8 @@ extern "C" float desktop_sun_strength( void );	// 0 = sun shadows off everywhere
 extern "C" int  desktop_sun_level( unsigned level, float *heading, float *pitch, float *strength );
 extern "C" void desktop_sun_seed( float heading, float pitch );
 extern "C" void desktop_sun_key( int fkey, int shift );
+extern "C" int  desktop_sun_auto_request( void );
+extern "C" int  desktop_sun_show_baked( void );
+extern "C" void desktop_sun_set_level( unsigned level, float heading, float pitch );
 
 #endif

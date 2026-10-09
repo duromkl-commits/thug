@@ -4167,6 +4167,14 @@ extern "C" void  desktop_sun_apply( const float *vw, const float *lvp, const flo
 extern "C" float desktop_sun_strength( void );
 extern "C" int   desktop_sun_level( unsigned level, float *heading, float *pitch, float *strength );
 extern "C" void  desktop_sun_seed( float heading, float pitch );
+extern "C" int   desktop_sun_auto_request( void );
+extern "C" int   desktop_sun_show_baked( void );
+extern "C" void  desktop_sun_set_level( unsigned level, float heading, float pitch );
+extern "C" int   desktop_sun_points( const float *pts, int n );
+extern "C" void  desktop_sun_eval( const float *lvp, const float *dec, float *vis );
+}	// namespace
+namespace Nx { extern unsigned char g_vita_tex_sombre[16384]; }
+namespace NxVita {
 
 static const float SOL_R = 3500.0f;		// half width of the map, inches (~90 m)
 static const float SOL_D = 12000.0f;	// half depth along the light
@@ -4174,6 +4182,276 @@ static float    s_sol_lvp[16];
 static float    s_sol_cle[6];			// centre (r, u, f) + light direction
 static unsigned s_sol_gen = 0xffffffffu;
 static int      s_sol_age = 1 << 20;
+
+// Direction of travel of a light set by heading/pitch (ScriptSetLightDirection),
+// and the way towards it, kept above the horizon whatever the sign convention.
+static bool vers_soleil( float heading, float pitch, float L[3] )
+{
+	Mth::Vector dir( 0.0f, 0.0f, 1.0f, 0.0f );
+	dir.RotateX( Mth::DegToRad( pitch ));
+	dir.RotateY( Mth::DegToRad( heading ));
+	L[0] = -dir[0]; L[1] = -dir[1]; L[2] = -dir[2];
+	if( L[1] < 0.0f ) L[1] = -L[1];
+	if( L[1] < 0.1f ) L[1] = 0.1f;
+	const float n = sqrtf( L[0] * L[0] + L[1] * L[1] + L[2] * L[2] );
+	if( n < 1e-4f ) return false;
+	L[0] /= n; L[1] /= n; L[2] /= n;
+	return true;
+}
+
+// Map of side 2 R (and 2 D along the light) centred on c, for the light L.
+static void matrice_soleil( const float L[3], const float c[3], float R, float D, float m[16],
+                            float r[3], float u[3], float f[3], bool aligner )
+{
+	f[0] = -L[0]; f[1] = -L[1]; f[2] = -L[2];
+	r[0] = -f[2]; r[1] = 0.0f; r[2] = f[0];		// f x (0,1,0) turned: horizontal
+	{
+		float n = sqrtf( r[0] * r[0] + r[2] * r[2] );
+		if( n < 1e-3f ) { r[0] = 1.0f; r[2] = 0.0f; n = 1.0f; }
+		r[0] /= n; r[2] /= n;
+	}
+	u[0] = r[1] * f[2] - r[2] * f[1]; u[1] = r[2] * f[0] - r[0] * f[2]; u[2] = r[0] * f[1] - r[1] * f[0];
+	float cr = r[0] * c[0] + r[1] * c[1] + r[2] * c[2];
+	float cu = u[0] * c[0] + u[1] * c[1] + u[2] * c[2];
+	const float cf = f[0] * c[0] + f[1] * c[1] + f[2] * c[2];
+	if( aligner )
+	{
+		const float texel = 2.0f * R / 4096.0f;
+		cr = floorf( cr / texel ) * texel;
+		cu = floorf( cu / texel ) * texel;
+	}
+	const float ir = 1.0f / R, id = 1.0f / D;
+	m[0] = r[0] * ir; m[4] = r[1] * ir; m[8]  = r[2] * ir; m[12] = -cr * ir;
+	m[1] = u[0] * ir; m[5] = u[1] * ir; m[9]  = u[2] * ir; m[13] = -cu * ir;
+	m[2] = f[0] * id; m[6] = f[1] * id; m[10] = f[2] * id; m[14] = -cf * id;
+	m[3] = 0.0f;      m[7] = 0.0f;      m[11] = 0.0f;      m[15] = 1.0f;
+}
+
+// Opaque (and cut-out) meshes inside the map: the casters.
+static int dessiner_carte_soleil( const float m[16], const float r[3], const float u[3], const float f[3],
+                                  const float c[3], float R, float D )
+{
+	const float cr = r[0] * c[0] + r[1] * c[1] + r[2] * c[2];
+	const float cu = u[0] * c[0] + u[1] * c[1] + u[2] * c[2];
+	const float cf = f[0] * c[0] + f[1] * c[1] + f[2] * c[2];
+	if( !desktop_sun_begin( m ))
+		return -1;
+	int n = 0;
+	for( int i = 0; i < s_num_world; ++i )
+	{
+		const SWorldMesh *p = &sp_world[i];
+		if( p->is_sky || !p->vbo || !p->ibo || ( p->num_indices < 3 ))
+			continue;
+		if( p->p_sector_actif && !*p->p_sector_actif )
+			continue;
+		const bool translucide = !g_vita_force_opaque
+		    && ( g_vita_transp_flag ? ((( p->mat_flags0 & 0x40 ) != 0 )
+		                               || ( g_vita_melange_opaques && melange_hors_drapeau( p->blend, p->mat_flags0 )))
+		                            : ( p->blend != 0 ));
+		const bool decoupe = g_vita_alpha_test && ( p->alpha_cutoff > 0 );
+		if( translucide && !decoupe )
+			continue;
+		float cc[3], e[3];
+		for( int q = 0; q < 3; ++q )
+		{
+			cc[q] = 0.5f * ( p->bb_min[q] + p->bb_max[q] );
+			e[q] = 0.5f * ( p->bb_max[q] - p->bb_min[q] );
+		}
+		const float er = fabsf( r[0] ) * e[0] + fabsf( r[1] ) * e[1] + fabsf( r[2] ) * e[2];
+		const float eu = fabsf( u[0] ) * e[0] + fabsf( u[1] ) * e[1] + fabsf( u[2] ) * e[2];
+		const float ef = fabsf( f[0] ) * e[0] + fabsf( f[1] ) * e[1] + fabsf( f[2] ) * e[2];
+		if( fabsf( r[0] * cc[0] + r[1] * cc[1] + r[2] * cc[2] - cr ) > R + er
+		    || fabsf( u[0] * cc[0] + u[1] * cc[1] + u[2] * cc[2] - cu ) > R + eu
+		    || fabsf( f[0] * cc[0] + f[1] * cc[1] + f[2] * cc[2] - cf ) > D + ef )
+			continue;
+		desktop_sun_mesh( p->vbo, p->uvbo, p->ibo, p->num_indices, p->texture,
+		                  decoupe ? (float)p->alpha_cutoff / 255.0f : 0.0f );
+		++n;
+	}
+	desktop_sun_end();
+	s_zbias_cour = 0;
+	s_cull_cour  = -1;
+	return n;
+}
+
+// --- Baked shadow decals ------------------------------------------------------
+// Blended (BLEND / BLEND_FIXED) meshes with a near-black texture: the level's
+// sharp painted shadows. Hidden (texture alpha read as 0 by swizzle, so every
+// draw path skips them) where the level's sun shadows are on.
+#ifndef GL_TEXTURE_SWIZZLE_A
+#define GL_TEXTURE_SWIZZLE_A 0x8E45
+#endif
+static unsigned s_dec_gen = 0xffffffffu;
+static int      s_dec_n = 0;
+static int     *sp_dec = NULL;			// mesh indices
+static GLuint   s_dec_tex[256];
+static int      s_dec_ntex = 0;
+static int      s_dec_cache = -1;		// state applied to the textures
+
+static bool est_decalque_ombre( const SWorldMesh *p )
+{
+	const unsigned b = p->blend & 0xFF;
+	return (( b == 5 ) || ( b == 6 )) && p->texture && ( p->texture < 16384 )
+	       && Nx::g_vita_tex_sombre[p->texture] && p->vbo && p->ibo && ( p->num_indices >= 3 );
+}
+
+static void decalques_lister( void )
+{
+	if( s_dec_gen == s_world_gen )
+		return;
+	// New world: textures of the old one are gone, nothing to restore.
+	s_dec_gen = s_world_gen;
+	s_dec_n = s_dec_ntex = 0;
+	s_dec_cache = -1;
+	free( sp_dec );
+	sp_dec = (int *)malloc( sizeof( int ) * ( s_num_world > 0 ? s_num_world : 1 ));
+	if( !sp_dec )
+		return;
+	for( int i = 0; i < s_num_world; ++i )
+	{
+		const SWorldMesh *p = &sp_world[i];
+		if( !est_decalque_ombre( p ))
+			continue;
+		sp_dec[s_dec_n++] = i;
+		int k = 0;
+		while(( k < s_dec_ntex ) && ( s_dec_tex[k] != p->texture ))
+			++k;
+		if(( k == s_dec_ntex ) && ( s_dec_ntex < 256 ))
+			s_dec_tex[s_dec_ntex++] = p->texture;
+	}
+	VLOG( "DSK", "baked shadow decals: %d meshes, %d textures", s_dec_n, s_dec_ntex );
+}
+
+static void decalques_cacher( bool cacher )
+{
+	if(( cacher ? 1 : 0 ) == s_dec_cache )
+		return;
+	s_dec_cache = cacher ? 1 : 0;
+	GLint t = 0;
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &t );
+	for( int k = 0; k < s_dec_ntex; ++k )
+	{
+		glBindTexture( GL_TEXTURE_2D, s_dec_tex[k] );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, cacher ? GL_ZERO : GL_ALPHA );
+	}
+	glBindTexture( GL_TEXTURE_2D, t );
+}
+
+// --- F4: the sun that best explains the decals ---------------------------------
+// Points inside decal triangles near the camera should be in shadow; points
+// just past their outer edges should be lit. Every candidate heading/pitch
+// renders the map and scores (shadowed inside + lit outside); coarse grid,
+// then a finer one around the best.
+static void soleil_chercher( unsigned niveau, const float cam[3] )
+{
+	const float RAYON = 1500.0f;
+	float *pts = (float *)malloc( sizeof( float ) * 3 * 8192 );
+	int *signe = (int *)malloc( sizeof( int ) * 8192 );
+	float *vis = (float *)malloc( sizeof( float ) * 8192 );
+	if( !pts || !signe || !vis ) { free( pts ); free( signe ); free( vis ); return; }
+	int np = 0, nin = 0, nout = 0;
+	float centre[3] = { 0.0f, 0.0f, 0.0f };
+	for( int d = 0; ( d < s_dec_n ) && ( np < 8000 ); ++d )
+	{
+		const SWorldMesh *p = &sp_world[sp_dec[d]];
+		if( p->p_sector_actif && !*p->p_sector_actif )
+			continue;
+		const float cx = 0.5f * ( p->bb_min[0] + p->bb_max[0] ) - cam[0];
+		const float cz = 0.5f * ( p->bb_min[2] + p->bb_max[2] ) - cam[2];
+		if( cx * cx + cz * cz > RAYON * RAYON )
+			continue;
+		GLint octets = 0;
+		glBindBuffer( GL_ARRAY_BUFFER, p->vbo );
+		glGetBufferParameteriv( GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &octets );
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		const int nv = octets / (int)( 3 * sizeof( float ));
+		if( nv <= 0 || nv > 65536 )
+			continue;
+		float *v = (float *)malloc( sizeof( float ) * 3 * nv );
+		unsigned short *ix = (unsigned short *)malloc( sizeof( unsigned short ) * p->num_indices );
+		if( !v || !ix ) { free( v ); free( ix ); continue; }
+		glBindBuffer( GL_ARRAY_BUFFER, p->vbo );
+		glGetBufferSubData( GL_ARRAY_BUFFER, 0, sizeof( float ) * 3 * nv, v );
+		glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, p->ibo );
+		glGetBufferSubData( GL_ELEMENT_ARRAY_BUFFER, 0, sizeof( unsigned short ) * p->num_indices, ix );
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 );
+		for( int t = 0; ( t + 2 < p->num_indices ) && ( np + 4 < 8000 ); ++t )
+		{
+			const int a = ix[t], b = ix[t + 1], c = ix[t + 2];
+			if( a == b || b == c || a == c || a >= nv || b >= nv || c >= nv )
+				continue;
+			const float *A = v + a * 3, *B = v + b * 3, *C = v + c * 3;
+			const float g[3] = { ( A[0] + B[0] + C[0] ) / 3.0f, ( A[1] + B[1] + C[1] ) / 3.0f, ( A[2] + B[2] + C[2] ) / 3.0f };
+			// Inside: the centroid. Outside: each corner pushed 10 inches
+			// further from the centroid -- past the decal's edge when the
+			// corner is on it (inner corners land in the neighbouring
+			// triangles: harmless noise, fewer than the edges).
+			pts[np * 3] = g[0]; pts[np * 3 + 1] = g[1]; pts[np * 3 + 2] = g[2];
+			signe[np++] = 1; ++nin;
+			for( int k = 0; k < 3; ++k )
+			{
+				const float *P = ( k == 0 ) ? A : ( k == 1 ) ? B : C;
+				float dx = P[0] - g[0], dz = P[2] - g[2];
+				const float l = sqrtf( dx * dx + dz * dz );
+				if( l < 1.0f ) continue;
+				dx /= l; dz /= l;
+				pts[np * 3] = P[0] + dx * 10.0f; pts[np * 3 + 1] = P[1]; pts[np * 3 + 2] = P[2] + dz * 10.0f;
+				signe[np++] = 0; ++nout;
+			}
+			for( int q = 0; q < 3; ++q ) centre[q] += g[q];
+		}
+		free( v );
+		free( ix );
+	}
+	if( nin < 20 )
+	{
+		VLOG( "DSK", "sun search: only %d decal points near the camera, not enough", nin );
+		free( pts ); free( signe ); free( vis );
+		return;
+	}
+	for( int q = 0; q < 3; ++q ) centre[q] /= (float)nin;
+	desktop_sun_points( pts, np );
+
+	float best = -1.0f, bh = 0.0f, bp = 330.0f;
+	for( int passe = 0; passe < 2; ++passe )
+	{
+		const float h0 = passe ? bh - 10.0f : 0.0f, h1 = passe ? bh + 10.0f : 359.0f, hs = passe ? 2.0f : 10.0f;
+		const float p0 = passe ? bp - 7.5f : 280.0f, p1 = passe ? bp + 7.5f : 350.0f, ps = passe ? 1.5f : 7.0f;
+		for( float h = h0; h <= h1; h += hs )
+			for( float pi = p0; pi <= p1 + 0.01f; pi += ps )
+			{
+				if( pi < 275.0f || pi > 355.0f )
+					continue;
+				float L[3], m[16], r[3], u[3], f[3];
+				if( !vers_soleil( h, pi, L ))
+					continue;
+				matrice_soleil( L, centre, RAYON + 500.0f, 12000.0f, m, r, u, f, false );
+				if( dessiner_carte_soleil( m, r, u, f, centre, RAYON + 500.0f, 12000.0f ) < 0 )
+					goto fin;
+				const float dec[3] = { L[0] * 3.0f, L[1] * 3.0f + 1.0f, L[2] * 3.0f };
+				desktop_sun_eval( m, dec, vis );
+				int si = 0, ni = 0, lo = 0, no = 0;
+				for( int i = 0; i < np; ++i )
+				{
+					if( vis[i] < 0.0f ) continue;
+					if( signe[i] ) { ++ni; if( vis[i] < 0.5f ) ++si; }
+					else           { ++no; if( vis[i] >= 0.5f ) ++lo; }
+				}
+				if( !ni || !no ) continue;
+				const float score = (float)si / ni + (float)lo / no;
+				if( score > best ) { best = score; bh = h; bp = pi; }
+			}
+	}
+	bh = fmodf( bh + 360.0f, 360.0f );
+	VLOG( "DSK", "sun search: %d inside / %d edge points, best heading %.0f pitch %.1f, score %.2f of 2",
+	      nin, nout, bh, bp, best );
+	if( best > 1.0f )
+		desktop_sun_set_level( niveau, bh, bp );
+fin:
+	free( pts ); free( signe ); free( vis );
+	s_sol_age = 1 << 20;		// redraw the real map
+}
 
 static bool inverser44( const float m[16], float o[16] )
 {
@@ -4211,17 +4489,20 @@ static int lev_composante( const char *p_nom )
 static void soleil_desktop( void )
 {
 	if(( desktop_sun_strength() <= 0.0f ) || !s_cur_view_ok || ( s_num_world <= 0 ))
+	{
+		decalques_cacher( false );
 		return;
+	}
+	decalques_lister();
 
-	// Per level only (thug_desktop.ini [sun], F5-F11 in game): the baked
-	// vertex lighting already holds the level's shadows, and new ones only
-	// look right lined up with them.
+	// Per level only (thug_desktop.ini [sun], F4-F11 in game): the baked
+	// lighting already holds the level's shadows, and new ones only look
+	// right lined up with them.
 	const unsigned niveau = Mdl::Skate::Instance() ? Mdl::Skate::Instance()->m_requested_level : 0;
 	const Mth::Vector v0 = Nx::CLightManager::sGetLightDirection( 0 );
 	{
-		// Starting point for a level switched on in game: the game's own
-		// light 0 as heading/pitch (ScriptSetLightDirection), found by search
-		// once per level and light.
+		// Starting point for a level switched on with F5: the game's own
+		// light 0 as heading/pitch, found by search once per level and light.
 		static unsigned s_gr_niveau = 0;
 		static float s_gr_v[3] = { 0.0f, 0.0f, 0.0f };
 		if( niveau != s_gr_niveau || s_gr_v[0] != v0[0] || s_gr_v[1] != v0[1] || s_gr_v[2] != v0[2] )
@@ -4242,23 +4523,24 @@ static void soleil_desktop( void )
 			desktop_sun_seed( bh, bp );
 		}
 	}
+
+	float vw[16];
+	if( !inverser44( s_cur_view, vw ))
+		return;
+	const float cam[3] = { vw[12], vw[13], vw[14] };
+	if( desktop_sun_auto_request())
+		soleil_chercher( niveau, cam );
+
 	float heading, pitch, force;
 	if( !desktop_sun_level( niveau, &heading, &pitch, &force ))
-		return;
-	Mth::Vector dir( 0.0f, 0.0f, 1.0f, 0.0f );
-	dir.RotateX( Mth::DegToRad( pitch ));
-	dir.RotateY( Mth::DegToRad( heading ));
-
-	// Towards the light: -direction (p_NxModel.cpp lights models the same
-	// way). Kept above the horizon whatever the sign convention.
-	float L[3] = { -dir[0], -dir[1], -dir[2] };
-	if( L[1] < 0.0f ) L[1] = -L[1];
-	if( L[1] < 0.1f ) L[1] = 0.1f;
 	{
-		const float n = sqrtf( L[0] * L[0] + L[1] * L[1] + L[2] * L[2] );
-		if( n < 1e-4f ) return;
-		L[0] /= n; L[1] /= n; L[2] /= n;
+		decalques_cacher( false );
+		return;
 	}
+	decalques_cacher( !desktop_sun_show_baked());
+	float L[3];
+	if( !vers_soleil( heading, pitch, L ))
+		return;
 
 	// Shade = what's left without light 0: (ambient + light 1) / all three,
 	// per channel; faded by the level tint (lev_red/green/blue, 128 = day).
@@ -4275,113 +4557,45 @@ static void soleil_desktop( void )
 	const float k = force * lev * lev;
 	if( k < 0.02f )
 		return;
-	float ombre[3], soleil[3];
-	const float dmax = (float)( d0.r > d0.g ? ( d0.r > d0.b ? d0.r : d0.b ) : ( d0.g > d0.b ? d0.g : d0.b ));
+	float ombre[3];
+	const float soleil[3] = { 1.0f, 1.0f, 1.0f };	// lit areas keep their baked light
 	for( int c = 0; c < 3; ++c )
 	{
 		float q = tout[c] > 1.0f ? reste[c] / tout[c] : 1.0f;
 		if( q < 0.25f ) q = 0.25f;
 		ombre[c] = 1.0f - k * ( 1.0f - q );
-		const float dc = ( c == 0 ) ? d0.r : ( c == 1 ) ? d0.g : d0.b;
-		soleil[c] = 1.0f;	// lit areas keep their baked light
-		(void)dc;
 	}
 
-	float vw[16];
-	if( !inverser44( s_cur_view, vw ))
-		return;
-	const float cam[3] = { vw[12], vw[13], vw[14] };
-
-	// Light basis: f = direction of travel, r and u across.
-	const float f[3] = { -L[0], -L[1], -L[2] };
-	float r[3] = { f[1] * 0.0f - f[2] * 1.0f, f[2] * 0.0f - f[0] * 0.0f, f[0] * 1.0f - f[1] * 0.0f };	// f x (0,0,1)
+	// Redrawn when the camera has moved a quarter of the map, the light
+	// changed, the world changed, or every 30 images (sectors on and off).
+	float r[3], u[3], f[3], m[16];
 	{
-		float n = sqrtf( r[0] * r[0] + r[1] * r[1] + r[2] * r[2] );
-		if( n < 1e-3f ) { r[0] = 1.0f; r[1] = 0.0f; r[2] = 0.0f; n = 1.0f; }
-		r[0] /= n; r[1] /= n; r[2] /= n;
-	}
-	const float u[3] = { r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0] };
-
-	const float texel = 2.0f * SOL_R / 4096.0f;
-	float cr = r[0] * cam[0] + r[1] * cam[1] + r[2] * cam[2];
-	float cu = u[0] * cam[0] + u[1] * cam[1] + u[2] * cam[2];
-	float cf = f[0] * cam[0] + f[1] * cam[1] + f[2] * cam[2];
-	const bool meme_lumiere = fabsf( s_sol_cle[3] - L[0] ) < 1e-4f && fabsf( s_sol_cle[4] - L[1] ) < 1e-4f
-	                          && fabsf( s_sol_cle[5] - L[2] ) < 1e-4f;
-	const bool redessiner = !meme_lumiere || ( s_sol_gen != s_world_gen ) || ( ++s_sol_age >= 30 )
-	    || fabsf( cr - s_sol_cle[0] ) > SOL_R * 0.25f || fabsf( cu - s_sol_cle[1] ) > SOL_R * 0.25f
-	    || fabsf( cf - s_sol_cle[2] ) > SOL_D * 0.25f;
-	if( redessiner )
-	{
-		if( meme_lumiere && ( s_sol_gen == s_world_gen ))
+		float c[3] = { cam[0], cam[1], cam[2] };
+		const bool meme_lumiere = fabsf( s_sol_cle[3] - L[0] ) < 1e-4f && fabsf( s_sol_cle[4] - L[1] ) < 1e-4f
+		                          && fabsf( s_sol_cle[5] - L[2] ) < 1e-4f;
+		const float dx = cam[0] - s_sol_cle[0], dy = cam[1] - s_sol_cle[1], dz = cam[2] - s_sol_cle[2];
+		const bool loin = dx * dx + dz * dz > SOL_R * SOL_R * 0.0625f || fabsf( dy ) > SOL_R * 0.25f;
+		if( !meme_lumiere || loin || ( s_sol_gen != s_world_gen ) || ( ++s_sol_age >= 30 ))
 		{
-			// Same light, camera still inside: keep the centre (no swim).
-			if( fabsf( cr - s_sol_cle[0] ) <= SOL_R * 0.25f && fabsf( cu - s_sol_cle[1] ) <= SOL_R * 0.25f
-			    && fabsf( cf - s_sol_cle[2] ) <= SOL_D * 0.25f )
+			if( meme_lumiere && !loin && ( s_sol_gen == s_world_gen ))
 			{
-				cr = s_sol_cle[0]; cu = s_sol_cle[1]; cf = s_sol_cle[2];
+				c[0] = s_sol_cle[0]; c[1] = s_sol_cle[1]; c[2] = s_sol_cle[2];	// no swim
 			}
+			s_sol_cle[0] = c[0]; s_sol_cle[1] = c[1]; s_sol_cle[2] = c[2];
+			s_sol_cle[3] = L[0]; s_sol_cle[4] = L[1]; s_sol_cle[5] = L[2];
+			s_sol_gen = s_world_gen;
+			s_sol_age = 0;
+			matrice_soleil( L, c, SOL_R, SOL_D, s_sol_lvp, r, u, f, true );
+			const int n = dessiner_carte_soleil( s_sol_lvp, r, u, f, c, SOL_R, SOL_D );
+			if( n < 0 )
+				return;
+			static int s_journal = 0;
+			if(( s_journal++ % 60 ) == 0 )
+				VLOG( "DSK", "sun map: %d meshes, heading %.0f pitch %.0f, shade (%.2f %.2f %.2f)",
+				      n, heading, pitch, ombre[0], ombre[1], ombre[2] );
 		}
-		// Whole texels: a moved map lands on the same texel grid.
-		cr = floorf( cr / texel ) * texel;
-		cu = floorf( cu / texel ) * texel;
-		s_sol_cle[0] = cr; s_sol_cle[1] = cu; s_sol_cle[2] = cf;
-		s_sol_cle[3] = L[0]; s_sol_cle[4] = L[1]; s_sol_cle[5] = L[2];
-		s_sol_gen = s_world_gen;
-		s_sol_age = 0;
-
-		// Columns (OpenGL order): clip = ( r.p - cr, u.p - cu, f.p - cf ) / size.
-		float *m = s_sol_lvp;
-		const float ir = 1.0f / SOL_R, id = 1.0f / SOL_D;
-		m[0] = r[0] * ir; m[4] = r[1] * ir; m[8]  = r[2] * ir; m[12] = -cr * ir;
-		m[1] = u[0] * ir; m[5] = u[1] * ir; m[9]  = u[2] * ir; m[13] = -cu * ir;
-		m[2] = f[0] * id; m[6] = f[1] * id; m[10] = f[2] * id; m[14] = -cf * id;
-		m[3] = 0.0f;      m[7] = 0.0f;      m[11] = 0.0f;      m[15] = 1.0f;
-
-		if( !desktop_sun_begin( s_sol_lvp ))
-			return;
-		int n = 0;
-		for( int i = 0; i < s_num_world; ++i )
-		{
-			const SWorldMesh *p = &sp_world[i];
-			if( p->is_sky || !p->vbo || !p->ibo || ( p->num_indices < 3 ))
-				continue;
-			if( p->p_sector_actif && !*p->p_sector_actif )
-				continue;
-			const bool translucide = !g_vita_force_opaque
-			    && ( g_vita_transp_flag ? ((( p->mat_flags0 & 0x40 ) != 0 )
-			                               || ( g_vita_melange_opaques && melange_hors_drapeau( p->blend, p->mat_flags0 )))
-			                            : ( p->blend != 0 ));
-			const bool decoupe = g_vita_alpha_test && ( p->alpha_cutoff > 0 );
-			if( translucide && !decoupe )
-				continue;
-			// Box against the map: centre and half extents seen along r, u, f.
-			float c[3], e[3];
-			for( int q = 0; q < 3; ++q )
-			{
-				c[q] = 0.5f * ( p->bb_min[q] + p->bb_max[q] );
-				e[q] = 0.5f * ( p->bb_max[q] - p->bb_min[q] );
-			}
-			const float er = fabsf( r[0] ) * e[0] + fabsf( r[1] ) * e[1] + fabsf( r[2] ) * e[2];
-			const float eu = fabsf( u[0] ) * e[0] + fabsf( u[1] ) * e[1] + fabsf( u[2] ) * e[2];
-			const float ef = fabsf( f[0] ) * e[0] + fabsf( f[1] ) * e[1] + fabsf( f[2] ) * e[2];
-			if( fabsf( r[0] * c[0] + r[1] * c[1] + r[2] * c[2] - cr ) > SOL_R + er
-			    || fabsf( u[0] * c[0] + u[1] * c[1] + u[2] * c[2] - cu ) > SOL_R + eu
-			    || fabsf( f[0] * c[0] + f[1] * c[1] + f[2] * c[2] - cf ) > SOL_D + ef )
-				continue;
-			desktop_sun_mesh( p->vbo, p->uvbo, p->ibo, p->num_indices, p->texture,
-			                  decoupe ? (float)p->alpha_cutoff / 255.0f : 0.0f );
-			++n;
-		}
-		desktop_sun_end();
-		// Caches d'etat du decor : polygon offset et culling ont pu changer.
-		s_zbias_cour = 0;
-		s_cull_cour  = -1;
-		static int s_journal = 0;
-		if(( s_journal++ % 60 ) == 0 )
-			VLOG( "DSK", "sun map: %d meshes, light (%.2f %.2f %.2f), shade (%.2f %.2f %.2f), level %.2f",
-			      n, L[0], L[1], L[2], ombre[0], ombre[1], ombre[2], lev );
 	}
+	(void)m;
 
 	// Towards the sun in view space (rotation part of the view).
 	const float *V = s_cur_view;

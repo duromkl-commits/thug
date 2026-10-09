@@ -141,6 +141,47 @@ static unsigned int alpha_min_rgba( const unsigned char *p, int num_pixels )
 
 // DXT1 lu en RGBA : un bloc en mode 3 couleurs (c0 <= c1) rend l'index 3
 // TRANSPARENT. Sinon tout est opaque.
+// Texture SOMBRE (desktop, ombres du soleil) : couleur moyenne ponderee par
+// l'alpha sous 40 -- les decalques d'ombre cuite du decor (texture noire a
+// alpha, melange BLEND), que les ombres du soleil remplacent. Meme regle que
+// le convertisseur de niveaux (thug_to_skate.py, texture_is_dark).
+unsigned char g_vita_tex_sombre[16384];
+
+static void noter_sombre( GLuint tex, bool sombre )
+{
+	if(( tex > 0 ) && ( tex < 16384 ))
+		g_vita_tex_sombre[tex] = sombre ? 1 : 0;
+}
+
+static bool sombre_rgba( const unsigned char *p, int num_pixels )
+{
+	double s = 0.0, w = 0.0;
+	for( int i = 0; i < num_pixels; ++i )
+	{
+		const double a = p[i * 4 + 3] / 255.0;
+		s += a * ( p[i * 4] + p[i * 4 + 1] + p[i * 4 + 2] ) / 3.0;
+		w += a;
+	}
+	return ( w > 0.0 ) && ( s / w < 40.0 );
+}
+
+// Blocs DXT : moyenne des deux couleurs extremes de chaque bloc (couleur sur
+// 8 octets a `decalage` dans un bloc de `pas` octets).
+static bool sombre_dxt( const unsigned char *p, unsigned int taille, unsigned int pas, unsigned int decalage )
+{
+	double s = 0.0;
+	unsigned int n = 0;
+	for( unsigned int o = 0; o + pas <= taille; o += pas, ++n )
+	{
+		const unsigned char *b = p + o + decalage;
+		const unsigned int c[2] = { (unsigned)( b[0] | ( b[1] << 8 )), (unsigned)( b[2] | ( b[3] << 8 )) };
+		for( int k = 0; k < 2; ++k )
+			s += ((( c[k] >> 11 ) & 31 ) * 255.0 / 31.0 + (( c[k] >> 5 ) & 63 ) * 255.0 / 63.0
+			      + ( c[k] & 31 ) * 255.0 / 31.0 ) / 6.0;
+	}
+	return n && ( s / n < 40.0 );
+}
+
 static unsigned int alpha_min_dxt1( const unsigned char *p, unsigned int taille )
 {
 	for( unsigned int o = 0; o + 8 <= taille; o += 8 )
@@ -239,6 +280,7 @@ CVitaTexture::~CVitaTexture()
 	s_texels_vivants -= (unsigned)m_width * m_height;
 	NxVita::OublierAdressage( m_gl_texture );
 	noter_alpha_min( m_gl_texture, 0 );		// le nom pourra etre reutilise
+	noter_sombre( m_gl_texture, false );
 	glDeleteTextures( 1, &m_gl_texture );
 	free( mp_img_path );
 }
@@ -618,6 +660,7 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			{
 				glGenTextures( 1, &gl_tex );
 				noter_alpha_min( gl_tex, 0 );
+				noter_sombre( gl_tex, false );
 				glBindTexture( GL_TEXTURE_2D, gl_tex );
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
@@ -632,6 +675,7 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 					{
 						decode_dxt5( p_rgba5, p_src, (int)mip_w, (int)mip_h );
 						noter_alpha_min( gl_tex, alpha_min_rgba( p_rgba5, (int)( mip_w * mip_h )));
+						noter_sombre( gl_tex, sombre_rgba( p_rgba5, (int)( mip_w * mip_h )));
 						glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA,
 						              (GLsizei)mip_w, (GLsizei)mip_h, 0,
 						              GL_RGBA, GL_UNSIGNED_BYTE, p_rgba5 );
@@ -647,6 +691,8 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 					while( glGetError() != GL_NO_ERROR ) {}
 					envoi_dxt_prepare();
 					noter_alpha_min( gl_tex, ( dxt == 1 ) ? alpha_min_dxt1( p_src, data_size ) : 0 );
+					noter_sombre( gl_tex, ( dxt == 1 ) ? sombre_dxt( p_src, data_size, 8, 0 )
+					                                   : sombre_dxt( p_src, data_size, 16, 8 ));
 					glCompressedTexImage2D( GL_TEXTURE_2D, 0, fmt,
 					                        (GLsizei)mip_w, (GLsizei)mip_h, 0,
 					                        (GLsizei)data_size, p_src );
@@ -712,6 +758,7 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 						}
 
 						noter_alpha_min( gl_tex, alpha_min_rgba( p_rgba, num_pixels ));
+						noter_sombre( gl_tex, sombre_rgba( p_rgba, num_pixels ));
 						glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA,
 						              (GLsizei)mip_w, (GLsizei)mip_h, 0,
 						              GL_RGBA, GL_UNSIGNED_BYTE, p_rgba );

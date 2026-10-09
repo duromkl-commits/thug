@@ -50,13 +50,18 @@ Sun shadows are per level because THUG's shadows are baked into the level's
 vertex lighting: new ones only look right lined up with the baked ones. Set a
 level in game, standing where baked shadows are easy to see:
 
+- F4: find the sun from the level's baked shadows (stand near some; takes a
+  second or two) and switch the level on
+- Shift+F4: show the baked shadows next to the sun shadows, to compare
 - F5: sun shadows on/off for this level
 - F6 / F7: turn the sun left / right
 - F8 / F9: raise / lower the sun
 - F10 / F11: lighter / darker shadows
 - hold Shift for finer steps
 
-Each key press saves the level's line in thug_desktop.ini.
+Each key press saves the level's line in thug_desktop.ini. Where a level's sun
+shadows are on, its painted (baked) shadow decals are hidden: the sun shadows
+replace them.
 
 ```
 [paths]

@@ -50,6 +50,7 @@ static const char *s_default_ini =
 	"; levels without a line have no sun shadows. Set them in game with the keyboard:\n"
 	";   F5 shadows on/off for this level   F6/F7 turn the sun   F8/F9 raise/lower it\n"
 	";   F10/F11 lighter/darker (hold Shift for finer steps). Every change is saved here.\n"
+	";   F4 finds the sun from the level's baked shadows; Shift+F4 shows the baked shadows to compare.\n"
 	"\n"
 	"[audio]\n"
 	"; voice acting: 0 = off, 1 = on\n"
@@ -356,30 +357,73 @@ static float tourner( float a, float d )
 	return a < 0.0f ? a + 360.0f : a;
 }
 
+static SSoleil *sol_creer( unsigned niveau )
+{
+	if( s_sol_n >= 64 )
+	return NULL;
+	SSoleil *p = &s_sol[s_sol_n++];
+	memset( p, 0, sizeof( *p ));
+	p->crc = niveau;
+	snprintf( p->nom, sizeof( p->nom ), "%08x", niveau );
+	for( int i = 0; s_noms_niveaux[i]; ++i )
+	{
+		char load[40];
+		snprintf( load, sizeof( load ), "load_%s", s_noms_niveaux[i] );
+		if( crc_thps( load ) == niveau )
+			snprintf( p->nom, sizeof( p->nom ), "%s", s_noms_niveaux[i] );
+	}
+	p->heading = s_graine_h;
+	p->pitch = s_graine_p;
+	p->force = desktop_config().sun_strength;
+	p->on = false;
+	return p;
+}
+
+static bool s_auto_demande = false;
+static bool s_montrer_cuites = false;
+
+// F4: find this level's sun from its baked shadow decals (p_world_render.cpp).
+extern "C" int desktop_sun_auto_request( void )
+{
+	const bool d = s_auto_demande;
+	s_auto_demande = false;
+	return d ? 1 : 0;
+}
+
+// Shift+F4: baked shadow decals shown next to the sun shadows, to compare.
+extern "C" int desktop_sun_show_baked( void ) { return s_montrer_cuites ? 1 : 0; }
+
+extern "C" void desktop_sun_set_level( unsigned niveau, float heading, float pitch )
+{
+	SSoleil *p = sol_trouver( niveau );
+	if( !p ) p = sol_creer( niveau );
+	if( !p ) return;
+	p->heading = heading;
+	p->pitch = pitch;
+	if( p->force <= 0.0f ) p->force = desktop_config().sun_strength;
+	p->on = true;
+	sun_sauver( p );
+	SDL_Log( "sun %s: matched to baked shadows, heading %.0f pitch %.0f", p->nom, heading, pitch );
+}
+
 extern "C" void desktop_sun_key( int touche, int maj )
 {
 	if( !s_sol_niveau || !desktop_config().sun_shadows )
 		return;
+	if( touche == 4 )
+	{
+		if( maj ) s_montrer_cuites = !s_montrer_cuites;
+		else      s_auto_demande = true;
+		return;
+	}
 	SSoleil *p = sol_trouver( s_sol_niveau );
 	if( !p )
 	{
-		if( touche != 5 || s_sol_n >= 64 )
+		if( touche != 5 )
 			return;
-		p = &s_sol[s_sol_n++];
-		memset( p, 0, sizeof( *p ));
-		p->crc = s_sol_niveau;
-		snprintf( p->nom, sizeof( p->nom ), "%08x", s_sol_niveau );
-		for( int i = 0; s_noms_niveaux[i]; ++i )
-		{
-			char load[40];
-			snprintf( load, sizeof( load ), "load_%s", s_noms_niveaux[i] );
-			if( crc_thps( load ) == s_sol_niveau )
-				snprintf( p->nom, sizeof( p->nom ), "%s", s_noms_niveaux[i] );
-		}
-		p->heading = s_graine_h;
-		p->pitch = s_graine_p;
-		p->force = desktop_config().sun_strength;
-		p->on = false;
+		p = sol_creer( s_sol_niveau );
+		if( !p )
+			return;
 	}
 	const float pas = maj ? 1.0f : 5.0f;
 	switch( touche )

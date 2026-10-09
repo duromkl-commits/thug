@@ -1404,3 +1404,151 @@ extern "C" void desktop_sun_apply( const float *vw, const float *lvp, const floa
 	appliquer_vp();
 	appliquer_sc();
 }
+
+// ---------------------------------------------------------------------------
+// Sun search (F4): which of a set of world points the current sun map puts
+// in shadow. One point per pixel of a small target, read back at once.
+// ---------------------------------------------------------------------------
+
+static const int EVAL_W = 128, EVAL_MAX = 128 * 64;
+static GLuint s_ev_prog = 0, s_ev_fbo = 0, s_ev_tex = 0, s_ev_vbo = 0;
+static GLint  s_ev_l_lvp = -1, s_ev_l_dec = -1;
+static int    s_ev_n = 0, s_ev_etat = 0;
+
+static const char *s_ev_vs =
+	"#version 130\n"
+	"in vec3 a_pos;\n"
+	"uniform mat4 lvp;\n"
+	"uniform vec3 dec;\n"			// push towards the sun, off the decal
+	"out vec3 s;\n"
+	"void main() {\n"
+	"	vec4 S = lvp * vec4(a_pos + dec, 1.0);\n"
+	"	s = S.xyz * 0.5 + 0.5;\n"
+	"	vec2 px = vec2(float(gl_VertexID % 128), float(gl_VertexID / 128)) + 0.5;\n"
+	"	gl_Position = vec4(px / vec2(128.0, 64.0) * 2.0 - 1.0, 0.0, 1.0);\n"
+	"	gl_PointSize = 1.0;\n"
+	"}\n";
+
+static const char *s_ev_fs =
+	"#version 130\n"
+	"uniform sampler2DShadow sm;\n"
+	"in vec3 s;\n"
+	"void main() {\n"
+	"	float hors = (any(lessThan(s.xy, vec2(0.0))) || any(greaterThan(s.xy, vec2(1.0)))) ? 1.0 : 0.0;\n"
+	"	gl_FragColor = vec4(texture(sm, s), hors, 0.0, 1.0);\n"
+	"}\n";
+
+static bool ev_pret( void )
+{
+	if( s_ev_etat )
+		return s_ev_etat > 0;
+	s_ev_etat = -1;
+	if( !sun_pret())
+		return false;
+	s_ev_prog = ao_lier( s_ev_vs, s_ev_fs, "sun search" );
+	if( !s_ev_prog )
+		return false;
+	glBindAttribLocation( s_ev_prog, 0, "a_pos" );
+	dgl_glLinkProgram( s_ev_prog );
+	GLint ok = 0;
+	glGetProgramiv( s_ev_prog, GL_LINK_STATUS, &ok );
+	if( !ok )
+		return false;
+	GLint avant = 0, tex = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
+	glUseProgram( s_ev_prog );
+	glUniform1i( glGetUniformLocation( s_ev_prog, "sm" ), 0 );
+	s_ev_l_lvp = glGetUniformLocation( s_ev_prog, "lvp" );
+	s_ev_l_dec = glGetUniformLocation( s_ev_prog, "dec" );
+	glUseProgram( avant );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
+	glGenTextures( 1, &s_ev_tex );
+	glBindTexture( GL_TEXTURE_2D, s_ev_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, EVAL_W, EVAL_MAX / EVAL_W, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+	glBindTexture( GL_TEXTURE_2D, tex );
+	dgl_glGenFramebuffers( 1, &s_ev_fbo );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ev_fbo );
+	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_ev_tex, 0 );
+	const GLenum st = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
+	if( st != GL_FRAMEBUFFER_COMPLETE )
+		return false;
+	glGenBuffers( 1, &s_ev_vbo );
+	s_ev_etat = 1;
+	return true;
+}
+
+// Points (x, y, z) to test, up to EVAL_MAX.
+extern "C" int desktop_sun_points( const float *pts, int n )
+{
+	if( !ev_pret())
+		return 0;
+	if( n > EVAL_MAX ) n = EVAL_MAX;
+	GLint ab = 0;
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &ab );
+	glBindBuffer( GL_ARRAY_BUFFER, s_ev_vbo );
+	glBufferData( GL_ARRAY_BUFFER, n * 3 * sizeof( float ), pts, GL_STATIC_DRAW );
+	glBindBuffer( GL_ARRAY_BUFFER, ab );
+	s_ev_n = n;
+	return n;
+}
+
+// After desktop_sun_begin/mesh/end with `lvp`: vis[i] = 1 lit, 0 shadowed,
+// -1 outside the map.
+extern "C" void desktop_sun_eval( const float *lvp, const float *dec, float *vis )
+{
+	if( s_ev_etat <= 0 || !s_ev_n )
+		return;
+	GLint prog = 0, act = 0, tex0 = 0, ab = 0;
+	GLint attr[4];
+	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
+	glGetIntegerv( GL_ACTIVE_TEXTURE, &act );
+	glActiveTexture( GL_TEXTURE0 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex0 );
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &ab );
+	for( int i = 0; i < 4; ++i )
+		dgl_glGetVertexAttribiv( i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &attr[i] );
+	glPushAttrib( GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ev_fbo );
+	glViewport( 0, 0, EVAL_W, EVAL_MAX / EVAL_W );
+	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_BLEND );
+	glDisable( GL_SCISSOR_TEST );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glDisable( GL_CULL_FACE );
+	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+	glEnable( GL_PROGRAM_POINT_SIZE );
+	glClearColor( 0, 0, 0, 0 );
+	glClear( GL_COLOR_BUFFER_BIT );
+	glUseProgram( s_ev_prog );
+	glUniformMatrix4fv( s_ev_l_lvp, 1, GL_FALSE, lvp );
+	glUniform3f( s_ev_l_dec, dec[0], dec[1], dec[2] );
+	glBindTexture( GL_TEXTURE_2D, s_sun_tex );
+	glBindBuffer( GL_ARRAY_BUFFER, s_ev_vbo );
+	dgl_glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
+	dgl_glEnableVertexAttribArray( 0 );
+	for( int i = 1; i < 4; ++i )
+		dgl_glDisableVertexAttribArray( i );
+	glDrawArrays( GL_POINTS, 0, s_ev_n );
+	static std::vector<unsigned char> px;
+	px.resize( EVAL_MAX * 4 );
+	glReadPixels( 0, 0, EVAL_W, EVAL_MAX / EVAL_W, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
+	for( int i = 0; i < s_ev_n; ++i )
+		vis[i] = px[i * 4 + 1] > 127 ? -1.0f : px[i * 4] / 255.0f;
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+	glPopAttrib();
+	for( int i = 0; i < 4; ++i )
+	{
+		if( attr[i] ) dgl_glEnableVertexAttribArray( i );
+		else          dgl_glDisableVertexAttribArray( i );
+	}
+	glBindBuffer( GL_ARRAY_BUFFER, ab );
+	glBindTexture( GL_TEXTURE_2D, tex0 );
+	glActiveTexture( act );
+	glUseProgram( prog );
+	appliquer_vp();
+	appliquer_sc();
+}
