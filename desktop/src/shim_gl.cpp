@@ -128,10 +128,13 @@ static bool screen_targets_create( void )
 }
 
 // -- vgl* ------------------------------------------------------------------------
+extern "C" void desktop_crash_handler_install( void );
+
 extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMultisampleMode )
 {
 	if( s_window )
 		return GL_FALSE;
+	desktop_crash_handler_install();
 	const DesktopConfig &cfg = desktop_config();
 
 	if( SDL_InitSubSystem( SDL_INIT_VIDEO ) != 0 )
@@ -449,23 +452,43 @@ extern "C" int sceGxmSetRegionClip( SceGxmContext *, int mode, unsigned int x0, 
 static inline bool on_screen( void ) { return s_bound_fb == 0; }
 static inline int sx( int v ) { return (int)(( (long long)v * s_rt_w + VIRT_W / 2 ) / VIRT_W ); }
 static inline int sy( int v ) { return (int)(( (long long)v * s_rt_h + VIRT_H / 2 ) / VIRT_H ); }
-static inline int ux( int v ) { return (int)(( (long long)v * VIRT_W + s_rt_w / 2 ) / s_rt_w ); }
-static inline int uy( int v ) { return (int)(( (long long)v * VIRT_H + s_rt_h / 2 ) / s_rt_h ); }
 
-extern "C" void desktop_glViewport( GLint x, GLint y, GLsizei w, GLsizei h )
+// Viewport and scissor as the game set them (screen = Vita 960x544
+// coordinates). Like vitaGL, they are state that follows the game across
+// render-target switches: p_ombre.cpp restores the screen viewport while its
+// shadow map is still bound, then binds the screen. So the real GL values are
+// recomputed for whichever target is bound.
+static GLint s_vp[4] = { 0, 0, VIRT_W, VIRT_H };
+static GLint s_sc[4] = { 0, 0, VIRT_W, VIRT_H };
+
+static void appliquer_vp( void )
 {
+	const GLint x = s_vp[0], y = s_vp[1], w = s_vp[2], h = s_vp[3];
 	if( on_screen())
 		glViewport( sx( x ), sy( y ), sx( x + w ) - sx( x ), sy( y + h ) - sy( y ));
 	else
 		glViewport( x, y, w, h );
 }
 
-extern "C" void desktop_glScissor( GLint x, GLint y, GLsizei w, GLsizei h )
+static void appliquer_sc( void )
 {
+	const GLint x = s_sc[0], y = s_sc[1], w = s_sc[2], h = s_sc[3];
 	if( on_screen())
 		glScissor( sx( x ), sy( y ), sx( x + w ) - sx( x ), sy( y + h ) - sy( y ));
 	else
 		glScissor( x, y, w, h );
+}
+
+extern "C" void desktop_glViewport( GLint x, GLint y, GLsizei w, GLsizei h )
+{
+	s_vp[0] = x; s_vp[1] = y; s_vp[2] = w; s_vp[3] = h;
+	appliquer_vp();
+}
+
+extern "C" void desktop_glScissor( GLint x, GLint y, GLsizei w, GLsizei h )
+{
+	s_sc[0] = x; s_sc[1] = y; s_sc[2] = w; s_sc[3] = h;
+	appliquer_sc();
 }
 
 extern "C" void desktop_glGetIntegerv( GLenum pname, GLint *v )
@@ -475,13 +498,13 @@ extern "C" void desktop_glGetIntegerv( GLenum pname, GLint *v )
 		*v = (GLint)s_bound_fb;
 		return;
 	}
-	glGetIntegerv( pname, v );
-	if( on_screen() && ( pname == GL_VIEWPORT || pname == GL_SCISSOR_BOX ))
+	if( pname == GL_VIEWPORT || pname == GL_SCISSOR_BOX )
 	{
-		const int x0 = ux( v[0] ), y0 = uy( v[1] );
-		const int x1 = ux( v[0] + v[2] ), y1 = uy( v[1] + v[3] );
-		v[0] = x0; v[1] = y0; v[2] = x1 - x0; v[3] = y1 - y0;
+		const GLint *src = ( pname == GL_VIEWPORT ) ? s_vp : s_sc;
+		for( int i = 0; i < 4; ++i ) v[i] = src[i];
+		return;
 	}
+	glGetIntegerv( pname, v );
 }
 
 extern "C" void desktop_glReadPixels( GLint x, GLint y, GLsizei w, GLsizei h, GLenum format, GLenum type, void *pixels )
@@ -523,9 +546,15 @@ extern "C" void desktop_glReadPixels( GLint x, GLint y, GLsizei w, GLsizei h, GL
 
 extern "C" void desktop_glBindFramebuffer( GLenum target, GLuint fb )
 {
+	const bool changement = ( fb != s_bound_fb );
 	s_bound_fb = fb;
 	is_rendering_display = fb ? GL_FALSE : GL_TRUE;
 	dgl_glBindFramebuffer_real( target, fb ? fb : s_fbo );
+	if( changement )
+	{
+		appliquer_vp();
+		appliquer_sc();
+	}
 }
 
 extern "C" GLuint desktop_screen_fbo( void ) { return s_fbo; }

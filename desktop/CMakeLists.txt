@@ -59,6 +59,7 @@ set(DESKTOP_SOURCES
   src/cg_to_glsl.cpp
   src/desktop_runtime.cpp
   src/desktop_link_stubs.cpp
+  src/crash_handler.cpp
   "${THUG_SRC_ROOT}/vita/src/vita_log.c"
 )
 
