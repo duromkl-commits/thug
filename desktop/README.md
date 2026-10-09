@@ -37,18 +37,20 @@ aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your s
 [graphics]
 ssao=1              ; ambient occlusion: darkens corners and contact points (2 = show only the occlusion, as a test)
 ssao_strength=0.8   ; 0.0 - 1.0
-ssao_radius=28      ; reach, in inches of game world
+ssao_radius=18      ; reach, in inches of game world
 bloom=1             ; glow around bright areas
-bloom_strength=0.3  ; 0.0 - 1.0
-bloom_threshold=0.7 ; 0.0 - 1.0, brightness where the glow starts
+bloom_strength=0.15 ; 0.0 - 1.0
+bloom_threshold=0.8 ; 0.0 - 1.0, brightness where the glow starts
 fog=1               ; distance haze in the colour of the level's sky (none indoors)
-fog_strength=0.5    ; 0.0 - 1.0, how thick it gets far away
+fog_strength=0.25   ; 0.0 - 1.0, how thick it gets far away
 fog_distance=8000   ; inches to reach half of that (8000 = about 200 m)
 dof=1               ; depth of field: blurs what's far behind your skater
-dof_strength=0.6    ; 0.0 - 1.0
+dof_strength=0.45   ; 0.0 - 1.0
 ps2_dither=1        ; 4x4 Bayer dithering over the whole picture (PS2 16-bit colour)
 dither_bits=5       ; bits per colour channel it dithers to: 5 = PS2, 6 = subtler, 8 = none
-soften=0.5          ; 0.0 - 1.0, TV-like softness over the finished picture
+soften=1.0          ; 0.0 - 1.0, TV-like softness over the finished picture (hides most of the dither)
+tv_levels=1         ; PS2 video-out levels: lifted greys, black 16, white 235
+saturation=0.9      ; colour strength, 1.0 = as rendered
 ghosting=0.2        ; 0.0 - 0.8, last frame left over in each new one (GTA III / Bully trails)
 overscan=0.04       ; black border round the picture like the PS2 output (0.0 - 0.15)
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)

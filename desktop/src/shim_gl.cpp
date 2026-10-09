@@ -239,7 +239,7 @@ void (*g_desktop_post_hook)( GLuint, int, int ) = NULL;
 // same formula as the Vita shader (the Xbox gamma table).
 static float  s_gamma_k[3] = { 1.0f, 1.0f, 1.0f };
 static GLuint s_gamma_prog = 0;
-static GLint  s_gamma_loc_k = -1, s_gamma_loc_zoom = -1, s_gamma_loc_tram = -1, s_gamma_loc_grille = -1, s_gamma_loc_taille = -1;
+static GLint  s_gamma_loc_k = -1, s_gamma_loc_zoom = -1, s_gamma_loc_tram = -1, s_gamma_loc_grille = -1, s_gamma_loc_taille = -1, s_gamma_loc_tv = -1, s_gamma_loc_sat = -1;
 static bool   s_gamma_echec = false;
 
 static bool s_letterbox = false;
@@ -270,6 +270,8 @@ static bool gamma_prog( void )
 		"uniform float tram;\n"		// colour levels per channel after the dither (32 = PS2 16-bit), 0 = off
 		"uniform vec3 grille;\n"		// window x, y of the picture, size of one dither cell in pixels
 		"uniform vec3 taille;\n"		// picture width, height in pixels; softening (0-1)
+		"uniform float tv;\n"		// 1 = TV video levels (PS2 output)
+		"uniform float sat;\n"		// colour saturation, 1 = unchanged
 		"varying vec2 t;\n"
 		// 4x4 Bayer matrix (the ordered dither Aseprite uses): every
 		// threshold once, spread as evenly as possible, so a flat colour
@@ -292,6 +294,12 @@ static bool gamma_prog( void )
 		"	vec3 c = texture2D(img, u).rgb;\n"
 		"	vec3 o = floor(256.0 * pow(c * (255.0 / 256.0), k) + 0.001);\n"
 		"	o = min(o, 255.0);\n"
+		// What the PS2 looks like through its video output: black at 16,
+		// white at 235 and the mid-tones a little lifted (measured from
+		// Marcus's PS2 capture against the same spot on PC).
+		"	float l = dot(o, vec3(0.299, 0.587, 0.114));\n"
+		"	o = clamp(mix(vec3(l), o, sat), 0.0, 255.0);\n"
+		"	if (tv > 0.5) o = 16.0 + 219.0 * pow(o / 255.0, vec3(1.0 / 1.15));\n"
 		"	if (tram > 1.5) {\n"
 		// Whole screen pixels per cell, counted from the picture's corner:
 		// a cell size that isn't a whole number of pixels breaks the
@@ -306,10 +314,12 @@ static bool gamma_prog( void )
 		"	vec2 f = gl_FragCoord.xy;\n"
 		"	vec3 c = px(f);\n"
 		// Softening over everything, dither included, like the PS2's video
-		// out on a TV: a little of the four neighbours mixed in.
+		// out: a 3x3 tent. At full strength it all but dissolves the dither
+		// weave (2-pixel cells), leaving it as faint as on the PS2 capture.
 		"	if (taille.z > 0.0) {\n"
-		"		vec3 v = px(f + vec2(1.0, 0.0)) + px(f - vec2(1.0, 0.0)) + px(f + vec2(0.0, 1.0)) + px(f - vec2(0.0, 1.0));\n"
-		"		c = mix(c, v * 0.25, taille.z * 0.5);\n"
+		"		vec3 e = px(f + vec2(1.0, 0.0)) + px(f - vec2(1.0, 0.0)) + px(f + vec2(0.0, 1.0)) + px(f - vec2(0.0, 1.0));\n"
+		"		vec3 d = px(f + vec2(1.0, 1.0)) + px(f - vec2(1.0, 1.0)) + px(f + vec2(1.0, -1.0)) + px(f - vec2(1.0, -1.0));\n"
+		"		c = mix(c, (4.0 * c + 2.0 * e + d) / 16.0, taille.z);\n"
 		"	}\n"
 		"	gl_FragColor = vec4(c, 1.0);\n"
 		"}\n";
@@ -337,6 +347,8 @@ static bool gamma_prog( void )
 	s_gamma_loc_tram = glGetUniformLocation( p, "tram" );
 	s_gamma_loc_grille = glGetUniformLocation( p, "grille" );
 	s_gamma_loc_taille = glGetUniformLocation( p, "taille" );
+	s_gamma_loc_tv = glGetUniformLocation( p, "tv" );
+	s_gamma_loc_sat = glGetUniformLocation( p, "sat" );
 	GLint avant = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
 	glUseProgram( p );
@@ -384,6 +396,8 @@ static void gamma_draw( int x, int y, int w, int h, GLuint img )
 		glUniform3f( s_gamma_loc_grille, (float)x, (float)y, cell < 1.0f ? 1.0f : cell );
 		float doux = cfg.soften < 0.0f ? 0.0f : cfg.soften > 1.0f ? 1.0f : cfg.soften;
 		glUniform3f( s_gamma_loc_taille, (float)w, (float)h, doux );
+		glUniform1f( s_gamma_loc_tv, cfg.tv_levels ? 1.0f : 0.0f );
+		glUniform1f( s_gamma_loc_sat, cfg.saturation < 0.0f ? 0.0f : cfg.saturation > 2.0f ? 2.0f : cfg.saturation );
 	}
 	glBindTexture( GL_TEXTURE_2D, img );
 	glBegin( GL_TRIANGLE_STRIP );
@@ -430,7 +444,8 @@ extern "C" void vglSwapBuffers( GLboolean )
 	glClear( GL_COLOR_BUFFER_BIT );
 	const DesktopConfig &cfg = desktop_config();
 	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
-	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f )
+	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f
+	                     || cfg.tv_levels || cfg.saturation != 1.0f )
 	                   && gamma_prog();
 	if( gamma )
 	{

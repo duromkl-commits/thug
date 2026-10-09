@@ -37,25 +37,29 @@ static const char *s_default_ini =
 	"ssao=1\n"
 	"; how dark it gets (0.0 - 1.0) and how far it reaches, in inches\n"
 	"ssao_strength=0.8\n"
-	"ssao_radius=28\n"
+	"ssao_radius=18\n"
 	"; glow around bright areas: 0 = off, 1 = on; how strong (0.0 - 1.0); brightness where it starts (0.0 - 1.0)\n"
 	"bloom=1\n"
-	"bloom_strength=0.3\n"
-	"bloom_threshold=0.7\n"
+	"bloom_strength=0.15\n"
+	"bloom_threshold=0.8\n"
 	"; distance haze, coloured like the level's sky: 0 = off, 1 = on; how thick far away (0.0 - 1.0);\n"
 	"; distance in inches where it reaches half of that (THUG levels: 8000 = about 200 m)\n"
 	"fog=1\n"
-	"fog_strength=0.5\n"
+	"fog_strength=0.25\n"
 	"fog_distance=8000\n"
 	"; depth of field: blurs what's far behind your skater: 0 = off, 1 = on; how much (0.0 - 1.0)\n"
 	"dof=1\n"
-	"dof_strength=0.6\n"
+	"dof_strength=0.45\n"
 	"; PS2-style dithering over the whole picture (4x4 Bayer, like Aseprite's ordered dither): 0 = off, 1 = on;\n"
 	"; colour bits per channel it dithers down to (5 = the PS2's 16-bit colour, 6 = subtler, 8 = none)\n"
 	"ps2_dither=1\n"
 	"dither_bits=5\n"
-	"; softens the finished picture like the PS2 on a TV (0.0 - 1.0)\n"
-	"soften=0.5\n"
+	"; softens the finished picture like the PS2 on a TV (0.0 - 1.0); also hides most of the dither weave\n"
+	"soften=1.0\n"
+	"; PS2 video-out levels: greys lifted, no pure black or white, like a capture of the PS2: 0 = off, 1 = on\n"
+	"tv_levels=1\n"
+	"; colour strength: 1.0 = as rendered; 0.9 matches the PS2 capture\n"
+	"saturation=0.9\n"
 	"; ghosting: a little of the last frame left over in each new one, like GTA III or Bully (0.0 - 0.8)\n"
 	"ghosting=0.2\n"
 	"; overscan: black border round the picture like the PS2 on a TV capture, share of the width each side (0.0 - 0.15)\n"
@@ -129,6 +133,8 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "dof_strength" ))  s_cfg.dof_strength = (float)atof( v );
 		else if( !strcmp( k, "ps2_dither" ))    s_cfg.ps2_dither = iv;
 		else if( !strcmp( k, "dither_bits" ))   s_cfg.dither_bits = iv;
+		else if( !strcmp( k, "saturation" ))    s_cfg.saturation = (float)atof( v );
+		else if( !strcmp( k, "tv_levels" ))     s_cfg.tv_levels = iv;
 		else if( !strcmp( k, "soften" ))        s_cfg.soften = (float)atof( v );
 		else if( !strcmp( k, "ghosting" ))      s_cfg.ghosting = (float)atof( v );
 		else if( !strcmp( k, "overscan" ))      s_cfg.overscan = (float)atof( v );
@@ -150,19 +156,21 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.vsync = 1;
 	s_cfg.ssao = 1;
 	s_cfg.ssao_strength = 0.8f;
-	s_cfg.ssao_radius = 28.0f;
+	s_cfg.ssao_radius = 18.0f;
 	s_cfg.bloom = 1;
-	s_cfg.bloom_strength = 0.3f;
-	s_cfg.bloom_threshold = 0.7f;
+	s_cfg.bloom_strength = 0.15f;
+	s_cfg.bloom_threshold = 0.8f;
 	s_cfg.fog = 1;
-	s_cfg.fog_strength = 0.5f;
+	s_cfg.fog_strength = 0.25f;
 	s_cfg.fog_distance = 8000.0f;
 	s_cfg.dof = 1;
-	s_cfg.dof_strength = 0.6f;
+	s_cfg.dof_strength = 0.45f;
 	s_cfg.ps2_dither = 1;
 	s_cfg.overscan = 0.04f;
 	s_cfg.dither_bits = 5;
-	s_cfg.soften = 0.5f;
+	s_cfg.soften = 1.0f;
+	s_cfg.tv_levels = 1;
+	s_cfg.saturation = 0.9f;
 	s_cfg.ghosting = 0.2f;
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
