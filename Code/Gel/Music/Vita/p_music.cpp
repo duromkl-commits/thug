@@ -53,6 +53,9 @@
 #include <math.h>
 
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+#include "custom_music.h"
+#endif
 
 SVitaStreamInfo	gCurrentStreamInfo[ NUM_STREAMS ];
 
@@ -108,6 +111,9 @@ static SceUID	 s_mutex			= -1;
 static volatile bool	s_joue			= false;
 static volatile bool	s_pause			= false;
 static volatile bool	s_fini			= true;
+// Desktop: the song playing is a file from custom_music (custom_music.cpp),
+// decoded straight to 48 kHz stereo instead of read from music_pcm.wad.
+static volatile bool	s_perso			= false;
 static volatile uint32	s_prechargee	= 0;
 static volatile bool	s_a_precharger	= false;
 
@@ -270,6 +276,27 @@ static int thread_audio( SceSize, void * )
 
 		sceKernelLockMutex( s_mutex, 1, NULL );
 
+#ifdef THUG_DESKTOP
+		if( s_perso )
+		{
+			const int n = cm_read( s_sortie, GRAIN );
+			if( n <= 0 )
+			{
+				cm_close();
+				s_perso = false;
+				s_joue = false;
+				s_fini = true;
+				sceKernelUnlockMutex( s_mutex, 1 );
+				continue;
+			}
+			if( n < GRAIN )
+				memset( s_sortie + n * AUDIO_CANAUX, 0, ( GRAIN - n ) * AUDIO_CANAUX * sizeof( short ));
+			sceKernelUnlockMutex( s_mutex, 1 );
+			sceAudioOutOutput( s_port, s_sortie );
+			continue;
+		}
+#endif
+
 		uint32 reste = ( s_pos_taille > s_pos_lue ) ? ( s_pos_taille - s_pos_lue ) : 0;
 		if( reste == 0 )
 		{
@@ -335,7 +362,7 @@ static int thread_audio( SceSize, void * )
 			sceAudioOutOutput( s_port, s_sortie );
 			bloc += n;
 
-			if( s_pause || !s_joue )
+			if( s_pause || !s_joue || s_perso )
 				break;
 		}
 	}
@@ -406,6 +433,10 @@ static bool demarre( uint32 checksum )
 	}
 
 	verrouille();
+#ifdef THUG_DESKTOP
+	cm_close();
+	s_perso = false;
+#endif
 	const bool ok = prepare_morceau( p_e );
 	if( ok )
 	{
@@ -417,6 +448,23 @@ static bool demarre( uint32 checksum )
 	deverrouille();
 	return ok;
 }
+
+#ifdef THUG_DESKTOP
+// A custom_music song, by its place in the playlist ("...\\THUGCUSTOM007").
+static bool demarre_perso( int i )
+{
+	if( s_port < 0 || !s_sortie )
+		return false;
+	verrouille();
+	const bool ok = custom_music_open( i ) != 0;
+	s_perso = ok;
+	s_joue  = ok;
+	s_pause = false;
+	s_fini  = !ok;
+	deverrouille();
+	return ok;
+}
+#endif
 
 } // namespace anonyme
 
@@ -884,6 +932,11 @@ bool	PCMAudio_PlayMusicTrack( const char *p_nom, bool )
 {
 	if( !p_nom )
 		return false;
+#ifdef THUG_DESKTOP
+	const int perso = custom_music_index( p_nom );
+	if( perso >= 0 )
+		return demarre_perso( perso );
+#endif
 	return demarre( checksum_de_piste( p_nom ));
 }
 bool	PCMAudio_PlaySoundtrackMusicTrack( int, int )		{ return true; }
@@ -955,7 +1008,13 @@ int		PCMAudio_GetStreamStatus( int s )
 
 bool	PCMAudio_TrackExists( const char *p_nom, int )
 {
-	if( !p_nom || !s_index )
+	if( !p_nom )
+		return false;
+#ifdef THUG_DESKTOP
+	if( custom_music_index( p_nom ) >= 0 )
+		return true;
+#endif
+	if( !s_index )
 		return false;
 
 	const uint32 cs = checksum_de_piste( p_nom );

@@ -59,6 +59,25 @@ shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 data=               ; folder that contains "data"; empty = next to the .exe
 ```
 
+## Custom soundtrack
+
+Put MP3, OGG, FLAC or WAV files in the `custom_music` folder next to
+`thug.exe` (created on first launch; subfolders work too). On the next launch
+they join the playlist as a fourth genre, **Custom**, in Options > Sound
+Options > Playlist: each song can be switched on or off, the Custom heading
+toggles them all, and they shuffle in with the game's songs.
+
+- The name shown is the **album artist** (the artist when a file has none)
+  and the title, from the file's tags. Untagged files use
+  `Artist - Title.mp3` file names. Accented letters lose their accent; other
+  non-Latin characters are dropped, since the game's fonts can't draw them.
+- The game keeps the playlist as 128 on/off switches: the stock songs
+  take most of them (76 in the PC version), so roughly 50 custom songs fit. Extra files are skipped (thug.log says
+  how many).
+- Songs are ordered by file path. Adding or removing files shifts the saved
+  on/off switches of the custom songs after them.
+- M4A/AAC and WMA aren't supported.
+
 ## Controls
 
 The game runs with PS2 controls and PS2 button icons: triangle backs out of

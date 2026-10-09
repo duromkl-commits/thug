@@ -35,7 +35,7 @@ class CStreamFrameAmpManager;
 #define DEFAULT_MUSIC_VOLUME		50.0f
 #define DEFAULT_MUSIC_STREAM_VOLUME	100.0f
 
-#define MAX_NUM_TRACKS				80
+#define MAX_NUM_TRACKS				128		// two uint64 on/off masks; the desktop custom soundtrack fills it
 #define MAX_TRACKNAME_STRING_LENGTH	40
 #define TRACK_TITLE_MAX_SIZE		100
 

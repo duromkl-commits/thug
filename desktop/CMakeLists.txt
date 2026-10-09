@@ -62,6 +62,8 @@ set(DESKTOP_SOURCES
   src/desktop_runtime.cpp
   src/desktop_link_stubs.cpp
   src/crash_handler.cpp
+  src/custom_music.cpp
+  src/custom_music_decode.c
   "${THUG_SRC_ROOT}/vita/src/vita_log.c"
 )
 

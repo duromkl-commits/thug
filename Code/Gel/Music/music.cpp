@@ -2060,7 +2060,8 @@ void SetTrackForbiddenStatus( int trackNum, bool forbidden, int whichList )
 		}
 		for ( i = 0; i < pTrackList->numTracks; i++ )
 		{
-			if ( !( pTrackList->trackForbidden0 & ( ((uint64)1) << i ) ) || !( pTrackList->trackForbidden1 & ( ((uint64)1) << (i-64) ) ) )
+			// (One mask per 64 tracks: the old test shifted by i-64 for every track.)
+			if ( ( i < 64 ) ? !( pTrackList->trackForbidden0 & ( ((uint64)1) << i ) ) : !( pTrackList->trackForbidden1 & ( ((uint64)1) << (i-64) ) ) )
 			{
 				pTrackList->allTracksForbidden = false;
 				return;
