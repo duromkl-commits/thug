@@ -918,9 +918,17 @@ void	CEngine::s_plat_set_screen_blur(uint32 amount)
 	VITA_STUB();
 }
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_set_letterbox( int on );
+#endif
+
 void	CEngine::s_plat_set_letterbox(bool letterbox)
 {
+#ifdef THUG_DESKTOP
+	desktop_set_letterbox( letterbox );
+#else
 	VITA_STUB();
+#endif
 }
 
 void	CEngine::s_plat_set_color_buffer_clear(bool clear)

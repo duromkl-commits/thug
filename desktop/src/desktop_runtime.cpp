@@ -32,6 +32,15 @@ static const char *s_default_ini =
 	"msaa=4\n"
 	"vsync=1\n"
 	"\n"
+	"[graphics]\n"
+	"; ambient occlusion (darkens corners and contact points): 0 = off, 1 = on\n"
+	"ssao=1\n"
+	"; how dark it gets (0.0 - 1.0) and how far it reaches, in inches\n"
+	"ssao_strength=0.6\n"
+	"ssao_radius=28\n"
+	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
+	"shadow_softness=2.5\n"
+	"\n"
 	"[paths]\n"
 	"; folder that holds the game's \"data\" folder; empty = this folder\n"
 	"data=\n"
@@ -81,6 +90,10 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "msaa" ))          s_cfg.msaa = iv;
 		else if( !strcmp( k, "vsync" ))         s_cfg.vsync = iv;
 		else if( !strcmp( k, "aspect" ))        s_cfg.aspect = !strcmp( v, "4:3" ) ? 43 : !strcmp( v, "16:9" ) ? 169 : 0;
+		else if( !strcmp( k, "ssao" ))          s_cfg.ssao = iv;
+		else if( !strcmp( k, "ssao_strength" )) s_cfg.ssao_strength = (float)atof( v );
+		else if( !strcmp( k, "ssao_radius" ))   s_cfg.ssao_radius = (float)atof( v );
+		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
 		else if( !strcmp( k, "dump_shaders" ))  s_cfg.dump_shaders = iv;
 		else if( !strcmp( k, "data" ))          snprintf( s_cfg.data_root, sizeof( s_cfg.data_root ), "%s", v );
 	}
@@ -95,6 +108,10 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.fullscreen = 1;
 	s_cfg.msaa = 4;
 	s_cfg.vsync = 1;
+	s_cfg.ssao = 1;
+	s_cfg.ssao_strength = 0.6f;
+	s_cfg.ssao_radius = 28.0f;
+	s_cfg.shadow_softness = 2.5f;
 
 	char path[1200];
 	char *base = SDL_GetBasePath();
@@ -174,6 +191,12 @@ extern "C" void desktop_fatal( const char *msg )
 	fprintf( stderr, "%s\n", msg );
 	SDL_ShowSimpleMessageBox( SDL_MESSAGEBOX_ERROR, "Tony Hawk's Underground", msg, NULL );
 	exit( 1 );
+}
+
+extern "C" float desktop_shadow_softness( void )
+{
+	const float v = desktop_config().shadow_softness;
+	return v < 0.0f ? 0.0f : v > 8.0f ? 8.0f : v;
 }
 
 extern "C" int desktop_ecran_43( void )

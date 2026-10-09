@@ -175,7 +175,7 @@ void vita_log_shutdown(void)
  * erreurs "!!", plantages) ; le reste n'est meme pas formate. */
 static int vita_log_retenu(const char *sys, const char *fmt)
 {
-    static const char *garder[] = { "SYS", "BOOT", "GFX", "WDOG", "ERR", "ASSERT", "CRASH", "LVL", NULL };
+    static const char *garder[] = { "SYS", "BOOT", "GFX", "WDOG", "ERR", "ASSERT", "CRASH", "LVL", "DSK", NULL };
     if (fmt && fmt[0] == '!' && fmt[1] == '!')
         return 1;
     for (int i = 0; garder[i]; ++i)

@@ -70,6 +70,9 @@
 #include <gfx/NxModel.h>
 #include <gfx/NxTexMan.h>
 #include <gfx/NxLoadScreen.h>
+#ifdef THUG_DESKTOP
+#include <gfx/2D/ScreenElemMan.h>
+#endif
 #include <gfx/NxLightMan.h>
 #include <gfx/NxViewMan.h>
 #include <gfx/NxMiscFX.h>
@@ -478,6 +481,15 @@ static	void	s_second_controller_check_code( const Tsk::Task< int > &task )
 			Script::RunScript( "enable_system_link_option" );
 		}
 		s_last_link_test = Tmr::GetTime();
+	}
+#endif
+#ifdef THUG_DESKTOP
+	// No network play on desktop: drop the Xbox main menu's System Link item
+	// (its enable/disable scripts already check that it exists).
+	{
+		Front::CScreenElementManager* p_man = Front::CScreenElementManager::Instance();
+		if( p_man && p_man->GetElement( CRCD( 0x0fd408e1, "mm_multi_play" )))
+			p_man->DestroyElement( CRCD( 0x0fd408e1, "mm_multi_play" ));
 	}
 #endif
 }

@@ -34,11 +34,21 @@ msaa=4              ; antialiasing samples (0 = off)
 vsync=1
 aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your screen
 
+[graphics]
+ssao=1              ; ambient occlusion: darkens corners and contact points
+ssao_strength=0.6   ; 0.0 - 1.0
+ssao_radius=28      ; reach, in inches of game world
+shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
+
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe
 ```
 
 ## Controls
+
+The game runs with PS2 controls and PS2 button icons: triangle backs out of
+menus, spine transfer is R2 (or L2) alone. Old `thug_desktop.ini` files keep
+working; missing `[graphics]` keys use the defaults above.
 
 | Xbox pad | Keyboard | Game (PS2 name) |
 |---|---|---|
@@ -73,4 +83,6 @@ Both build from a copy of the sources with case-fixed include links
 - The game draws into an offscreen 960x544-shaped screen scaled to the render
   size, then letterboxed into the window.
 - The game is paced to 60 fps whatever the monitor refresh rate.
-- No videos yet, no network play.
+- Cutscenes are letterboxed 16:9 inside the 4:3 picture, like the PS2.
+- Voice acting plays from `data/streams/pcm/pcm.wad`.
+- No videos yet, no network play (System Link is removed from the menu).

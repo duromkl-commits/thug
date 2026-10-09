@@ -186,7 +186,7 @@ extern "C" int sceCtrlReadBufferPositive( int port, SceCtrlData *d, int count )
 // Audio
 // ===========================================================================
 
-#define MAX_PORTS 4
+#define MAX_PORTS 8
 struct Port
 {
 	bool  used;

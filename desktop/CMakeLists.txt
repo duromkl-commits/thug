@@ -39,6 +39,8 @@ add_compile_definitions(
   __PLAT_VITA__
   VITA
   THUG_DESKTOP
+  # Player build: no debug overlay or shortcuts, no dev tools, short log.
+  THUG_RELEASE
 )
 if(WIN32)
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS SDL_MAIN_HANDLED)

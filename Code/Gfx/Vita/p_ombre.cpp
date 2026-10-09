@@ -58,7 +58,20 @@ float g_vita_ombre_pu = -4.0f;		// XBox render.cpp:2327, ZOFFSET
 // Auto-ombrage du skater (#45, p_ombre.h, "aom"). Coupe tant que non valide
 // a l'ecran. Part d'ombre : XBox instance.cpp:547.
 // "omd X" : decalage du PCF 4 points en texels (#69), 0 = echantillon unique.
+#ifdef THUG_DESKTOP
+// Desktop: soft edge (s_src_rec_f), shadow_softness in thug_desktop.ini.
+extern "C" float desktop_shadow_softness( void );
+float g_vita_ombre_douce = -1.0f;	// < 0 : read from the ini on first use
+static inline float douceur( void )
+{
+	if( g_vita_ombre_douce < 0.0f )
+		g_vita_ombre_douce = desktop_shadow_softness();
+	return g_vita_ombre_douce;
+}
+#else
 float g_vita_ombre_douce = 0.0f;	// xemu : bords NETS (creneles), pas plus doux -- laisse a 0
+static inline float douceur( void ) { return g_vita_ombre_douce; }
+#endif
 // "omc 0/1" (#70) : decoupe de la reception aux 4 bords lateraux de la boite
 // de lumiere par plans de decoupe materiels (sorties CLP du programme de
 // sommets). Sans elle, chaque maillage recepteur -- des sols entiers a
@@ -472,9 +485,29 @@ static const char *s_src_rec_f =
 	"	uniform float uDoux)\n"
 	"{\n"
 	"	float z = saturate(vS.z);\n"
+#ifdef THUG_DESKTOP
+	// Desktop: 12-tap Poisson disk of radius uDoux texels -- a soft penumbra
+	// instead of the console's 4-tap edge.
+	"	float2 d = float2(uDoux / 256.f, uDoux / 256.f);\n"
+	"	float s = (1.f / 12.f) * (\n"
+	"		  ombre_tap(uOmbre, vS.xy + d * float2(-0.326f, -0.406f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(-0.840f, -0.074f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(-0.696f, 0.457f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(-0.203f, 0.621f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(0.962f, -0.195f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(0.473f, -0.480f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(0.519f, 0.767f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(0.185f, -0.893f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(0.507f, 0.064f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(0.896f, 0.412f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(-0.322f, -0.933f), z)\n"
+	"		+ ombre_tap(uOmbre, vS.xy + d * float2(-0.792f, -0.598f), z)\n"
+	"		);\n"
+#else
 	"	float2 d = float2(uDoux / 256.f, uDoux / 256.f);\n"
 	"	float s = 0.25f * (ombre_tap(uOmbre, vS.xy + float2(-d.x, -d.y), z) + ombre_tap(uOmbre, vS.xy + float2(d.x, -d.y), z)\n"
 	"	                 + ombre_tap(uOmbre, vS.xy + float2(-d.x, d.y), z) + ombre_tap(uOmbre, vS.xy + float2(d.x, d.y), z));\n"
+#endif
 	"	float2 hors = step(float2(1.f, 1.f), vS.xy) + step(vS.xy, float2(0.f, 0.f));\n"
 	"	s = s * (1.f - saturate(hors.x + hors.y));\n"
 	"	float k = min(1.f, 1.6f - s);\n"
@@ -995,7 +1028,7 @@ bool OmbreReceptionDebut( int i, const float *pv )
 	// carte ; hors de [0,1] le pixel vaut k = 1, la marge n'est que prudence.
 	if( s_re_decoupe >= 0 )
 		glUniform1f( s_re_decoupe, g_vita_ombre_decoupe
-		             ? ( 1.0f + fabsf( g_vita_ombre_douce )) / (float)OMB_TAILLE : 1e4f );
+		             ? ( 1.0f + fabsf( douceur() )) / (float)OMB_TAILLE : 1e4f );
 
 	// Carte sur l'unite 1, texture du materiau sur l'unite 0.
 	glActiveTexture( GL_TEXTURE1 );
@@ -1097,7 +1130,7 @@ void OmbreReceptionMaillage( unsigned int vbo, unsigned int uvbo, unsigned int i
 	// Toujours une texture valide sur l'unite 0 : la carte elle-meme a defaut.
 	glBindTexture( GL_TEXTURE_2D, m ? texture : s_rec_tex_ombre );
 	glUniform1f( s_re_masque, m ? 1.0f : 0.0f );
-	if( s_re_doux >= 0 ) glUniform1f( s_re_doux, g_vita_ombre_douce );
+	if( s_re_doux >= 0 ) glUniform1f( s_re_doux, douceur() );
 	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo );
 	glDrawElements( GL_TRIANGLE_STRIP, num_indices, GL_UNSIGNED_SHORT, NULL );
 }

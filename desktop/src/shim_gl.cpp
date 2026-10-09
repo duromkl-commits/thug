@@ -242,6 +242,13 @@ static GLuint s_gamma_prog = 0;
 static GLint  s_gamma_loc_k = -1;
 static bool   s_gamma_echec = false;
 
+static bool s_letterbox = false;
+
+extern "C" void desktop_set_letterbox( int on )
+{
+	s_letterbox = on != 0;
+}
+
 extern "C" void desktop_set_gamma( float kr, float kg, float kb )
 {
 	s_gamma_k[0] = kr; s_gamma_k[1] = kg; s_gamma_k[2] = kb;
@@ -344,6 +351,15 @@ extern "C" void vglSwapBuffers( GLboolean )
 	int w = dw, h = ( dw * s_rt_h ) / s_rt_w;
 	if( h > dh ) { h = dh; w = ( dh * s_rt_w ) / s_rt_h; }
 	int x = ( dw - w ) / 2, y = ( dh - h ) / 2;
+	// Cutscene letterbox on a 4:3 picture: the game renders 16:9 (aspect and
+	// angle set by screen_setup_letterbox) and, like the PS2, the whole frame
+	// is squeezed into a 16:9 band with black bars.
+	if( s_letterbox && desktop_ecran_43())
+	{
+		const int nh = h * 3 / 4;
+		y += ( h - nh ) / 2;
+		h = nh;
+	}
 
 	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
 	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, 0 );
@@ -774,4 +790,271 @@ static void tampons_envoyer( void )
 	}
 	s_sales.clear();
 	glBindBuffer( GL_ARRAY_BUFFER, (GLuint)avant );
+}
+
+// ---------------------------------------------------------------------------
+// SSAO: ambient occlusion from the depth buffer, multiplied onto the 3D image
+// after the world's opaque pass (before translucents and the 2D). The world
+// projection comes from the engine (desktop_ssao_projection); AO is computed
+// at half size and blurred with depth-aware weights when it is applied.
+// ---------------------------------------------------------------------------
+
+static float  s_proj[4] = { 0, 0, 4.0f, 100000.0f };	// tanH, tanV, near, far
+static bool   s_proj_ok = false;
+static GLuint s_ao_dep_tex = 0, s_ao_dep_fbo = 0, s_ao_tex = 0, s_ao_fbo = 0;
+static GLuint s_ao_prog = 0, s_ao_mix = 0;
+static GLint  s_ao_l_proj = -1, s_ao_l_par = -1, s_ao_l_tx = -1;
+static GLint  s_mix_l_proj = -1, s_mix_l_hx = -1;
+static int    s_ao_etat = 0;		// 0 not tried, 1 ready, -1 off
+
+extern "C" void desktop_ssao_projection( float f, float aspect, float znear, float zfar )
+{
+	if( f <= 0.0f || aspect <= 0.0f )
+		return;
+	s_proj[0] = aspect / f;
+	s_proj[1] = 1.0f / f;
+	s_proj[2] = znear;
+	s_proj[3] = zfar;
+	s_proj_ok = true;
+}
+
+#define AO_GLSL_COMMUN \
+	"#version 120\n" \
+	"uniform sampler2D dep;\n" \
+	"uniform vec4 proj;\n" \
+	"varying vec2 t;\n" \
+	"float lin(float d) { float z = d * 2.0 - 1.0;\n" \
+	"	return 2.0 * proj.z * proj.w / ((proj.w + proj.z) - z * (proj.w - proj.z)); }\n" \
+	"vec3 pos(vec2 uv) { float z = lin(texture2D(dep, uv).r);\n" \
+	"	return vec3((uv * 2.0 - 1.0) * proj.xy * z, -z); }\n"
+
+static const char *s_ao_vs =
+	"#version 120\n"
+	"varying vec2 t;\n"
+	"void main() { t = gl_MultiTexCoord0.xy; gl_Position = gl_Vertex; }\n";
+
+static const char *s_ao_fs =
+	AO_GLSL_COMMUN
+	"uniform vec3 par;\n"		// radius, strength, fade distance
+	"uniform vec2 tx;\n"		// one full-size texel
+	"void main() {\n"
+	"	float d = texture2D(dep, t).r;\n"
+	"	vec3 P = pos(t);\n"
+	"	float z = -P.z;\n"
+	"	if (d >= 0.99999 || z > par.z) { gl_FragColor = vec4(1.0); return; }\n"
+	// Normal from the neighbours on the nearer side (no smearing across edges).
+	"	vec3 pr = pos(t + vec2(tx.x, 0.0)) - P, pl = P - pos(t - vec2(tx.x, 0.0));\n"
+	"	vec3 pu = pos(t + vec2(0.0, tx.y)) - P, pd = P - pos(t - vec2(0.0, tx.y));\n"
+	"	vec3 dx = abs(pr.z) < abs(pl.z) ? pr : pl;\n"
+	"	vec3 dy = abs(pu.z) < abs(pd.z) ? pu : pd;\n"
+	"	vec3 N = normalize(cross(dx, dy));\n"
+	"	if (dot(N, P) > 0.0) N = -N;\n"
+	"	vec2 r = min(vec2(0.15), 0.5 * par.x / (z * proj.xy));\n"
+	"	float a = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
+	"	float occ = 0.0;\n"
+	"	for (int i = 0; i < 12; ++i) {\n"
+	"		float k = (float(i) + 0.5) / 12.0;\n"
+	"		float g = a + float(i) * 2.3999632;\n"
+	"		vec3 v = pos(t + vec2(cos(g), sin(g)) * r * sqrt(k)) - P;\n"
+	"		float l = length(v) + 0.001;\n"
+	"		occ += max(0.0, dot(v, N) / l - 0.15) * (1.0 - smoothstep(0.6 * par.x, par.x, l));\n"
+	"	}\n"
+	"	float ao = 1.0 - par.y * occ / (12.0 * 0.85);\n"
+	"	ao = mix(ao, 1.0, smoothstep(0.6 * par.z, par.z, z));\n"
+	"	gl_FragColor = vec4(vec3(clamp(ao, 0.0, 1.0)), 1.0);\n"
+	"}\n";
+
+static const char *s_mix_fs =
+	AO_GLSL_COMMUN
+	"uniform sampler2D ao;\n"
+	"uniform vec2 hx;\n"		// one half-size texel
+	"void main() {\n"
+	"	float zc = lin(texture2D(dep, t).r);\n"
+	"	float s = 0.0, w = 0.0;\n"
+	"	for (int j = -1; j <= 1; ++j)\n"
+	"		for (int i = -1; i <= 1; ++i) {\n"
+	"			vec2 o = vec2(float(i), float(j)) * hx;\n"
+	"			float zs = lin(texture2D(dep, t + o).r);\n"
+	"			float k = exp(-abs(zs - zc) / (0.03 * zc));\n"
+	"			s += texture2D(ao, t + o).r * k;\n"
+	"			w += k;\n"
+	"		}\n"
+	"	float a = s / max(w, 0.0001);\n"
+	"	gl_FragColor = vec4(a, a, a, 1.0);\n"
+	"}\n";
+
+static GLuint ao_lier( const char *vs, const char *fs, const char *nom )
+{
+	GLuint sh[2] = { dgl_glCreateShader_real( GL_VERTEX_SHADER ), dgl_glCreateShader_real( GL_FRAGMENT_SHADER ) };
+	const char *src[2] = { vs, fs };
+	GLuint p = glCreateProgram();
+	for( int i = 0; i < 2; ++i )
+	{
+		dgl_glShaderSource_real( sh[i], 1, &src[i], NULL );
+		glCompileShader( sh[i] );
+		GLint ok = 0;
+		glGetShaderiv( sh[i], GL_COMPILE_STATUS, &ok );
+		if( !ok )
+		{
+			char log[1024] = "";
+			glGetShaderInfoLog( sh[i], sizeof( log ), NULL, log );
+			DLOG( "!! SSAO %s shader: %s", nom, log );
+			return 0;
+		}
+		glAttachShader( p, sh[i] );
+	}
+	dgl_glLinkProgram( p );
+	GLint ok = 0;
+	glGetProgramiv( p, GL_LINK_STATUS, &ok );
+	if( !ok )
+	{
+		DLOG( "!! SSAO %s program refused", nom );
+		return 0;
+	}
+	return p;
+}
+
+static bool ao_pret( void )
+{
+	if( s_ao_etat )
+		return s_ao_etat > 0;
+	s_ao_etat = -1;
+	const DesktopConfig &cfg = desktop_config();
+	if( !cfg.ssao )
+		return false;
+
+	s_ao_prog = ao_lier( s_ao_vs, s_ao_fs, "occlusion" );
+	s_ao_mix  = ao_lier( s_ao_vs, s_mix_fs, "blur" );
+	if( !s_ao_prog || !s_ao_mix )
+		return false;
+	GLint avant = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
+	glUseProgram( s_ao_prog );
+	glUniform1i( glGetUniformLocation( s_ao_prog, "dep" ), 0 );
+	s_ao_l_proj = glGetUniformLocation( s_ao_prog, "proj" );
+	s_ao_l_par  = glGetUniformLocation( s_ao_prog, "par" );
+	s_ao_l_tx   = glGetUniformLocation( s_ao_prog, "tx" );
+	glUseProgram( s_ao_mix );
+	glUniform1i( glGetUniformLocation( s_ao_mix, "dep" ), 0 );
+	glUniform1i( glGetUniformLocation( s_ao_mix, "ao" ), 1 );
+	s_mix_l_proj = glGetUniformLocation( s_ao_mix, "proj" );
+	s_mix_l_hx   = glGetUniformLocation( s_ao_mix, "hx" );
+	glUseProgram( avant );
+
+	GLint tex = 0;
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
+	glGenTextures( 1, &s_ao_dep_tex );
+	glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, s_rt_w, s_rt_h, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL );
+	glGenTextures( 1, &s_ao_tex );
+	glBindTexture( GL_TEXTURE_2D, s_ao_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, ( s_rt_w + 1 ) / 2, ( s_rt_h + 1 ) / 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
+	glBindTexture( GL_TEXTURE_2D, tex );
+
+	dgl_glGenFramebuffers( 1, &s_ao_dep_fbo );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ao_dep_fbo );
+	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, s_ao_dep_tex, 0 );
+	glDrawBuffer( GL_NONE );
+	glReadBuffer( GL_NONE );
+	const GLenum st1 = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	dgl_glGenFramebuffers( 1, &s_ao_fbo );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ao_fbo );
+	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_ao_tex, 0 );
+	const GLenum st2 = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+	if( st1 != GL_FRAMEBUFFER_COMPLETE || st2 != GL_FRAMEBUFFER_COMPLETE )
+	{
+		DLOG( "!! SSAO targets incomplete (0x%x, 0x%x), SSAO off", (unsigned)st1, (unsigned)st2 );
+		return false;
+	}
+	DLOG( "SSAO on: strength %.2f, radius %.0f", cfg.ssao_strength, cfg.ssao_radius );
+	s_ao_etat = 1;
+	return true;
+}
+
+static void ao_quad( void )
+{
+	glBegin( GL_TRIANGLE_STRIP );
+	glTexCoord2f( 0, 0 ); glVertex2f( -1, -1 );
+	glTexCoord2f( 1, 0 ); glVertex2f(  1, -1 );
+	glTexCoord2f( 0, 1 ); glVertex2f( -1,  1 );
+	glTexCoord2f( 1, 1 ); glVertex2f(  1,  1 );
+	glEnd();
+}
+
+extern "C" void desktop_ssao( void )
+{
+	// Full-screen 3D only (split screen draws the world once per viewport).
+	if( !s_window || !on_screen() || !s_proj_ok ||
+	    s_vp[0] != 0 || s_vp[1] != 0 || s_vp[2] < VIRT_W || s_vp[3] < VIRT_H || !ao_pret())
+		return;
+	const DesktopConfig &cfg = desktop_config();
+	const int hw = ( s_rt_w + 1 ) / 2, hh = ( s_rt_h + 1 ) / 2;
+
+	// Depth copy (resolves MSAA: one sample per pixel).
+	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
+	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_ao_dep_fbo );
+	dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_DEPTH_BUFFER_BIT, GL_NEAREST );
+
+	GLint prog = 0, act = 0, tex0 = 0, tex1 = 0, buf = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
+	glGetIntegerv( GL_ACTIVE_TEXTURE, &act );
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &buf );
+	glActiveTexture( GL_TEXTURE1 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex1 );
+	glActiveTexture( GL_TEXTURE0 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex0 );
+	glPushAttrib( GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
+	glDisable( GL_DEPTH_TEST );
+	glDepthMask( GL_FALSE );
+	glDisable( GL_CULL_FACE );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glDisable( GL_SCISSOR_TEST );
+	glDisable( GL_BLEND );
+	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
+
+	// Occlusion, half size.
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ao_fbo );
+	glViewport( 0, 0, hw, hh );
+	glUseProgram( s_ao_prog );
+	glUniform4f( s_ao_l_proj, s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
+	glUniform3f( s_ao_l_par, cfg.ssao_radius, cfg.ssao_strength, 6000.0f );
+	glUniform2f( s_ao_l_tx, 1.0f / s_rt_w, 1.0f / s_rt_h );
+	glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
+	ao_quad();
+
+	// Blur and multiply onto the image.
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+	glViewport( 0, 0, s_rt_w, s_rt_h );
+	glEnable( GL_BLEND );
+	glBlendEquation( GL_FUNC_ADD );
+	glBlendFunc( GL_ZERO, GL_SRC_COLOR );
+	glUseProgram( s_ao_mix );
+	glUniform4f( s_mix_l_proj, s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
+	glUniform2f( s_mix_l_hx, 1.0f / hw, 1.0f / hh );
+	glActiveTexture( GL_TEXTURE1 );
+	glBindTexture( GL_TEXTURE_2D, s_ao_tex );
+	glActiveTexture( GL_TEXTURE0 );
+	ao_quad();
+
+	glPopAttrib();
+	glBindBuffer( GL_ARRAY_BUFFER, buf );
+	glActiveTexture( GL_TEXTURE1 );
+	glBindTexture( GL_TEXTURE_2D, tex1 );
+	glActiveTexture( GL_TEXTURE0 );
+	glBindTexture( GL_TEXTURE_2D, tex0 );
+	glActiveTexture( act );
+	glUseProgram( prog );
+	appliquer_vp();
+	appliquer_sc();
 }

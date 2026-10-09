@@ -47,7 +47,13 @@ void CFontManager::sLoadFont(const char *pName, int charSpacing, int spaceSpacin
 
 	if (!s_meta_button_map_initialized)
 	{
-		#if defined(__PLAT_XBOX__) || defined(__PLAT_WN32__) // lwss: PC version uses this as well.
+		#if defined(THUG_DESKTOP)
+		// Desktop draws the PS2 icon font (ButtonsPs2): index it with the PS2
+		// table, or the Xbox indices pick the wrong (and wrongly coloured) icons.
+		Script::CArray *p_array = Script::GetArray("meta_button_map_ps2", Script::NO_ASSERT);
+		if (!p_array)
+			p_array = Script::GetArray("meta_button_map_xbox", Script::ASSERT);
+		#elif defined(__PLAT_XBOX__) || defined(__PLAT_WN32__) // lwss: PC version uses this as well.
 		Script::CArray *p_array = Script::GetArray("meta_button_map_xbox", Script::ASSERT);
 		#else
 		#ifdef __PLAT_NGC__

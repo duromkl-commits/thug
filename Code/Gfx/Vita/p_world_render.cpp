@@ -2551,6 +2551,11 @@ static void mat_mul( float *out, const float *a, const float *b )
 // "pll X" : plan lointain (#69). XBox : 32000 (NX/render.cpp:1788) ; Vita : 100000.
 float g_vita_plan_loin = 100000.0f;
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_ssao_projection( float f, float aspect, float znear, float zfar );
+extern "C" void desktop_ssao( void );
+#endif
+
 static void set_projection( float fov_deg, float aspect, float znear, float zfar )
 {
 	float f = 1.0f / tanf( fov_deg * 0.5f * 3.14159265f / 180.0f );
@@ -2565,6 +2570,9 @@ static void set_projection( float fov_deg, float aspect, float znear, float zfar
 
 	glMatrixMode( GL_PROJECTION );
 	glLoadMatrixf( m );
+#ifdef THUG_DESKTOP
+	desktop_ssao_projection( f, aspect, znear, zfar );
+#endif
 
 	// Conservee pour le calcul du tronc de vision : la relire depuis GL
 	// couterait une synchronisation, et on la connait deja.
@@ -6839,6 +6847,11 @@ void RenderWorld( void )
 	{
 		VitaMondeEtape( MW_OMBRE );
 		ombre_reception();
+#ifdef THUG_DESKTOP
+		// Ambient occlusion on the opaque world (and the models already
+		// drawn), before translucents and 2D.
+		desktop_ssao();
+#endif
 	}
 	// Puis apres TOUS les translucides, tries compris (XBox/NX/render.cpp:
 	// 2793) : RANG_TRI est la derniere passe. "omt 0" : rien.
