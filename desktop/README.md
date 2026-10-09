@@ -61,9 +61,11 @@ walk_lean=1.0       ; on foot, lean with the stick into running and turns (Ameri
 [difficulty]
 score_scale=1.0     ; goal score targets x this (1.5 = half as many points again)
 time_scale=1.0      ; goal time limits x this (0.8 = a fifth less time)
-prestige=1          ; new game+: each time you beat the story, point targets go up (time limits don't)
+prestige=1          ; new game+: each time you beat the story, goals get a bit harder
 prestige_points_per_level=0.10 ; +10% points per prestige level...
 prestige_points_max=2.0        ; ...up to 2x the original
+prestige_time_per_level=0.02   ; -2% time per prestige level...
+prestige_time_min=0.8          ; ...down to 80% of the original
 
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe
@@ -87,8 +89,9 @@ time limits (goals with a point target of 1,000 or more; counters such as
 Prestige is a new game+: when the story's ending plays, the prestige level
 goes up by one (kept in `thug_prestige.txt`), and point targets grow by
 `prestige_points_per_level` per level (+10%), up to `prestige_points_max`
-(2x) of the original, on top of `score_scale`. Prestige doesn't touch time
-limits. Goals built around stops or a route (tours, H.O.R.S.E., moving score
+(2x) of the original, on top of `score_scale`; time limits shrink by
+`prestige_time_per_level` (-2%) down to `prestige_time_min` (80%). Level 10
+with the defaults: 2x the points in 80% of the time. Goals built around stops or a route (tours, H.O.R.S.E., moving score
 spots like Chad Muska's SUV) keep their own figures. Delete
 `thug_prestige.txt` to go back to level 0.
 

@@ -37,6 +37,8 @@ struct DesktopConfig
 	int  prestige;			// 1: beating the story raises the prestige level (thug_prestige.txt)
 	float prestige_points_per_level;	// per prestige level: score targets +this share
 	float prestige_points_max;	// prestige never takes score targets past this multiple
+	float prestige_time_per_level;	// per prestige level: time limits -this share
+	float prestige_time_min;	// prestige never takes time limits under this multiple
 	char data_root[1024];		// folder holding "data" (default: the exe's folder)
 };
 
