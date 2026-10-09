@@ -151,6 +151,10 @@ static int vita_watchdog_thread(SceSize args, void *argp)
 
 void vita_log_start_watchdog(void)
 {
+#ifdef THUG_DESKTOP
+    /* A PC debugger beats a provoked crash dump. */
+    return;
+#endif
     SceUID th = sceKernelCreateThread("thug_watchdog", vita_watchdog_thread,
                                       0x10000100, 0x4000, 0, 0, NULL);
     if (th >= 0)
@@ -233,6 +237,11 @@ void vita_log_printf(const char *sys, const char *fmt, ...)
             sceIoWrite(s_fd, line, n);
         }
     }
+
+#ifdef THUG_DESKTOP
+    /* Desktop: the console window shows the log live. */
+    fwrite(line, 1, n, stdout);
+#endif
 
     if (s_ring_mtx >= 0)
     {

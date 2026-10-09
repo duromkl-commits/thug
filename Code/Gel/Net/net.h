@@ -51,6 +51,10 @@
 // windows.h -> winsock ; ce chemin est neutralisé chez nous.
 // Le netplay reste stubé (voir CLAUDE.md) : il s'agit ici de compiler, pas de
 // faire fonctionner le réseau.
+#if defined( THUG_DESKTOP ) && defined( _WIN32 )
+// Windows desktop build: winsock already has closesocket, ioctlsocket & co.
+#include "desktop_winsock.h"
+#else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -80,6 +84,7 @@ inline int ioctlsocket( int s, long cmd, unsigned long *argp )
 	fl = ( *argp ) ? ( fl | O_NONBLOCK ) : ( fl & ~O_NONBLOCK );
 	return ( fcntl( s, F_SETFL, fl ) < 0 ) ? -1 : 0;
 }
+#endif // THUG_DESKTOP && _WIN32
 #endif // __PLAT_VITA__
 
 #ifdef __PLAT_WN32__
@@ -243,7 +248,7 @@ inline int ioctlsocket( int s, long cmd, unsigned long *argp )
 // Vita ajoutée à la liste : sous Win32, SOCKET arrivait indirectement par
 // Defines.h -> d3d9.h -> windows.h -> winsock. Ce chemin est neutralisé chez
 // nous, donc on prend le même typedef que les plateformes non-Windows.
-#if( defined( __PLAT_NGPS__ ) || defined( __PLAT_NGC__ ) || defined( __PLAT_VITA__ ))
+#if( defined( __PLAT_NGPS__ ) || defined( __PLAT_NGC__ ) || ( defined( __PLAT_VITA__ ) && !( defined( THUG_DESKTOP ) && defined( _WIN32 ))))
 typedef int	SOCKET;	// Xbox type SOCKET is defined in winsockx.h.
 #endif
 

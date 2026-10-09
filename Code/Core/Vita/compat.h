@@ -19,6 +19,11 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <errno.h>
+#ifdef THUG_DESKTOP
+// newlib's string/stdlib headers pull these in; glibc's and MinGW's don't.
+#include <stdint.h>
+#include <limits.h>
+#endif
 
 // -- MSVC-ismes -------------------------------------------------------------
 #ifndef __forceinline
@@ -43,7 +48,19 @@
 // -- Allocation -------------------------------------------------------------
 // _msize (MSVC) = taille utilisable d'un bloc. newlib fournit l'équivalent
 // POSIX, déclaré dans <malloc.h>.
+#if defined( THUG_DESKTOP ) && defined( _WIN32 )
+// Windows desktop build: the CRT has _msize itself, but no glibc/newlib
+// allocator extensions. mallinfo only feeds logs and the park editor's
+// free-memory estimate (which then falls back to the heap budget).
+#include <malloc.h>
+struct mallinfo { size_t arena, ordblks, smblks, hblks, hblkhd, usmblks, fsmblks, uordblks, fordblks, keepcost; };
+static inline struct mallinfo mallinfo( void ) { struct mallinfo m = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }; return m; }
+// Only for buffers that are never freed (p_sfx.cpp's mix buffer): an
+// _aligned_malloc block must not go to free().
+static inline void *memalign( size_t alignment, size_t size ) { return _aligned_malloc( size, alignment ); }
+#else
 #define _msize    malloc_usable_size
+#endif
 
 // -- Types Windows résiduels ------------------------------------------------
 // Le code sous __PLAT_WN32__ en utilise une poignée (4 occurrences dans
@@ -64,8 +81,10 @@ typedef char       *LPSTR;
 // Le netplay est stubé (voir CLAUDE.md), mais quelques appels winsock traînent
 // dans du code qu'on compile quand même. errno tient lieu de code d'erreur :
 // les vraies sockets viennent des headers BSD du vitasdk (Gel/Net/net.h).
+#if !( defined( THUG_DESKTOP ) && defined( _WIN32 ))	// winsock has them
 #define WSAGetLastError()   (errno)
 #define WSAEWOULDBLOCK      EWOULDBLOCK
+#endif
 
 // -- max / min --------------------------------------------------------------
 // Le code les appelle non qualifiés : sous Windows ils viennent de windows.h,

@@ -2690,6 +2690,16 @@ void Device::read_data( void )
 	// qui comptent ; la descente de planche est L1+R1, voir #76) et le pave arriere L1/R1 (rotations).
 	// Avant : L1/R1 aux gachettes, et les doigts poses au dos de la console
 	// envoyaient L2+R2 = descente de planche intempestive. "inv 0/1".
+#ifdef THUG_DESKTOP
+	// A real pad has all four shoulders: triggers (LT/RT) = L2/R2,
+	// bumpers (LB/RB) = L1/R1, as on PS2. Touch corners still work.
+	{
+		if( pad.buttons & SCE_CTRL_LTRIGGER ) b3 &= ~( 1 << 0 );
+		if( pad.buttons & SCE_CTRL_RTRIGGER ) b3 &= ~( 1 << 1 );
+		if(( pad.buttons & SCE_CTRL_L1 ) || ( tac & ( TAC_L1 | TAC_DESCENTE ))) b3 &= ~( 1 << 2 );
+		if(( pad.buttons & SCE_CTRL_R1 ) || ( tac & ( TAC_R1 | TAC_DESCENTE ))) b3 &= ~( 1 << 3 );
+	}
+#else
 	{
 		const bool pg = ( pad.buttons & SCE_CTRL_LTRIGGER ) != 0, pd = ( pad.buttons & SCE_CTRL_RTRIGGER ) != 0;
 		const bool ag = ( pad.buttons & VITA_PAD_L2 ) != 0,       ad = ( pad.buttons & VITA_PAD_R2 ) != 0;
@@ -2701,6 +2711,7 @@ void Device::read_data( void )
 		if( l1 || ( tac & ( TAC_L1 | TAC_DESCENTE ))) b3 &= ~( 1 << 2 );
 		if( r1 || ( tac & ( TAC_R1 | TAC_DESCENTE ))) b3 &= ~( 1 << 3 );
 	}
+#endif // THUG_DESKTOP
 	if( pad.buttons & SCE_CTRL_TRIANGLE )	b3 &= ~( 1 << 4 );
 	if( pad.buttons & SCE_CTRL_CIRCLE )		b3 &= ~( 1 << 5 );
 	if( pad.buttons & SCE_CTRL_CROSS )		b3 &= ~( 1 << 6 );

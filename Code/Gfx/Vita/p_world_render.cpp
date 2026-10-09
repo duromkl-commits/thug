@@ -35,7 +35,9 @@ extern "C" void vita_memspy_niveau( void );
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
+#ifndef THUG_DESKTOP
 #include <arm_neon.h>	// teinte de scene (#15)
+#endif
 
 #include "vita_log.h"
 #include "p_NxModel.h"
@@ -4937,6 +4939,7 @@ static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
 	const unsigned int f7r = (unsigned int)( f[0] * 128.0f + 0.5f );
 	const unsigned int f7g = (unsigned int)( f[1] * 128.0f + 0.5f );
 	const unsigned int f7b = (unsigned int)( f[2] * 128.0f + 0.5f );
+#ifndef THUG_DESKTOP	// NEON (ARM) ; le PC prend la boucle scalaire
 	if( g_vita_teinte_neon && ( f7r <= 255 ) && ( f7g <= 255 ) && ( f7b <= 255 ))
 	{
 		// Tete scalaire jusqu'a une adresse de destination alignee sur 16.
@@ -4960,6 +4963,7 @@ static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
 			vst1q_u8( (uint8_t *)( w + v ), vcombine_u8( lo, hi ));
 		}
 	}
+#endif
 	for( ; v < nombre; ++v )
 		w[v] = teinte_sommet( o + 4 * v, fr, fg, fb );
 }
