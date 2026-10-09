@@ -260,6 +260,13 @@ extern "C" int sceIoWrite( SceUID fd, const void *data, SceSize size )
 	return (int)fwrite( data, 1, size, f );
 }
 
+// The log writes line by line and flushes, so a hung game still leaves it.
+extern "C" void desktop_io_flush( SceUID fd )
+{
+	FILE *f = fd_file( fd );
+	if( f ) fflush( f );
+}
+
 extern "C" SceOff sceIoLseek( SceUID fd, SceOff offset, int whence )
 {
 	FILE *f = fd_file( fd );

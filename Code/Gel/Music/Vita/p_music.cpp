@@ -626,8 +626,19 @@ static int thread_voix( SceSize, void *p_arg )
 	return 0;
 }
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_voices( void );
+#endif
+
 static void voix_init( void )
 {
+#ifdef THUG_DESKTOP
+	if( !desktop_voices())
+	{
+		VLOG( "PCM", "voices off (thug_desktop.ini)" );
+		return;
+	}
+#endif
 	if( !vcharge_index() )
 		return;
 	s_flux = (SFlux *)calloc( NUM_STREAMS, sizeof( SFlux ));

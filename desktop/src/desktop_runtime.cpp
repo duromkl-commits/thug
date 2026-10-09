@@ -41,6 +41,10 @@ static const char *s_default_ini =
 	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
 	"shadow_softness=2.5\n"
 	"\n"
+	"[audio]\n"
+	"; voice acting: 0 = off, 1 = on\n"
+	"voices=1\n"
+	"\n"
 	"[paths]\n"
 	"; folder that holds the game's \"data\" folder; empty = this folder\n"
 	"data=\n"
@@ -94,6 +98,7 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "ssao_strength" )) s_cfg.ssao_strength = (float)atof( v );
 		else if( !strcmp( k, "ssao_radius" ))   s_cfg.ssao_radius = (float)atof( v );
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
+		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
 		else if( !strcmp( k, "dump_shaders" ))  s_cfg.dump_shaders = iv;
 		else if( !strcmp( k, "data" ))          snprintf( s_cfg.data_root, sizeof( s_cfg.data_root ), "%s", v );
 	}
@@ -112,6 +117,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.ssao_strength = 0.6f;
 	s_cfg.ssao_radius = 28.0f;
 	s_cfg.shadow_softness = 2.5f;
+	s_cfg.voices = 1;
 
 	char path[1200];
 	char *base = SDL_GetBasePath();
@@ -197,6 +203,11 @@ extern "C" float desktop_shadow_softness( void )
 {
 	const float v = desktop_config().shadow_softness;
 	return v < 0.0f ? 0.0f : v > 8.0f ? 8.0f : v;
+}
+
+extern "C" int desktop_voices( void )
+{
+	return desktop_config().voices;
 }
 
 extern "C" int desktop_ecran_43( void )
