@@ -668,8 +668,18 @@ void CScript::SwitchOffIfDebugging()
 #endif
 }
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_prestige_story_beaten( void );
+#endif
+
 void CScript::set_script(uint32 scriptChecksum, uint8 *p_script, CStruct *p_params, Obj::CObject *p_object)
 {
+#ifdef THUG_DESKTOP
+	// Prestige (desktop/src/desktop_runtime.cpp): the story's ending has started.
+	static const uint32 s_endgame=Crc::GenerateCRCFromString("HI_Endgame_show_messages_spawned");
+	if (scriptChecksum==s_endgame)
+		desktop_prestige_story_beaten();
+#endif
 	#ifdef	__NOPT_ASSERT__	
 	#ifdef SEND_SCRIPT_NAMES_TO_DEBUGGER
 	// Tell the debugger that this script is begin run.

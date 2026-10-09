@@ -8,6 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
+#include <string>
+#include "vita_log.h"
 
 #include "desktop_config.h"
 
@@ -70,6 +73,17 @@ static const char *s_default_ini =
 	"[gameplay]\n"
 	"; on foot, the skater leans into running and into turns (American Wasteland style): 0 = off, 1 = default, 2 = double\n"
 	"walk_lean=1.0\n"
+	"\n"
+	"[difficulty]\n"
+	"; goal score targets and time limits: 1.0 = as shipped; score_scale=1.5 wants half as many points\n"
+	"; again, time_scale=0.8 gives a fifth less time\n"
+	"score_scale=1.0\n"
+	"time_scale=1.0\n"
+	"; prestige (new game+): each time you beat the story, every later goal gets harder by these steps\n"
+	"; (the level is kept in thug_prestige.txt; delete it or set prestige=0 to stop)\n"
+	"prestige=1\n"
+	"prestige_score_step=1.25\n"
+	"prestige_time_step=0.9\n"
 	"\n"
 	"[audio]\n"
 	"; voice acting: 0 = off, 1 = on\n"
@@ -142,6 +156,11 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "soften" ))        s_cfg.soften = (float)atof( v );
 		else if( !strcmp( k, "ghosting" ))      s_cfg.ghosting = (float)atof( v );
 		else if( !strcmp( k, "walk_lean" ))     s_cfg.walk_lean = (float)atof( v );
+		else if( !strcmp( k, "score_scale" ))   s_cfg.score_scale = (float)atof( v );
+		else if( !strcmp( k, "time_scale" ))    s_cfg.time_scale = (float)atof( v );
+		else if( !strcmp( k, "prestige" ))      s_cfg.prestige = iv;
+		else if( !strcmp( k, "prestige_score_step" )) s_cfg.prestige_score_step = (float)atof( v );
+		else if( !strcmp( k, "prestige_time_step" ))  s_cfg.prestige_time_step = (float)atof( v );
 		else if( !strcmp( k, "overscan" ))      s_cfg.overscan = (float)atof( v );
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
 		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
@@ -180,6 +199,11 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
 	s_cfg.walk_lean = 1.0f;
+	s_cfg.score_scale = 1.0f;
+	s_cfg.time_scale = 1.0f;
+	s_cfg.prestige = 1;
+	s_cfg.prestige_score_step = 1.25f;
+	s_cfg.prestige_time_step = 0.9f;
 
 	char path[1200];
 	char *base = SDL_GetBasePath();
@@ -271,6 +295,76 @@ extern "C" float desktop_walk_lean( void )
 {
 	const float l = desktop_config().walk_lean;
 	return ( l < 0.0f ) ? 0.0f : ( l > 3.0f ) ? 3.0f : l;
+}
+
+// --- difficulty and prestige ---------------------------------------------------
+
+static int s_prestige = -1;
+
+static std::string prestige_path( void )
+{
+	char *base = SDL_GetBasePath();
+	std::string p = std::string( base ? base : "" ) + "thug_prestige.txt";
+	SDL_free( base );
+	return p;
+}
+
+static int prestige_level( void )
+{
+	if( s_prestige >= 0 )
+		return s_prestige;
+	s_prestige = 0;
+	FILE *f = fopen( prestige_path().c_str(), "r" );
+	if( f )
+	{
+		char l[64];
+		while( fgets( l, sizeof( l ), f ))
+			if( isdigit( (unsigned char)l[0] )) { s_prestige = atoi( l ); break; }
+		fclose( f );
+	}
+	if( s_prestige < 0 ) s_prestige = 0;
+	if( s_prestige > 0 )
+		VLOG( "GAME", "prestige level %d", s_prestige );
+	return s_prestige;
+}
+
+static float clampf( float v, float lo, float hi ) { return v < lo ? lo : v > hi ? hi : v; }
+
+extern "C" float desktop_goal_score_scale( void )
+{
+	const DesktopConfig &c = desktop_config();
+	float s = clampf( c.score_scale, 0.1f, 20.0f );
+	if( c.prestige )
+		s *= powf( clampf( c.prestige_score_step, 0.5f, 4.0f ), (float)prestige_level());
+	return clampf( s, 0.1f, 100.0f );
+}
+
+extern "C" float desktop_goal_time_scale( void )
+{
+	const DesktopConfig &c = desktop_config();
+	float t = clampf( c.time_scale, 0.1f, 10.0f );
+	if( c.prestige )
+		t *= powf( clampf( c.prestige_time_step, 0.25f, 2.0f ), (float)prestige_level());
+	return clampf( t, 0.05f, 10.0f );
+}
+
+// The story's ending (script HI_Endgame_show_messages_spawned) started.
+extern "C" void desktop_prestige_story_beaten( void )
+{
+	static bool s_deja = false;
+	if( s_deja || !desktop_config().prestige )
+		return;
+	s_deja = true;
+	const int n = prestige_level() + 1;
+	FILE *f = fopen( prestige_path().c_str(), "w" );
+	if( f )
+	{
+		fprintf( f, "%d\n; prestige level: raised each time the story is beaten (thug_desktop.ini [difficulty])\n", n );
+		fclose( f );
+	}
+	s_prestige = n;
+	VLOG( "GAME", "story beaten: prestige level %d (scores x%.2f, time x%.2f)", n,
+	      desktop_goal_score_scale(), desktop_goal_time_scale());
 }
 
 extern "C" int desktop_voices( void )

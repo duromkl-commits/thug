@@ -58,6 +58,13 @@ shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 [gameplay]
 walk_lean=1.0       ; on foot, lean with the stick into running and turns (American Wasteland style); 0 = off, 2 = double
 
+[difficulty]
+score_scale=1.0     ; goal score targets x this (1.5 = half as many points again)
+time_scale=1.0      ; goal time limits x this (0.8 = a fifth less time)
+prestige=1          ; new game+: each time you beat the story, later goals get harder by the steps below
+prestige_score_step=1.25
+prestige_time_step=0.9
+
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe
 ```
@@ -70,6 +77,19 @@ every frame for the same time. On 144 or 165 Hz there is no even split: some
 frames stay up longer than others, and fast movement judders. Set the
 monitor to 120 Hz in Windows display settings, or use G-Sync/FreeSync, for
 smooth motion. thug.log's `frame pacing` line shows what the game picked.
+
+## Difficulty and prestige
+
+`score_scale` and `time_scale` change every story goal's point target and
+time limit (goals with a point target of 1,000 or more; counters such as
+"collect 5" stay as they are). The goal's text shows the new figure.
+
+Prestige is a new game+: when the story's ending plays, the prestige level
+goes up by one (kept in `thug_prestige.txt`), and from then on point targets
+are multiplied by `prestige_score_step` and time limits by
+`prestige_time_step` once per level, on top of the two scales. Level 2 with
+the defaults: 1.56x the points in 81% of the time. Time limits never go
+under 10 seconds. Delete `thug_prestige.txt` to go back to level 0.
 
 ## Custom soundtrack
 
