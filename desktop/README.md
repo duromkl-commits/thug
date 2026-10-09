@@ -75,9 +75,11 @@ smooth motion. thug.log's `frame pacing` line shows what the game picked.
 
 Put MP3, OGG, FLAC or WAV files in the `custom_music` folder next to
 `thug.exe` (created on first launch; subfolders work too). On the next launch
-they join the playlist as a fourth genre, **Custom**, in Options > Sound
-Options > Playlist: each song can be switched on or off, the Custom heading
-toggles them all, and they shuffle in with the game's songs.
+they join the playlist in Options > Sound Options > Playlist, each under the
+genre heading its **genre tag** fits: Punk (punk, pop punk, hardcore, ska,
+emo), Hip Hop (hip hop, rap, trap, grime, drill) or Rock/Other (everything
+else, and songs without a genre tag). They switch on and off like the game's
+own songs and shuffle in with them.
 
 - The name shown is the **album artist** (the artist when a file has none)
   and the title, from the file's tags. Untagged files use

@@ -7,21 +7,17 @@
 **                                                                          **
 **  - Their names come from the files' tags: album artist (artist when     **
 **    there is none) and title; "Artist - Title" file names otherwise.     **
+**  - Their genre tag puts them under the menu's Punk, Hip Hop or          **
+**    Rock/Other heading (anything else is Other, like the game's own).    **
 **  - The game's playlist lives in its scripts: the playlist_tracks array  **
 **    (band, track_title, genre, path) feeds LoadPermSongs, the playlist   **
 **    menu, shuffle and the now-playing text. The songs are appended to    **
-**    that array as genre 3 while the .qb loads, so every one of those     **
-**    works on them unchanged.                                             **
-**  - The playlist menu has three genres written into its scripts; a       **
-**    fourth, "Custom", is patched into create_playlist_menu,              **
-**    playlist_hmenu_add_item (its width; the four headings shrink to fit  **
-**    the bar) and update_genre_checks.                                    **
+**    that array while the .qb loads, so every one of those works on them  **
+**    unchanged.                                                           **
 **  - The engine saves the playlist as 128 on/off bits: the game's own     **
 **    songs plus at most as many custom songs as fit in 128.               **
 **                                                                          **
-**  The patches work on script tokens (Gel/Scripting/tokens.h). Each one   **
-**  checks the exact shape it expects and leaves the script alone, with a  **
-**  line in thug.log, when it doesn't find it.                             **
+**  The patch works on script tokens (Gel/Scripting/tokens.h).            **
 *****************************************************************************/
 
 #ifdef _WIN32
@@ -61,6 +57,7 @@ struct Piste
 	std::string cle;		// relative path, lower case: the order
 	std::string bande;		// album artist (or artist)
 	std::string titre;
+	int         genre;		// playlist genre: 0 punk, 1 hip hop, 2 rock/other
 };
 
 static std::vector<Piste> s_pistes;			// every file found
@@ -68,7 +65,7 @@ static int  s_nb_actives = -1;				// how many joined playlist_tracks
 static bool s_scanne = false;
 
 const int MAX_PISTES_JEU = 128;				// the engine's on/off bits
-const int GENRE_PERSO = 3;
+const int GENRE_AUTRE = 2;		// the menu's Rock/Other
 
 // --- text --------------------------------------------------------------------
 
@@ -163,7 +160,7 @@ static std::string utf16_vers_utf8( const unsigned char *p, size_t n, bool be )
 
 // --- tags ----------------------------------------------------------------------
 
-struct Tags { std::string album_artiste, artiste, titre; };
+struct Tags { std::string album_artiste, artiste, titre, genre; };
 
 // ID3v2 text frame: encoding byte, then text. Only the first value of a
 // multi-value frame (v2.4 separates them with NUL).
@@ -221,6 +218,7 @@ static void lit_id3v2( const std::vector<unsigned char> &b, Tags &t )
 		const unsigned char *d = &b[i + entete];
 		if( id == "TPE2" || id == "TP2" )		t.album_artiste = texte_id3( d, taille );
 		else if( id == "TPE1" || id == "TP1" )	t.artiste = texte_id3( d, taille );
+		else if( id == "TCON" || id == "TCO" )	t.genre = texte_id3( d, taille );
 		else if( id == "TIT2" || id == "TT2" )	t.titre = texte_id3( d, taille );
 		i += entete + taille;
 	}
@@ -234,6 +232,11 @@ static void lit_id3v1( const std::vector<unsigned char> &fin, Tags &t )
 	std::string titre = latin1_vers_utf8( p + 3, 30 ), artiste = latin1_vers_utf8( p + 33, 30 );
 	if( t.titre.empty())   t.titre = titre;
 	if( t.artiste.empty()) t.artiste = artiste;
+	if( t.genre.empty() && p[127] != 255 )
+	{
+		char n[8]; snprintf( n, sizeof( n ), "%d", p[127] );
+		t.genre = n;
+	}
 }
 
 // Vorbis comments (OGG and FLAC): little-endian lengths, KEY=value.
@@ -262,6 +265,7 @@ static void lit_vorbis( const unsigned char *p, size_t n, Tags &t )
 			t.album_artiste = v;
 		else if( cle == "ARTIST" && t.artiste.empty())	t.artiste = v;
 		else if( cle == "TITLE" && t.titre.empty())		t.titre = v;
+		else if( cle == "GENRE" && t.genre.empty())		t.genre = v;
 	}
 }
 
@@ -313,12 +317,68 @@ static void lit_wav( const std::vector<unsigned char> &b, Tags &t )
 				std::string v = latin1_vers_utf8( &b[j + 8], l );
 				if( !memcmp( &b[j], "IART", 4 )) t.artiste = v;
 				else if( !memcmp( &b[j], "INAM", 4 )) t.titre = v;
+				else if( !memcmp( &b[j], "IGNR", 4 )) t.genre = v;
 				j += 8 + l + ( l & 1 );
 			}
 			return;
 		}
 		i += 8 + taille + ( taille & 1 );
 	}
+}
+
+// --- genre ---------------------------------------------------------------------
+
+// ID3v1 genre numbers (ID3v2 writes them too, as "17" or "(17)") that land
+// in Punk or Hip Hop (or plainly rock); any other number is Rock/Other.
+static const char *genre_id3( int n )
+{
+	switch( n )
+	{
+		case 43: case 121: case 129: case 133:		return "punk";
+		case 7: case 15:							return "hip hop";
+		case 1: case 6: case 9: case 17: case 20: case 22: case 40: case 47:
+		case 56: case 79: case 81: case 91: case 92: case 93: case 94: case 131:
+		case 137: case 138: case 141: case 144:		return "rock";
+	}
+	return "";
+}
+
+// The genre tag -> the playlist menu's genres: Punk, Hip Hop, Rock/Other.
+// Anything that isn't punk or hip hop (electronic, jazz, untagged...) is
+// Other, like the game's own. Punk wins over rock ("punk rock"), rock over
+// rap ("rap metal").
+static int genre_du_jeu( std::string g )
+{
+	// "(17)Rock", "(17)", "17": the number's name.
+	size_t i = 0;
+	while( i < g.size() && ( g[i] == '(' || g[i] == ' ' )) ++i;
+	if( i < g.size() && isdigit((unsigned char)g[i] ))
+	{
+		const int n = atoi( g.c_str() + i );
+		size_t f = g.find( ')' );
+		std::string reste = ( f != std::string::npos ) ? g.substr( f + 1 ) : "";
+		g = reste.empty() ? genre_id3( n ) : reste;
+	}
+	// Words, lower case, separators as spaces: " hip hop / rap " -> " hip hop rap ".
+	std::string m = " ";
+	for( size_t k = 0; k < g.size(); ++k )
+	{
+		const unsigned char c = (unsigned char)g[k];
+		m += isalnum( c ) ? (char)tolower( c ) : ' ';
+	}
+	m += " ";
+	struct { const char *mot; int genre; } const mots[] =
+	{
+		{ " punk", 0 }, { " hardcore", 0 }, { " emo ", 0 }, { " ska ", 0 }, { " oi ", 0 }, { " crust", 0 },
+		{ "rock", 2 }, { " metal", 2 }, { "core ", 2 }, { " grunge", 2 }, { " alternative", 2 }, { " alt ", 2 },
+		{ " indie", 2 }, { " shoegaze", 2 }, { " stoner", 2 }, { " sludge", 2 }, { " doom", 2 },
+		{ " hip hop", 1 }, { " hiphop", 1 }, { " rap ", 1 }, { " trap ", 1 }, { " grime", 1 }, { " drill", 1 },
+		{ " boom bap", 1 }, { " gangsta", 1 }, { " horrorcore", 1 },
+	};
+	for( size_t k = 0; k < sizeof( mots ) / sizeof( mots[0] ); ++k )
+		if( m.find( mots[k].mot ) != std::string::npos )
+			return mots[k].genre;
+	return GENRE_AUTRE;
 }
 
 // --- files -------------------------------------------------------------------------
@@ -400,6 +460,7 @@ static void ajoute_fichier( const Chemin &chemin, const std::string &relatif )
 	// The engine's title buffer holds "band: title" in 100 bytes (99 + NUL).
 	coupe( p.bande, 44 );
 	coupe( p.titre, 97 - (int)p.bande.size());
+	p.genre = genre_du_jeu( t.genre );
 	s_pistes.push_back( p );
 }
 
@@ -557,31 +618,13 @@ struct Ecrit
 	std::vector<unsigned char> o;
 	void octet( unsigned char b ) { o.push_back( b ); }
 	void u32( uint32_t v ) { for( int k = 0; k < 4; ++k ) o.push_back((unsigned char)( v >> ( 8 * k ))); }
-	void f32( float f ) { uint32_t v; memcpy( &v, &f, 4 ); u32( v ); }
 	void nom( const char *n ) { octet( T_NOM ); u32( crc( n )); }
 	void entier( int v ) { octet( T_ENTIER ); u32((uint32_t)v ); }
 	void chaine( const std::string &s ) { octet( T_CHAINE ); u32((uint32_t)s.size() + 1 ); for( size_t i = 0; i < s.size(); ++i ) octet((unsigned char)s[i] ); octet( 0 ); }
-	void paire( float a, float b ) { octet( T_PAIRE ); f32( a ); f32( b ); }
 	void eol() { octet( T_EOL ); }
 	void champ_chaine( const char *n, const std::string &s ) { nom( n ); octet( T_EGAL ); chaine( s ); }
 	void champ_entier( const char *n, int v ) { nom( n ); octet( T_EGAL ); entier( v ); }
 };
-
-// Finds the tokens of "script <name> ... endscript": [debut, fin).
-static bool trouve_script( const unsigned char *qb, const std::vector<Jeton> &j, uint32_t nom, size_t &debut, size_t &fin )
-{
-	for( size_t k = 0; k + 1 < j.size(); ++k )
-		if( qb[j[k].pos] == T_SCRIPT && qb[j[k + 1].pos] == T_NOM && lit32( qb + j[k + 1].pos + 1 ) == nom )
-		{
-			for( size_t e = k + 2; e < j.size(); ++e )
-				if( qb[j[e].pos] == T_ENDSCRIPT )
-				{
-					debut = k; fin = e + 1;
-					return true;
-				}
-		}
-	return false;
-}
 
 // Skips end-of-line tokens from k.
 static size_t sans_eol( const unsigned char *qb, const std::vector<Jeton> &j, size_t k )
@@ -591,20 +634,6 @@ static size_t sans_eol( const unsigned char *qb, const std::vector<Jeton> &j, si
 }
 
 static bool est_nom( const unsigned char *qb, const Jeton &t, uint32_t n ) { return qb[t.pos] == T_NOM && lit32( qb + t.pos + 1 ) == n; }
-static bool est_entier( const unsigned char *qb, const Jeton &t, int v ) { return qb[t.pos] == T_ENTIER && (int)lit32( qb + t.pos + 1 ) == v; }
-
-// A script must not hold jumps (random blocks): inserting bytes would move
-// their targets.
-static bool sans_sauts( const unsigned char *qb, const std::vector<Jeton> &j, size_t d, size_t f )
-{
-	for( size_t k = d; k < f; ++k )
-	{
-		const unsigned char c = qb[j[k].pos];
-		if( c == T_JUMP || c == T_RANDOM || c == T_RANDOM2 || c == T_RANDOM_NR || c == T_RANDOM_P )
-			return false;
-	}
-	return true;
-}
 
 // Edits: at byte position pos, drop 'enleve' bytes and put 'ajout' in.
 struct Modif { size_t pos, enleve; std::vector<unsigned char> ajout; };
@@ -666,7 +695,7 @@ static void patch_liste( const unsigned char *qb, const std::vector<Jeton> &j, s
 			w.octet( T_STRUCT );
 			w.champ_chaine( "band", s_pistes[i].bande );
 			w.champ_chaine( "track_title", s_pistes[i].titre );
-			w.champ_entier( "genre", GENRE_PERSO );
+			w.champ_entier( "genre", s_pistes[i].genre );
 			w.champ_chaine( "path", chemin );
 			w.octet( T_FSTRUCT );
 		}
@@ -675,105 +704,6 @@ static void patch_liste( const unsigned char *qb, const std::vector<Jeton> &j, s
 		VLOG( "MUS", "custom music: %d songs added after the game's %d", n, nb );
 		return;
 	}
-}
-
-// The playlist menu's genre bar: Punk, Hip Hop, Rock/Other, + Custom.
-static void patch_menu( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
-{
-	const uint32_t n_item = crc( "playlist_hmenu_add_item" ), n_genre = crc( "genre" ),
-	               n_dims = crc( "dims" ), n_scale = crc( "scale" ), n_maj = crc( "update_genre_checks" ),
-	               n_menu = crc( "create_playlist_menu" );
-	size_t d1, f1, d2, f2, d3, f3;
-	if( !trouve_script( qb, j, n_menu, d1, f1 ))
-		return;		// not this file
-	if( !trouve_script( qb, j, n_item, d2, f2 ) || !trouve_script( qb, j, n_maj, d3, f3 ))
-	{
-		VLOG( "MUS", "custom music: playlist scripts not as expected, no Custom genre heading" );
-		return;
-	}
-	std::vector<Modif> mm;
-
-	// 1. create_playlist_menu: after "playlist_hmenu_add_item { ... genre = 2 }".
-	bool ok1 = false;
-	for( size_t k = d1; k + 1 < f1 && !ok1; ++k )
-	{
-		if( !est_nom( qb, j[k], n_item ) || qb[j[k + 1].pos] != T_STRUCT ) continue;
-		size_t e = k + 2; bool g2 = false;
-		for( ; e < f1 && qb[j[e].pos] != T_FSTRUCT; ++e )
-			if( e + 2 < f1 && est_nom( qb, j[e], n_genre ) && qb[j[e + 1].pos] == T_EGAL && est_entier( qb, j[e + 2], 2 ))
-				g2 = true;
-		if( !g2 || e >= f1 ) continue;
-		Ecrit w;
-		w.eol();
-		w.nom( "playlist_hmenu_add_item" ); w.octet( T_STRUCT );
-		w.champ_chaine( "text", "Custom" ); w.champ_entier( "genre", GENRE_PERSO );
-		w.octet( T_FSTRUCT );
-		mm.push_back( Modif{ j[e].pos + j[e].taille, 0, w.o } );
-		ok1 = true;
-	}
-
-	// 2. playlist_hmenu_add_item: a "case 3" width, and the four headings
-	// narrowed to 70% of their text (+ the checkbox) so they fit the bar the
-	// three filled. Text scale 1.5 -> 1.05.
-	bool ok2 = false;
-	int largeurs = 0;
-	for( size_t k = d2; k < f2; ++k )
-	{
-		if( est_nom( qb, j[k], n_dims ) && k + 2 < f2 && qb[j[k + 1].pos] == T_EGAL && qb[j[k + 2].pos] == T_PAIRE )
-		{
-			float a, b;
-			memcpy( &a, qb + j[k + 2].pos + 1, 4 );
-			memcpy( &b, qb + j[k + 2].pos + 5, 4 );
-			Ecrit w; w.paire( 35.0f + ( a - 35.0f ) * 0.7f, b );
-			mm.push_back( Modif{ j[k + 2].pos, j[k + 2].taille, w.o } );
-			++largeurs;
-		}
-		if( est_nom( qb, j[k], n_scale ) && k + 2 < f2 && qb[j[k + 1].pos] == T_EGAL && qb[j[k + 2].pos] == T_FLOTTANT )
-		{
-			float s; memcpy( &s, qb + j[k + 2].pos + 1, 4 );
-			if( s == 1.5f )
-			{
-				Ecrit w; w.octet( T_FLOTTANT ); w.f32( 1.05f );
-				mm.push_back( Modif{ j[k + 2].pos, j[k + 2].taille, w.o } );
-			}
-		}
-		if( qb[j[k].pos] == T_CASE && !ok2 )
-		{
-			size_t v = sans_eol( qb, j, k + 1 );
-			if( v < f2 && est_entier( qb, j[v], 2 ))
-			{
-				size_t n = sans_eol( qb, j, v + 1 );
-				if( n + 2 < f2 && est_nom( qb, j[n], n_dims ) && qb[j[n + 1].pos] == T_EGAL && qb[j[n + 2].pos] == T_PAIRE )
-				{
-					// "Custom" is 6 letters: between Punk (4) and Hip Hop (7).
-					Ecrit w;
-					w.eol(); w.octet( T_CASE ); w.entier( GENRE_PERSO );
-					w.eol(); w.nom( "dims" ); w.octet( T_EGAL ); w.paire( 35.0f + 110.0f * 0.7f, 50.0f );
-					mm.push_back( Modif{ j[n + 2].pos + j[n + 2].taille, 0, w.o } );
-					ok2 = true;
-				}
-			}
-		}
-	}
-
-	// 3. update_genre_checks: "repeat 3" -> "repeat 4".
-	bool ok3 = false;
-	for( size_t k = d3; k + 1 < f3 && !ok3; ++k )
-		if( qb[j[k].pos] == T_REPEAT && est_entier( qb, j[k + 1], 3 ))
-		{
-			Ecrit w; w.entier( 4 );
-			mm.push_back( Modif{ j[k + 1].pos, j[k + 1].taille, w.o } );
-			ok3 = true;
-		}
-
-	if( !ok1 || !ok2 || !ok3 || largeurs != 3 || !sans_sauts( qb, j, d1, f1 ) || !sans_sauts( qb, j, d2, f2 ))
-	{
-		VLOG( "MUS", "custom music: playlist menu not as expected (%d %d %d %d), no Custom genre heading",
-		      ok1, ok2, ok3, largeurs );
-		return;
-	}
-	m.insert( m.end(), mm.begin(), mm.end());
-	VLOG( "MUS", "custom music: Custom genre added to the playlist menu" );
 }
 
 } // namespace
@@ -791,7 +721,6 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	}
 	std::vector<Modif> m;
 	patch_liste( qb, j, m );
-	patch_menu( qb, j, m );
 	if( m.empty()) return NULL;
 	return applique( qb, j.back().pos + 1, m );
 }
