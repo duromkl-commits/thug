@@ -50,8 +50,14 @@ static const char *s_default_ini =
 	"; depth of field: blurs what's far behind your skater: 0 = off, 1 = on; how much (0.0 - 1.0)\n"
 	"dof=1\n"
 	"dof_strength=0.6\n"
-	"; PS2-style dithering over the whole picture (its 16-bit colour): 0 = off, 1 = on\n"
+	"; PS2-style dithering over the whole picture (4x4 Bayer, like Aseprite's ordered dither): 0 = off, 1 = on;\n"
+	"; colour bits per channel it dithers down to (5 = the PS2's 16-bit colour, 6 = subtler, 8 = none)\n"
 	"ps2_dither=1\n"
+	"dither_bits=5\n"
+	"; softens the finished picture like the PS2 on a TV (0.0 - 1.0)\n"
+	"soften=0.5\n"
+	"; ghosting: a little of the last frame left over in each new one, like GTA III or Bully (0.0 - 0.8)\n"
+	"ghosting=0.2\n"
 	"; overscan: black border round the picture like the PS2 on a TV capture, share of the width each side (0.0 - 0.15)\n"
 	"overscan=0.04\n"
 	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
@@ -122,6 +128,9 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "dof" ))           s_cfg.dof = iv;
 		else if( !strcmp( k, "dof_strength" ))  s_cfg.dof_strength = (float)atof( v );
 		else if( !strcmp( k, "ps2_dither" ))    s_cfg.ps2_dither = iv;
+		else if( !strcmp( k, "dither_bits" ))   s_cfg.dither_bits = iv;
+		else if( !strcmp( k, "soften" ))        s_cfg.soften = (float)atof( v );
+		else if( !strcmp( k, "ghosting" ))      s_cfg.ghosting = (float)atof( v );
 		else if( !strcmp( k, "overscan" ))      s_cfg.overscan = (float)atof( v );
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
 		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
@@ -152,6 +161,9 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.dof_strength = 0.6f;
 	s_cfg.ps2_dither = 1;
 	s_cfg.overscan = 0.04f;
+	s_cfg.dither_bits = 5;
+	s_cfg.soften = 0.5f;
+	s_cfg.ghosting = 0.2f;
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
 

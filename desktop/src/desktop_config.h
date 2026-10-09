@@ -23,6 +23,9 @@ struct DesktopConfig
 	int   dof;			// depth of field: blur well behind the skater
 	float dof_strength;		// 0-1, blur mix at its farthest
 	int   ps2_dither;		// PS2 16-bit frame buffer dither over the whole picture
+	int   dither_bits;		// colour bits per channel after the dither (5 = PS2 16-bit)
+	float soften;			// 0-1, blur over the finished picture (TV softness)
+	float ghosting;			// 0-0.8, share of the last frame mixed into each new one
 	float overscan;			// black border each side, fraction of the width (PS2 look)
 	float shadow_softness;		// skater shadow edge blur, shadow-map texels (0 = hard)
 	int  voices;			// voice acting streams (pcm.wad)

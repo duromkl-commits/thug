@@ -239,7 +239,7 @@ void (*g_desktop_post_hook)( GLuint, int, int ) = NULL;
 // same formula as the Vita shader (the Xbox gamma table).
 static float  s_gamma_k[3] = { 1.0f, 1.0f, 1.0f };
 static GLuint s_gamma_prog = 0;
-static GLint  s_gamma_loc_k = -1, s_gamma_loc_zoom = -1, s_gamma_loc_tram = -1, s_gamma_loc_grille = -1;
+static GLint  s_gamma_loc_k = -1, s_gamma_loc_zoom = -1, s_gamma_loc_tram = -1, s_gamma_loc_grille = -1, s_gamma_loc_taille = -1;
 static bool   s_gamma_echec = false;
 
 static bool s_letterbox = false;
@@ -267,34 +267,51 @@ static bool gamma_prog( void )
 		"uniform sampler2D img;\n"
 		"uniform vec3 k;\n"
 		"uniform vec2 zoom;\n"		// overscan: the picture shrunk inside a black border
-		"uniform float tram;\n"		// 1 = PS2 dither
-		"uniform vec2 grille;\n"		// PS2 pixels across the picture
+		"uniform float tram;\n"		// colour levels per channel after the dither (32 = PS2 16-bit), 0 = off
+		"uniform vec3 grille;\n"		// window x, y of the picture, size of one dither cell in pixels
+		"uniform vec3 taille;\n"		// picture width, height in pixels; softening (0-1)
 		"varying vec2 t;\n"
-		// The GS dither matrix (DIMX, the value games load): added to the
-		// 8-bit colour before it drops to 5 bits in a 16-bit frame buffer.
-		"float dimx(vec2 p) {\n"
+		// 4x4 Bayer matrix (the ordered dither Aseprite uses): every
+		// threshold once, spread as evenly as possible, so a flat colour
+		// between two levels turns into a fine even weave, not stray dots.
+		"float bayer(vec2 p) {\n"
 		"	int i = int(mod(p.x, 4.0)) + 4 * int(mod(p.y, 4.0));\n"
 		"	float m[16];\n"
-		"	m[0] = -4.0; m[1] = 0.0; m[2] = -3.0; m[3] = 1.0;\n"
-		"	m[4] = 2.0; m[5] = -2.0; m[6] = 3.0; m[7] = -1.0;\n"
-		"	m[8] = -3.0; m[9] = 1.0; m[10] = -4.0; m[11] = 0.0;\n"
-		"	m[12] = 3.0; m[13] = -1.0; m[14] = 2.0; m[15] = -2.0;\n"
+		"	m[0] = 0.0; m[1] = 8.0; m[2] = 2.0; m[3] = 10.0;\n"
+		"	m[4] = 12.0; m[5] = 4.0; m[6] = 14.0; m[7] = 6.0;\n"
+		"	m[8] = 3.0; m[9] = 11.0; m[10] = 1.0; m[11] = 9.0;\n"
+		"	m[12] = 15.0; m[13] = 7.0; m[14] = 13.0; m[15] = 5.0;\n"
 		"	float v = 0.0;\n"
 		"	for (int j = 0; j < 16; ++j) if (j == i) v = m[j];\n"
-		"	return v;\n"
+		"	return (v + 0.5) / 16.0;\n"
 		"}\n"
-		"void main() {\n"
-		"	vec2 u = 0.5 + (t - 0.5) * zoom;\n"
-		"	if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }\n"
+	// One window pixel of the finished picture.
+		"vec3 px(vec2 f) {\n"
+		"	vec2 u = 0.5 + ((f - grille.xy) / taille.xy - 0.5) * zoom;\n"
+		"	if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) return vec3(0.0);\n"
 		"	vec3 c = texture2D(img, u).rgb;\n"
 		"	vec3 o = floor(256.0 * pow(c * (255.0 / 256.0), k) + 0.001);\n"
 		"	o = min(o, 255.0);\n"
-		"	if (tram > 0.5) {\n"
-		"		vec2 p = floor(u * grille);\n"
-		"		o = floor(clamp(o + dimx(p), 0.0, 255.0) / 8.0) * 8.0;\n"
-		"		o = o + o / 32.0;\n"	// 5 bits back to the full 0-255 range
+		"	if (tram > 1.5) {\n"
+		// Whole screen pixels per cell, counted from the picture's corner:
+		// a cell size that isn't a whole number of pixels breaks the
+		// pattern into uneven specks (what the last build did).
+		"		vec2 p = floor((f - grille.xy) / grille.z);\n"
+		"		float n = tram - 1.0;\n"
+		"		o = floor(o * (n / 255.0) + bayer(p)) * (255.0 / n);\n"
 		"	}\n"
-		"	gl_FragColor = vec4(min(o, 255.0) / 255.0, 1.0);\n"
+		"	return min(o, 255.0) / 255.0;\n"
+		"}\n"
+		"void main() {\n"
+		"	vec2 f = gl_FragCoord.xy;\n"
+		"	vec3 c = px(f);\n"
+		// Softening over everything, dither included, like the PS2's video
+		// out on a TV: a little of the four neighbours mixed in.
+		"	if (taille.z > 0.0) {\n"
+		"		vec3 v = px(f + vec2(1.0, 0.0)) + px(f - vec2(1.0, 0.0)) + px(f + vec2(0.0, 1.0)) + px(f - vec2(0.0, 1.0));\n"
+		"		c = mix(c, v * 0.25, taille.z * 0.5);\n"
+		"	}\n"
+		"	gl_FragColor = vec4(c, 1.0);\n"
 		"}\n";
 	GLuint sh[2] = { dgl_glCreateShader_real( GL_VERTEX_SHADER ), dgl_glCreateShader_real( GL_FRAGMENT_SHADER ) };
 	const char *src[2] = { vs, fs };
@@ -319,6 +336,7 @@ static bool gamma_prog( void )
 	s_gamma_loc_zoom = glGetUniformLocation( p, "zoom" );
 	s_gamma_loc_tram = glGetUniformLocation( p, "tram" );
 	s_gamma_loc_grille = glGetUniformLocation( p, "grille" );
+	s_gamma_loc_taille = glGetUniformLocation( p, "taille" );
 	GLint avant = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
 	glUseProgram( p );
@@ -328,7 +346,9 @@ static bool gamma_prog( void )
 }
 
 // Draws s_tex_resolve into the window's (x, y, w, h) through the ramp.
-static void gamma_draw( int x, int y, int w, int h )
+static GLuint desktop_fantome( void );
+
+static void gamma_draw( int x, int y, int w, int h, GLuint img )
 {
 	GLint prog = 0, act = 0, tex = 0, vp[4];
 	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
@@ -355,12 +375,17 @@ static void gamma_draw( int x, int y, int w, int h )
 		// Like the PS2 on a capture card (Marcus's footage): black bars of
 		// about 4% of the width each side and a bit less top and bottom.
 		glUniform2f( s_gamma_loc_zoom, 1.0f / ( 1.0f - 2.0f * os ), 1.0f / ( 1.0f - 1.6f * os ));
-		glUniform1f( s_gamma_loc_tram, cfg.ps2_dither ? 1.0f : 0.0f );
-		// 640x448 like the PS2 game in 4:3; the same pixel size across a
-		// wider picture.
-		glUniform2f( s_gamma_loc_grille, 448.0f * w / (float)h, 448.0f );
+		// PS2 16-bit colour: 32 levels per channel.
+		int bits = cfg.dither_bits < 2 ? 2 : cfg.dither_bits > 8 ? 8 : cfg.dither_bits;
+		glUniform1f( s_gamma_loc_tram, cfg.ps2_dither ? (float)( 1 << bits ) : 0.0f );
+		// Cells the size of a PS2 pixel (448 lines), rounded to whole
+		// window pixels: 2 at 1080, 1 at 720.
+		float cell = (float)(int)( h / 448.0f + 0.5f );
+		glUniform3f( s_gamma_loc_grille, (float)x, (float)y, cell < 1.0f ? 1.0f : cell );
+		float doux = cfg.soften < 0.0f ? 0.0f : cfg.soften > 1.0f ? 1.0f : cfg.soften;
+		glUniform3f( s_gamma_loc_taille, (float)w, (float)h, doux );
 	}
-	glBindTexture( GL_TEXTURE_2D, s_tex_resolve );
+	glBindTexture( GL_TEXTURE_2D, img );
 	glBegin( GL_TRIANGLE_STRIP );
 	glTexCoord2f( 0, 0 ); glVertex2f( -1, -1 );
 	glTexCoord2f( 1, 0 ); glVertex2f(  1, -1 );
@@ -405,13 +430,15 @@ extern "C" void vglSwapBuffers( GLboolean )
 	glClear( GL_COLOR_BUFFER_BIT );
 	const DesktopConfig &cfg = desktop_config();
 	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
-	                     || cfg.ps2_dither || cfg.overscan > 0.0f ) && gamma_prog();
+	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f )
+	                   && gamma_prog();
 	if( gamma )
 	{
 		dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_fbo_resolve );
 		dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_COLOR_BUFFER_BIT, GL_NEAREST );
+		const GLuint img = desktop_fantome();
 		dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, 0 );
-		gamma_draw( x, y, w, h );
+		gamma_draw( x, y, w, h, img );
 	}
 	else if( s_msaa > 1 || ( w != s_rt_w || h != s_rt_h ))
 	{
@@ -1352,6 +1379,21 @@ static void pp_vers( GLuint fbo, int w, int h )
 	glViewport( 0, 0, w, h );
 }
 
+// Ghosting (frame blending, like GTA III or Bully on the PS2): each frame
+// shown is the new image with a little of the last one shown mixed back in.
+static GLuint s_fant_tex[2] = { 0, 0 }, s_fant_fbo[2] = { 0, 0 }, s_fant_p = 0;
+static int    s_fant_w = 0, s_fant_h = 0, s_fant_cur = 0, s_fant_etat = 0;
+static bool   s_fant_vide = true;
+static const char *s_fant_fs =
+	"#version 120\n"
+	"uniform sampler2D img;\n"
+	"uniform sampler2D prec;\n"
+	"uniform float a;\n"
+	"varying vec2 t;\n"
+	"void main() {\n"
+	"	gl_FragColor = vec4(mix(texture2D(img, t).rgb, texture2D(prec, t).rgb, a), 1.0);\n"
+	"}\n";
+
 static void pp_resoudre( void )
 {
 	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
@@ -1508,4 +1550,77 @@ extern "C" void desktop_post( void )
 	glUseProgram( prog );
 	appliquer_vp();
 	appliquer_sc();
+}
+
+// Returns the image to present: s_tex_resolve, or it blended with the last
+// frame shown. Called with s_tex_resolve holding this frame.
+static GLuint desktop_fantome( void )
+{
+	const float a = desktop_config().ghosting;
+	if( a <= 0.0f || s_fant_etat < 0 )
+		return s_tex_resolve;
+	if( !s_fant_etat )
+	{
+		s_fant_etat = -1;
+		s_fant_p = ao_lier( s_ao_vs, s_fant_fs, "ghosting" );
+		if( !s_fant_p )
+			return s_tex_resolve;
+		pp_echantillons( s_fant_p, "img", 0, "prec", 1 );
+		s_fant_etat = 1;
+	}
+	GLint prog = 0, tex0 = 0, tex1 = 0, buf = 0, vp[4];
+	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &buf );
+	glGetIntegerv( GL_VIEWPORT, vp );
+	glActiveTexture( GL_TEXTURE1 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex1 );
+	glActiveTexture( GL_TEXTURE0 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex0 );
+	if( s_fant_w != s_rt_w || s_fant_h != s_rt_h )
+	{
+		for( int i = 0; i < 2; ++i )
+		{
+			if( s_fant_tex[i] ) { glDeleteTextures( 1, &s_fant_tex[i] ); dgl_glDeleteFramebuffers( 1, &s_fant_fbo[i] ); }
+			s_fant_tex[i] = pp_cible( &s_fant_fbo[i], s_rt_w, s_rt_h, false );
+		}
+		s_fant_w = s_rt_w;
+		s_fant_h = s_rt_h;
+		s_fant_vide = true;
+		glBindTexture( GL_TEXTURE_2D, tex0 );
+		if( !s_fant_tex[0] || !s_fant_tex[1] )
+		{
+			s_fant_etat = -1;
+			dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, 0 );
+			return s_tex_resolve;
+		}
+	}
+	glPushAttrib( GL_ENABLE_BIT );
+	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_CULL_FACE );
+	glDisable( GL_BLEND );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glDisable( GL_SCISSOR_TEST );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
+	const int dst = 1 - s_fant_cur;
+	pp_vers( s_fant_fbo[dst], s_rt_w, s_rt_h );
+	glUseProgram( s_fant_p );
+	// Capped well short of 1 so trails always die out.
+	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f ? 0.8f : a );
+	glActiveTexture( GL_TEXTURE1 );
+	glBindTexture( GL_TEXTURE_2D, s_fant_tex[s_fant_cur] );
+	glActiveTexture( GL_TEXTURE0 );
+	glBindTexture( GL_TEXTURE_2D, s_tex_resolve );
+	ao_quad();
+	s_fant_cur = dst;
+	s_fant_vide = false;
+	glPopAttrib();
+	glActiveTexture( GL_TEXTURE1 );
+	glBindTexture( GL_TEXTURE_2D, tex1 );
+	glActiveTexture( GL_TEXTURE0 );
+	glBindTexture( GL_TEXTURE_2D, tex0 );
+	glBindBuffer( GL_ARRAY_BUFFER, buf );
+	glUseProgram( prog );
+	glViewport( vp[0], vp[1], vp[2], vp[3] );
+	return s_fant_tex[dst];
 }
