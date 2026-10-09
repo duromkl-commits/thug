@@ -1003,6 +1003,10 @@ extern "C" void desktop_ssao( void )
 	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
 	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_ao_dep_fbo );
 	dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_DEPTH_BUFFER_BIT, GL_NEAREST );
+	// Back on the screen target BEFORE glPushAttrib: GL_COLOR_BUFFER_BIT saves
+	// the bound framebuffer's draw buffer, and the depth copy's is GL_NONE --
+	// popping that onto the screen target stopped all drawing to the screen.
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
 
 	GLint prog = 0, act = 0, tex0 = 0, tex1 = 0, buf = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
