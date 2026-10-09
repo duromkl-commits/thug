@@ -14,9 +14,17 @@ struct DesktopConfig
 	int  ssao;			// ambient occlusion on the 3D image
 	float ssao_strength;		// 0..1, how dark creases get
 	float ssao_radius;		// world inches
+	int  bloom;			// glow around bright areas
+	float bloom_strength;		// 0..1
+	float bloom_threshold;		// 0..1, brightness where glow starts
+	int  fog;			// distance haze in the sky's colour
+	float fog_strength;		// 0..1, haze at the far end
+	float fog_distance;		// inches to half of fog_strength
+	int   dof;			// depth of field: blur well behind the skater
+	float dof_strength;		// 0-1, blur mix at its farthest
+	int   ps2_dither;		// PS2 16-bit frame buffer dither over the whole picture
+	float overscan;			// fraction of the picture past the screen edges, like a CRT
 	float shadow_softness;		// skater shadow edge blur, shadow-map texels (0 = hard)
-	int  sun_shadows;		// shadows of the level cast by the time-of-day sun
-	float sun_strength;		// 0..1, starting strength of a level switched on in game
 	int  voices;			// voice acting streams (pcm.wad)
 	char data_root[1024];		// folder holding "data" (default: the exe's folder)
 };
@@ -26,12 +34,5 @@ const DesktopConfig &desktop_config( void );
 extern "C" int desktop_ecran_43( void );
 extern "C" float desktop_shadow_softness( void );
 extern "C" int desktop_voices( void );
-extern "C" float desktop_sun_strength( void );	// 0 = sun shadows off everywhere
-extern "C" int  desktop_sun_level( unsigned level, float *heading, float *pitch, float *strength );
-extern "C" void desktop_sun_seed( float heading, float pitch );
-extern "C" void desktop_sun_key( int fkey, int shift );
-extern "C" int  desktop_sun_auto_request( void );
-extern "C" int  desktop_sun_show_baked( void );
-extern "C" void desktop_sun_set_level( unsigned level, float heading, float pitch );
 
 #endif

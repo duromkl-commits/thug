@@ -8,8 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <math.h>
-#include <string>
 
 #include "desktop_config.h"
 
@@ -40,17 +38,24 @@ static const char *s_default_ini =
 	"; how dark it gets (0.0 - 1.0) and how far it reaches, in inches\n"
 	"ssao_strength=0.8\n"
 	"ssao_radius=28\n"
+	"; glow around bright areas: 0 = off, 1 = on; how strong (0.0 - 1.0); brightness where it starts (0.0 - 1.0)\n"
+	"bloom=1\n"
+	"bloom_strength=0.3\n"
+	"bloom_threshold=0.7\n"
+	"; distance haze, coloured like the level's sky: 0 = off, 1 = on; how thick far away (0.0 - 1.0);\n"
+	"; distance in inches where it reaches half of that (THUG levels: 8000 = about 200 m)\n"
+	"fog=1\n"
+	"fog_strength=0.5\n"
+	"fog_distance=8000\n"
+	"; depth of field: blurs what's far behind your skater: 0 = off, 1 = on; how much (0.0 - 1.0)\n"
+	"dof=1\n"
+	"dof_strength=0.6\n"
+	"; PS2-style dithering over the whole picture (its 16-bit colour): 0 = off, 1 = on\n"
+	"ps2_dither=1\n"
+	"; overscan: how much of the picture's edge falls off the screen, like a TV (0.0 - 0.15)\n"
+	"overscan=0.04\n"
 	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
 	"shadow_softness=2.5\n"
-	"; shadows of buildings and objects from the sun: 0 = off everywhere, 1 = on in the levels listed under [sun]\n"
-	"sun_shadows=1\n"
-	"\n"
-	"[sun]\n"
-	"; one line per level: sun_<level>=heading pitch strength, e.g. sun_nj=50 330 0.7\n"
-	"; levels without a line have no sun shadows. Set them in game with the keyboard:\n"
-	";   F5 shadows on/off for this level   F6/F7 turn the sun   F8/F9 raise/lower it\n"
-	";   F10/F11 lighter/darker (hold Shift for finer steps). Every change is saved here.\n"
-	";   F4 finds the sun from the level's baked shadows; Shift+F4 shows the baked shadows to compare.\n"
 	"\n"
 	"[audio]\n"
 	"; voice acting: 0 = off, 1 = on\n"
@@ -65,8 +70,6 @@ static const char *s_default_ini =
 
 static DesktopConfig s_cfg;
 static bool s_loaded = false;
-static char s_ini_path[1200];
-static void sun_parse( const char *k, const char *v );
 
 static void trim( char *s )
 {
@@ -110,13 +113,19 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "ssao" ))          s_cfg.ssao = iv;
 		else if( !strcmp( k, "ssao_strength" )) s_cfg.ssao_strength = (float)atof( v );
 		else if( !strcmp( k, "ssao_radius" ))   s_cfg.ssao_radius = (float)atof( v );
+		else if( !strcmp( k, "bloom" ))         s_cfg.bloom = iv;
+		else if( !strcmp( k, "bloom_strength" )) s_cfg.bloom_strength = (float)atof( v );
+		else if( !strcmp( k, "bloom_threshold" )) s_cfg.bloom_threshold = (float)atof( v );
+		else if( !strcmp( k, "fog" ))           s_cfg.fog = iv;
+		else if( !strcmp( k, "fog_strength" ))  s_cfg.fog_strength = (float)atof( v );
+		else if( !strcmp( k, "fog_distance" ))  s_cfg.fog_distance = (float)atof( v );
+		else if( !strcmp( k, "dof" ))           s_cfg.dof = iv;
+		else if( !strcmp( k, "dof_strength" ))  s_cfg.dof_strength = (float)atof( v );
+		else if( !strcmp( k, "ps2_dither" ))    s_cfg.ps2_dither = iv;
+		else if( !strcmp( k, "overscan" ))      s_cfg.overscan = (float)atof( v );
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
-		else if( !strcmp( k, "sun_shadows" ))   s_cfg.sun_shadows = iv;
-		else if( !strcmp( k, "sun_strength" ))  s_cfg.sun_strength = (float)atof( v );
 		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
 		else if( !strcmp( k, "dump_shaders" ))  s_cfg.dump_shaders = iv;
-		else if( !strncmp( k, "sun_", 4 ) && strcmp( k, "sun_shadows" ) && strcmp( k, "sun_strength" ))
-			sun_parse( k + 4, v );
 		else if( !strcmp( k, "data" ))          snprintf( s_cfg.data_root, sizeof( s_cfg.data_root ), "%s", v );
 	}
 }
@@ -133,10 +142,18 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.ssao = 1;
 	s_cfg.ssao_strength = 0.8f;
 	s_cfg.ssao_radius = 28.0f;
+	s_cfg.bloom = 1;
+	s_cfg.bloom_strength = 0.3f;
+	s_cfg.bloom_threshold = 0.7f;
+	s_cfg.fog = 1;
+	s_cfg.fog_strength = 0.5f;
+	s_cfg.fog_distance = 8000.0f;
+	s_cfg.dof = 1;
+	s_cfg.dof_strength = 0.6f;
+	s_cfg.ps2_dither = 1;
+	s_cfg.overscan = 0.04f;
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
-	s_cfg.sun_shadows = 1;
-	s_cfg.sun_strength = 0.7f;	// strength of a level switched on in game
 
 	char path[1200];
 	char *base = SDL_GetBasePath();
@@ -145,7 +162,6 @@ const DesktopConfig &desktop_config( void )
 	const char *env = getenv( "THUG_DESKTOP_INI" );
 	if( env && *env )
 		snprintf( path, sizeof( path ), "%s", env );
-	snprintf( s_ini_path, sizeof( s_ini_path ), "%s", path );
 	FILE *f = fopen( path, "r" );
 	if( !f )
 	{
@@ -223,226 +239,6 @@ extern "C" float desktop_shadow_softness( void )
 {
 	const float v = desktop_config().shadow_softness;
 	return v < 0.0f ? 0.0f : v > 8.0f ? 8.0f : v;
-}
-
-// ---------------------------------------------------------------------------
-// Per-level sun ([sun] in the ini). THUG's lighting is baked into the vertex
-// colours, shadows included, so a sun shadow only looks right where its
-// direction matches the baked one: each level is set by hand, in game.
-// ---------------------------------------------------------------------------
-
-struct SSoleil { unsigned crc; char nom[24]; float heading, pitch, force; bool on; };
-static SSoleil s_sol[64];
-static int s_sol_n = 0;
-static unsigned s_sol_niveau = 0;	// level being drawn (desktop_sun_level)
-
-static unsigned crc_thps( const char *p )
-{
-	unsigned c = 0xffffffffu;
-	for( ; *p; ++p )
-	{
-		c ^= (unsigned char)tolower( (unsigned char)*p );
-		for( int k = 0; k < 8; ++k )
-			c = ( c >> 1 ) ^ (( c & 1 ) ? 0xedb88320u : 0u );
-	}
-	return c;
-}
-
-static SSoleil *sol_trouver( unsigned crc )
-{
-	for( int i = 0; i < s_sol_n; ++i )
-		if( s_sol[i].crc == crc )
-			return &s_sol[i];
-	return NULL;
-}
-
-static void sun_parse( const char *k, const char *v )
-{
-	char load[40];
-	snprintf( load, sizeof( load ), "load_%s", k );
-	SSoleil *p = sol_trouver( crc_thps( load ));
-	if( !p )
-	{
-		if( s_sol_n >= 64 ) return;
-		p = &s_sol[s_sol_n++];
-	}
-	memset( p, 0, sizeof( *p ));
-	p->crc = crc_thps( load );
-	snprintf( p->nom, sizeof( p->nom ), "%s", k );
-	p->force = 0.7f;
-	p->pitch = 330.0f;
-	const int n = sscanf( v, "%f %f %f", &p->heading, &p->pitch, &p->force );
-	p->on = ( n >= 2 ) && ( p->force > 0.0f );
-}
-
-// Level checksums are "load_<name>" (levels.q): the names are listed to save
-// a level switched on in game under a readable key.
-static const char *s_noms_niveaux[] = {
-	"nj", "ny", "fl", "sd", "hi", "vc", "sj", "ru", "au", "se", "sc", "dj", "ph", "vn",
-	"hn", "sc2", "www", "skateshop", "cas", "boardshop", "sk5ed", "sk5ed_gameplay",
-	"test", "testlevel", "default", NULL };
-
-static void sun_sauver( const SSoleil *p )
-{
-	if( !s_ini_path[0] )
-		return;
-	std::string sortie, cle = std::string( "sun_" ) + p->nom;
-	char ligne[128];
-	snprintf( ligne, sizeof( ligne ), "%s=%.0f %.0f %.2f\n", cle.c_str(), p->heading, p->pitch,
-	          p->on ? p->force : 0.0f );
-	bool fait = false;
-	FILE *f = fopen( s_ini_path, "r" );
-	if( f )
-	{
-		char l[1200];
-		while( fgets( l, sizeof( l ), f ))
-		{
-			char k[64] = "";
-			sscanf( l, " %63[^= \t]", k );
-			if( !fait && cle == k )
-			{
-				sortie += ligne;
-				fait = true;
-			}
-			else
-				sortie += l;
-		}
-		fclose( f );
-	}
-	if( !fait )
-	{
-		if( sortie.find( "[sun]" ) == std::string::npos )
-			sortie += "\n[sun]\n";
-		sortie += ligne;
-	}
-	f = fopen( s_ini_path, "w" );
-	if( f )
-	{
-		fputs( sortie.c_str(), f );
-		fclose( f );
-	}
-}
-
-extern "C" float desktop_sun_strength( void )
-{
-	return desktop_config().sun_shadows ? 1.0f : 0.0f;
-}
-
-// 1 and the level's sun when it has shadows on; 0 otherwise. *p_cree is set
-// when a key press just switched the level on and wants the game's own
-// direction as a starting point (desktop_sun_seed).
-extern "C" int desktop_sun_level( unsigned level, float *heading, float *pitch, float *force )
-{
-	desktop_config();
-	s_sol_niveau = level;
-	const SSoleil *p = sol_trouver( level );
-	if( !p || !p->on || !desktop_config().sun_shadows )
-		return 0;
-	*heading = p->heading;
-	*pitch = p->pitch;
-	*force = p->force;
-	return 1;
-}
-
-static float s_graine_h = 60.0f, s_graine_p = 330.0f;
-extern "C" void desktop_sun_seed( float heading, float pitch )
-{
-	s_graine_h = heading;
-	s_graine_p = pitch;
-}
-
-static float tourner( float a, float d )
-{
-	a = fmodf( a + d, 360.0f );
-	return a < 0.0f ? a + 360.0f : a;
-}
-
-static SSoleil *sol_creer( unsigned niveau )
-{
-	if( s_sol_n >= 64 )
-	return NULL;
-	SSoleil *p = &s_sol[s_sol_n++];
-	memset( p, 0, sizeof( *p ));
-	p->crc = niveau;
-	snprintf( p->nom, sizeof( p->nom ), "%08x", niveau );
-	for( int i = 0; s_noms_niveaux[i]; ++i )
-	{
-		char load[40];
-		snprintf( load, sizeof( load ), "load_%s", s_noms_niveaux[i] );
-		if( crc_thps( load ) == niveau )
-			snprintf( p->nom, sizeof( p->nom ), "%s", s_noms_niveaux[i] );
-	}
-	p->heading = s_graine_h;
-	p->pitch = s_graine_p;
-	p->force = desktop_config().sun_strength;
-	p->on = false;
-	return p;
-}
-
-static bool s_auto_demande = false;
-static bool s_montrer_cuites = false;
-
-// F4: find this level's sun from its baked shadow decals (p_world_render.cpp).
-extern "C" int desktop_sun_auto_request( void )
-{
-	const bool d = s_auto_demande;
-	s_auto_demande = false;
-	return d ? 1 : 0;
-}
-
-// Shift+F4: baked shadow decals shown next to the sun shadows, to compare.
-extern "C" int desktop_sun_show_baked( void ) { return s_montrer_cuites ? 1 : 0; }
-
-extern "C" void desktop_sun_set_level( unsigned niveau, float heading, float pitch )
-{
-	SSoleil *p = sol_trouver( niveau );
-	if( !p ) p = sol_creer( niveau );
-	if( !p ) return;
-	p->heading = heading;
-	p->pitch = pitch;
-	if( p->force <= 0.0f ) p->force = desktop_config().sun_strength;
-	p->on = true;
-	sun_sauver( p );
-	SDL_Log( "sun %s: matched to baked shadows, heading %.0f pitch %.0f", p->nom, heading, pitch );
-}
-
-extern "C" void desktop_sun_key( int touche, int maj )
-{
-	if( !s_sol_niveau || !desktop_config().sun_shadows )
-		return;
-	if( touche == 4 )
-	{
-		if( maj ) s_montrer_cuites = !s_montrer_cuites;
-		else      s_auto_demande = true;
-		return;
-	}
-	SSoleil *p = sol_trouver( s_sol_niveau );
-	if( !p )
-	{
-		if( touche != 5 )
-			return;
-		p = sol_creer( s_sol_niveau );
-		if( !p )
-			return;
-	}
-	const float pas = maj ? 1.0f : 5.0f;
-	switch( touche )
-	{
-		case 5:  p->on = !p->on; if( p->force <= 0.0f ) p->force = desktop_config().sun_strength; break;
-		case 6:  p->heading = tourner( p->heading, -pas ); break;
-		case 7:  p->heading = tourner( p->heading, pas ); break;
-		// Pitch 330 = 30 degrees up (levels.q); 270 = straight overhead.
-		case 8:  p->pitch = tourner( p->pitch, -pas ); if( p->pitch < 275.0f ) p->pitch = 275.0f; break;
-		case 9:  p->pitch = tourner( p->pitch, pas );  if( p->pitch > 355.0f || p->pitch < 270.0f ) p->pitch = 355.0f; break;
-		case 10: p->force -= maj ? 0.02f : 0.1f; if( p->force < 0.05f ) p->force = 0.05f; break;
-		case 11: p->force += maj ? 0.02f : 0.1f; if( p->force > 1.0f ) p->force = 1.0f; break;
-		default: return;
-	}
-	if( touche != 5 )
-		p->on = true;
-	sun_sauver( p );
-	SDL_Log( "sun %s: %s, heading %.0f pitch %.0f strength %.2f", p->nom, p->on ? "on" : "off",
-	         p->heading, p->pitch, p->force );
 }
 
 extern "C" int desktop_voices( void )

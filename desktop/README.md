@@ -38,32 +38,18 @@ aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your s
 ssao=1              ; ambient occlusion: darkens corners and contact points (2 = show only the occlusion, as a test)
 ssao_strength=0.8   ; 0.0 - 1.0
 ssao_radius=28      ; reach, in inches of game world
-sun_shadows=1       ; 0 = no sun shadows anywhere; 1 = in the levels listed under [sun]
-sun_strength=0.7    ; starting strength for a level switched on in game
+bloom=1             ; glow around bright areas
+bloom_strength=0.3  ; 0.0 - 1.0
+bloom_threshold=0.7 ; 0.0 - 1.0, brightness where the glow starts
+fog=1               ; distance haze in the colour of the level's sky (none indoors)
+fog_strength=0.5    ; 0.0 - 1.0, how thick it gets far away
+fog_distance=8000   ; inches to reach half of that (8000 = about 200 m)
+dof=1               ; depth of field: blurs what's far behind your skater
+dof_strength=0.6    ; 0.0 - 1.0
+ps2_dither=1        ; PS2 16-bit colour dithering over the whole picture
+overscan=0.04       ; share of the picture's edge cut off like a TV (0.0 - 0.15)
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 
-[sun]
-sun_nj=50 330 0.7   ; per level: heading, pitch (330 = 30 degrees up), strength
-```
-
-Sun shadows are per level because THUG's shadows are baked into the level's
-vertex lighting: new ones only look right lined up with the baked ones. Set a
-level in game, standing where baked shadows are easy to see:
-
-- F4: find the sun from the level's baked shadows (stand near some; takes a
-  second or two) and switch the level on
-- Shift+F4: show the baked shadows next to the sun shadows, to compare
-- F5: sun shadows on/off for this level
-- F6 / F7: turn the sun left / right
-- F8 / F9: raise / lower the sun
-- F10 / F11: lighter / darker shadows
-- hold Shift for finer steps
-
-Each key press saves the level's line in thug_desktop.ini. Where a level's sun
-shadows are on, its painted (baked) shadow decals are hidden: the sun shadows
-replace them.
-
-```
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe
 ```

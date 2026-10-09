@@ -239,7 +239,7 @@ void (*g_desktop_post_hook)( GLuint, int, int ) = NULL;
 // same formula as the Vita shader (the Xbox gamma table).
 static float  s_gamma_k[3] = { 1.0f, 1.0f, 1.0f };
 static GLuint s_gamma_prog = 0;
-static GLint  s_gamma_loc_k = -1;
+static GLint  s_gamma_loc_k = -1, s_gamma_loc_zoom = -1, s_gamma_loc_tram = -1, s_gamma_loc_grille = -1;
 static bool   s_gamma_echec = false;
 
 static bool s_letterbox = false;
@@ -266,10 +266,33 @@ static bool gamma_prog( void )
 		"#version 120\n"
 		"uniform sampler2D img;\n"
 		"uniform vec3 k;\n"
+		"uniform float zoom;\n"		// overscan: the picture's edges past the screen
+		"uniform float tram;\n"		// 1 = PS2 dither
+		"uniform vec2 grille;\n"		// PS2 pixels across the picture
 		"varying vec2 t;\n"
+		// The GS dither matrix (DIMX, the value games load): added to the
+		// 8-bit colour before it drops to 5 bits in a 16-bit frame buffer.
+		"float dimx(vec2 p) {\n"
+		"	int i = int(mod(p.x, 4.0)) + 4 * int(mod(p.y, 4.0));\n"
+		"	float m[16];\n"
+		"	m[0] = -4.0; m[1] = 0.0; m[2] = -3.0; m[3] = 1.0;\n"
+		"	m[4] = 2.0; m[5] = -2.0; m[6] = 3.0; m[7] = -1.0;\n"
+		"	m[8] = -3.0; m[9] = 1.0; m[10] = -4.0; m[11] = 0.0;\n"
+		"	m[12] = 3.0; m[13] = -1.0; m[14] = 2.0; m[15] = -2.0;\n"
+		"	float v = 0.0;\n"
+		"	for (int j = 0; j < 16; ++j) if (j == i) v = m[j];\n"
+		"	return v;\n"
+		"}\n"
 		"void main() {\n"
-		"	vec3 c = texture2D(img, t).rgb;\n"
+		"	vec2 u = 0.5 + (t - 0.5) * zoom;\n"
+		"	vec3 c = texture2D(img, u).rgb;\n"
 		"	vec3 o = floor(256.0 * pow(c * (255.0 / 256.0), k) + 0.001);\n"
+		"	o = min(o, 255.0);\n"
+		"	if (tram > 0.5) {\n"
+		"		vec2 p = floor(u * grille);\n"
+		"		o = floor(clamp(o + dimx(p), 0.0, 255.0) / 8.0) * 8.0;\n"
+		"		o = o + o / 32.0;\n"	// 5 bits back to the full 0-255 range
+		"	}\n"
 		"	gl_FragColor = vec4(min(o, 255.0) / 255.0, 1.0);\n"
 		"}\n";
 	GLuint sh[2] = { dgl_glCreateShader_real( GL_VERTEX_SHADER ), dgl_glCreateShader_real( GL_FRAGMENT_SHADER ) };
@@ -292,6 +315,9 @@ static bool gamma_prog( void )
 	}
 	s_gamma_prog = p;
 	s_gamma_loc_k = glGetUniformLocation( p, "k" );
+	s_gamma_loc_zoom = glGetUniformLocation( p, "zoom" );
+	s_gamma_loc_tram = glGetUniformLocation( p, "tram" );
+	s_gamma_loc_grille = glGetUniformLocation( p, "grille" );
 	GLint avant = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
 	glUseProgram( p );
@@ -322,6 +348,15 @@ static void gamma_draw( int x, int y, int w, int h )
 	glViewport( x, y, w, h );
 	glUseProgram( s_gamma_prog );
 	glUniform3f( s_gamma_loc_k, s_gamma_k[0], s_gamma_k[1], s_gamma_k[2] );
+	{
+		const DesktopConfig &cfg = desktop_config();
+		float os = cfg.overscan < 0.0f ? 0.0f : cfg.overscan > 0.15f ? 0.15f : cfg.overscan;
+		glUniform1f( s_gamma_loc_zoom, 1.0f - os );
+		glUniform1f( s_gamma_loc_tram, cfg.ps2_dither ? 1.0f : 0.0f );
+		// 640x448 like the PS2 game in 4:3; the same pixel size across a
+		// wider picture.
+		glUniform2f( s_gamma_loc_grille, 448.0f * w / (float)h, 448.0f );
+	}
 	glBindTexture( GL_TEXTURE_2D, s_tex_resolve );
 	glBegin( GL_TRIANGLE_STRIP );
 	glTexCoord2f( 0, 0 ); glVertex2f( -1, -1 );
@@ -365,7 +400,9 @@ extern "C" void vglSwapBuffers( GLboolean )
 	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, 0 );
 	glClearColor( 0, 0, 0, 1 );
 	glClear( GL_COLOR_BUFFER_BIT );
-	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f ) && gamma_prog();
+	const DesktopConfig &cfg = desktop_config();
+	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
+	                     || cfg.ps2_dither || cfg.overscan > 0.0f ) && gamma_prog();
 	if( gamma )
 	{
 		dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_fbo_resolve );
@@ -1112,250 +1149,223 @@ extern "C" void desktop_ssao( void )
 }
 
 // ---------------------------------------------------------------------------
-// Sun shadows. The world (p_world_render.cpp) draws its opaque meshes from
-// the time-of-day sun into a depth map around the camera; after the opaque
-// pass, every screen pixel is put back in the world (from the depth copy)
-// and tested against that map. Shadowed pixels, and surfaces turned away
-// from the sun, are multiplied by the shade colour; lit ones slightly by the
-// sun colour.
+// Distance haze and bloom, on the 3D image before the 2D (called right after
+// desktop_ssao). The haze takes the sky's colour: the average of the pixels
+// with no geometry, smoothed over time and kept when no sky is in view.
 // ---------------------------------------------------------------------------
 
-static const int SUN_TAILLE = 4096;
-static GLuint s_sun_tex = 0, s_sun_fbo = 0, s_sun_prog = 0, s_sun_app = 0;
-static GLint  s_sun_l_lvp = -1, s_sun_l_seuil = -1;
-static GLint  s_sa_l_proj = -1, s_sa_l_vw = -1, s_sa_l_lvp = -1, s_sa_l_lv = -1;
-static GLint  s_sa_l_ombre = -1, s_sa_l_soleil = -1, s_sa_l_tx = -1, s_sa_l_tm = -1;
-static int    s_sun_etat = 0;		// 0 not tried, 1 ready, -1 off
-static bool   s_sun_carte = false;	// a map has been drawn since the level loaded
+#ifndef GL_RGBA16F
+#define GL_RGBA16F 0x881A
+#endif
+static const int PP_NIV = 5;			// bloom levels: 1/2 ... 1/32
+static GLuint s_pp_tex[PP_NIV], s_pp_fbo[PP_NIV];
+static int    s_pp_w[PP_NIV], s_pp_h[PP_NIV];
+static GLuint s_pp_ciel_tex = 0, s_pp_ciel_fbo = 0, s_pp_moy_tex[2] = { 0, 0 }, s_pp_moy_fbo[2] = { 0, 0 };
+static int    s_pp_moy = 0;
+static GLuint s_pp_p_ciel = 0, s_pp_p_moy = 0, s_pp_p_fog = 0, s_pp_p_pre = 0, s_pp_p_down = 0, s_pp_p_up = 0;
+static int    s_pp_etat = 0;
 
-static const char *s_sun_vs =
+static const char *s_pp_ciel_fs =
 	"#version 120\n"
-	"attribute vec3 a_pos;\n"
-	"attribute vec2 a_uv;\n"
-	"uniform mat4 lvp;\n"
-	"varying vec2 uv;\n"
-	"void main() { uv = a_uv; gl_Position = lvp * vec4(a_pos, 1.0); }\n";
-
-static const char *s_sun_fs =
-	"#version 120\n"
-	"uniform sampler2D tex;\n"
-	"uniform float seuil;\n"		// alpha test threshold, 0 = none
-	"varying vec2 uv;\n"
+	"uniform sampler2D img;\n"
+	"uniform sampler2D dep;\n"
+	"varying vec2 t;\n"
 	"void main() {\n"
-	"	if (seuil > 0.0 && texture2D(tex, uv).a < seuil) discard;\n"
-	"	gl_FragColor = vec4(1.0);\n"
+	"	gl_FragColor = texture2D(dep, t).r >= 0.99999 ? vec4(texture2D(img, t).rgb, 1.0) : vec4(0.0);\n"
 	"}\n";
 
-static const char *s_sun_app_fs =
+static const char *s_pp_moy_fs =
+	"#version 130\n"
+	"uniform sampler2D ciel;\n"
+	"uniform sampler2D prec;\n"
+	"in vec2 t;\n"
+	"void main() {\n"
+	"	vec4 s = textureLod(ciel, vec2(0.5), 6.0);\n"
+	"	vec4 p = texture(prec, vec2(0.5));\n"
+	"	if (s.a < 0.02) { gl_FragColor = p; return; }\n"
+	"	vec3 c = s.rgb / s.a;\n"
+	"	gl_FragColor = vec4(p.a < 0.5 ? c : mix(p.rgb, c, 0.05), 1.0);\n"
+	"}\n";
+
+static const char *s_pp_fog_fs =
 	AO_GLSL_COMMUN
-	"uniform sampler2DShadow sm;\n"
-	"uniform mat4 vw;\n"			// view -> world
-	"uniform mat4 lvp;\n"			// world -> sun map
-	"uniform vec3 Lv;\n"			// towards the sun, view space
-	"uniform vec3 ombre;\n"			// multiplier in shade
-	"uniform vec3 soleil;\n"		// multiplier facing the sun
-	"uniform vec2 tx;\n"
-	"uniform float tm;\n"			// one map texel
+	"uniform sampler2D moy;\n"
+	"uniform vec2 par;\n"			// strength, half distance
 	"void main() {\n"
 	"	float d = texture2D(dep, t).r;\n"
-	"	if (d >= 0.99999) { gl_FragColor = vec4(0.5); return; }\n"
-	"	vec3 P = pos(t);\n"
-	"	float z = -P.z;\n"
-	"	vec2 e = 2.0 * tx;\n"
-	"	vec3 pr = pos(t + vec2(e.x, 0.0)) - P, pl = P - pos(t - vec2(e.x, 0.0));\n"
-	"	vec3 pu = pos(t + vec2(0.0, e.y)) - P, pd = P - pos(t - vec2(0.0, e.y));\n"
-	"	vec3 dx = abs(pr.z) < abs(pl.z) ? pr : pl;\n"
-	"	vec3 dy = abs(pu.z) < abs(pd.z) ? pu : pd;\n"
-	"	vec3 N = normalize(cross(dx, dy));\n"
-	"	if (dot(N, P) > 0.0) N = -N;\n"
-	"	float nl = dot(N, Lv);\n"
-	// Pushed off the surface (more when seen from afar or edge-on to the sun):
-	// no self-shadowing acne.
-	"	vec3 Po = P + N * (1.5 + 0.002 * z) + Lv * (1.0 + 2.0 * (1.0 - abs(nl)));\n"
-	"	vec4 S = lvp * (vw * vec4(Po, 1.0));\n"
-	"	vec3 s = S.xyz * 0.5 + 0.5;\n"
-	"	vec2 bd = abs(S.xy);\n"
-	"	float bord = smoothstep(0.8, 0.98, max(bd.x, bd.y));\n"
-	"	float vis = 0.0;\n"
-	"	float a = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n"
-	"	for (int i = 0; i < 12; ++i) {\n"
-	"		float k = (float(i) + 0.5) / 12.0;\n"
-	"		float g = a + float(i) * 2.3999632;\n"
-	"		vec2 o = vec2(cos(g), sin(g)) * sqrt(k) * 2.5 * tm;\n"
-	"		vis += shadow2D(sm, vec3(s.xy + o, s.z)).r;\n"
-	"	}\n"
-	"	vis /= 12.0;\n"
-	// Cast shadows only: a face turned from the sun is already dark in the
-	// baked lighting, darkening it again doubled the shade.
-	"	float lum = nl < -0.05 ? 1.0 : vis;\n"
-	"	lum = mix(lum, 1.0, bord);\n"
-	"	vec3 m = mix(ombre, soleil, lum);\n"
-	"	gl_FragColor = vec4(m * 0.5, 1.0);\n"
+	"	if (d >= 0.99999) discard;\n"
+	"	vec4 m = texture2D(moy, vec2(0.5));\n"
+	"	float f = par.x * (1.0 - exp2(-length(pos(t)) / par.y));\n"
+	"	gl_FragColor = vec4(m.rgb, f * m.a);\n"
 	"}\n";
 
-static bool sun_pret( void )
+static const char *s_pp_pre_fs =
+	"#version 120\n"
+	"uniform sampler2D src;\n"
+	"uniform vec2 hx;\n"			// one source texel
+	"uniform float seuil;\n"
+	"varying vec2 t;\n"
+	"void main() {\n"
+	"	vec3 c = 0.25 * (texture2D(src, t + vec2(-hx.x, -hx.y)).rgb + texture2D(src, t + vec2(hx.x, -hx.y)).rgb\n"
+	"	               + texture2D(src, t + vec2(-hx.x, hx.y)).rgb + texture2D(src, t + vec2(hx.x, hx.y)).rgb);\n"
+	"	float l = dot(c, vec3(0.299, 0.587, 0.114));\n"
+	"	gl_FragColor = vec4(c * smoothstep(seuil, seuil + 0.25, l), 1.0);\n"
+	"}\n";
+
+static const char *s_pp_down_fs =
+	"#version 120\n"
+	"uniform sampler2D src;\n"
+	"uniform vec2 hx;\n"
+	"varying vec2 t;\n"
+	"void main() {\n"
+	"	vec3 c = texture2D(src, t).rgb * 4.0\n"
+	"	       + texture2D(src, t + vec2(-hx.x, -hx.y)).rgb + texture2D(src, t + vec2(hx.x, -hx.y)).rgb\n"
+	"	       + texture2D(src, t + vec2(-hx.x, hx.y)).rgb + texture2D(src, t + vec2(hx.x, hx.y)).rgb;\n"
+	"	gl_FragColor = vec4(c / 8.0, 1.0);\n"
+	"}\n";
+
+static const char *s_pp_up_fs =
+	"#version 120\n"
+	"uniform sampler2D src;\n"
+	"uniform vec2 hx;\n"
+	"uniform float k;\n"
+	"varying vec2 t;\n"
+	"void main() {\n"
+	"	vec3 c = texture2D(src, t + vec2(-2.0 * hx.x, 0.0)).rgb + texture2D(src, t + vec2(2.0 * hx.x, 0.0)).rgb\n"
+	"	       + texture2D(src, t + vec2(0.0, -2.0 * hx.y)).rgb + texture2D(src, t + vec2(0.0, 2.0 * hx.y)).rgb\n"
+	"	       + 2.0 * (texture2D(src, t + vec2(-hx.x, hx.y)).rgb + texture2D(src, t + vec2(hx.x, hx.y)).rgb\n"
+	"	              + texture2D(src, t + vec2(hx.x, -hx.y)).rgb + texture2D(src, t + vec2(-hx.x, -hx.y)).rgb);\n"
+	"	gl_FragColor = vec4(c / 12.0 * k, 1.0);\n"
+	"}\n";
+
+static GLuint s_pp_p_dof = 0;
+static const char *s_pp_dof_fs =
+	AO_GLSL_COMMUN
+	"uniform sampler2D flou;\n"
+	"uniform vec2 hx;\n"			// one quarter-size texel
+	"uniform float force;\n"
+	"void main() {\n"
+	// Focus: the nearest of 9 points around the middle of the screen, where
+	// the camera keeps the skater.
+	"	float f = 1e9;\n"
+	"	for (int j = 0; j < 3; ++j)\n"
+	"		for (int i = 0; i < 3; ++i)\n"
+	"			f = min(f, lin(texture2D(dep, vec2(0.44 + 0.06 * float(i), 0.38 + 0.08 * float(j))).r));\n"
+	"	f = clamp(f, 120.0, 3000.0);\n"
+	"	float z = lin(texture2D(dep, t).r);\n"
+	"	float c = force * smoothstep(f * 2.5, f * 8.0, z);\n"
+	"	if (c < 0.004) discard;\n"
+	"	vec3 b = texture2D(flou, t + vec2(-2.0 * hx.x, 0.0)).rgb + texture2D(flou, t + vec2(2.0 * hx.x, 0.0)).rgb\n"
+	"	       + texture2D(flou, t + vec2(0.0, -2.0 * hx.y)).rgb + texture2D(flou, t + vec2(0.0, 2.0 * hx.y)).rgb\n"
+	"	       + 2.0 * (texture2D(flou, t + vec2(-hx.x, hx.y)).rgb + texture2D(flou, t + vec2(hx.x, hx.y)).rgb\n"
+	"	              + texture2D(flou, t + vec2(hx.x, -hx.y)).rgb + texture2D(flou, t + vec2(-hx.x, -hx.y)).rgb);\n"
+	"	gl_FragColor = vec4(b / 12.0, c);\n"
+	"}\n";
+
+static GLuint pp_cible( GLuint *fbo, int w, int h, bool mips )
 {
-	if( s_sun_etat )
-		return s_sun_etat > 0;
-	s_sun_etat = -1;
-	if( !dep_pret())
-		return false;
-
-	s_sun_prog = ao_lier( s_sun_vs, s_sun_fs, "sun map" );
-	s_sun_app  = ao_lier( s_ao_vs, s_sun_app_fs, "sun shadows" );
-	if( !s_sun_prog || !s_sun_app )
-		return false;
-	glBindAttribLocation( s_sun_prog, 0, "a_pos" );
-	glBindAttribLocation( s_sun_prog, 1, "a_uv" );
-	dgl_glLinkProgram( s_sun_prog );
-	GLint ok = 0;
-	glGetProgramiv( s_sun_prog, GL_LINK_STATUS, &ok );
-	if( !ok )
-	{
-		DLOG( "!! sun map program refused" );
-		return false;
-	}
-	GLint avant = 0;
-	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
-	glUseProgram( s_sun_prog );
-	glUniform1i( glGetUniformLocation( s_sun_prog, "tex" ), 0 );
-	s_sun_l_lvp   = glGetUniformLocation( s_sun_prog, "lvp" );
-	s_sun_l_seuil = glGetUniformLocation( s_sun_prog, "seuil" );
-	glUseProgram( s_sun_app );
-	glUniform1i( glGetUniformLocation( s_sun_app, "dep" ), 0 );
-	glUniform1i( glGetUniformLocation( s_sun_app, "sm" ), 1 );
-	s_sa_l_proj   = glGetUniformLocation( s_sun_app, "proj" );
-	s_sa_l_vw     = glGetUniformLocation( s_sun_app, "vw" );
-	s_sa_l_lvp    = glGetUniformLocation( s_sun_app, "lvp" );
-	s_sa_l_lv     = glGetUniformLocation( s_sun_app, "Lv" );
-	s_sa_l_ombre  = glGetUniformLocation( s_sun_app, "ombre" );
-	s_sa_l_soleil = glGetUniformLocation( s_sun_app, "soleil" );
-	s_sa_l_tx     = glGetUniformLocation( s_sun_app, "tx" );
-	s_sa_l_tm     = glGetUniformLocation( s_sun_app, "tm" );
-	glUseProgram( avant );
-
-	GLint tex = 0;
-	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
-	glGenTextures( 1, &s_sun_tex );
-	glBindTexture( GL_TEXTURE_2D, s_sun_tex );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	GLuint tex = 0;
+	glGenTextures( 1, &tex );
+	glBindTexture( GL_TEXTURE_2D, tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mips ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, SUN_TAILLE, SUN_TAILLE, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, NULL );
-	glBindTexture( GL_TEXTURE_2D, tex );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT, NULL );
+	if( mips )
+		dgl_glGenerateMipmap( GL_TEXTURE_2D );
+	dgl_glGenFramebuffers( 1, fbo );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, *fbo );
+	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0 );
+	if( dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER ) != GL_FRAMEBUFFER_COMPLETE )
+		return 0;
+	glClearColor( 0, 0, 0, 0 );
+	glClear( GL_COLOR_BUFFER_BIT );
+	return tex;
+}
 
-	dgl_glGenFramebuffers( 1, &s_sun_fbo );
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_sun_fbo );
-	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, s_sun_tex, 0 );
-	glDrawBuffer( GL_NONE );
-	glReadBuffer( GL_NONE );
-	const GLenum st = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
-	if( st != GL_FRAMEBUFFER_COMPLETE )
+static void pp_echantillons( GLuint p, const char *a, int ua, const char *b, int ub )
+{
+	GLint avant = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
+	glUseProgram( p );
+	if( a ) glUniform1i( glGetUniformLocation( p, a ), ua );
+	if( b ) glUniform1i( glGetUniformLocation( p, b ), ub );
+	glUseProgram( avant );
+}
+
+static bool pp_pret( void )
+{
+	if( s_pp_etat )
+		return s_pp_etat > 0;
+	s_pp_etat = -1;
+	if( !dep_pret())
+		return false;
+	s_pp_p_ciel = ao_lier( s_ao_vs, s_pp_ciel_fs, "sky average" );
+	s_pp_p_moy  = ao_lier( s_ao_vs, s_pp_moy_fs, "sky smoothing" );
+	s_pp_p_fog  = ao_lier( s_ao_vs, s_pp_fog_fs, "haze" );
+	s_pp_p_pre  = ao_lier( s_ao_vs, s_pp_pre_fs, "bloom bright pass" );
+	s_pp_p_down = ao_lier( s_ao_vs, s_pp_down_fs, "bloom down" );
+	s_pp_p_up   = ao_lier( s_ao_vs, s_pp_up_fs, "bloom up" );
+	s_pp_p_dof  = ao_lier( s_ao_vs, s_pp_dof_fs, "depth of field" );
+	if( !s_pp_p_ciel || !s_pp_p_moy || !s_pp_p_fog || !s_pp_p_pre || !s_pp_p_down || !s_pp_p_up || !s_pp_p_dof )
+		return false;
+	pp_echantillons( s_pp_p_dof, "dep", 0, "flou", 1 );
+	pp_echantillons( s_pp_p_ciel, "img", 1, "dep", 0 );
+	pp_echantillons( s_pp_p_moy, "ciel", 0, "prec", 1 );
+	pp_echantillons( s_pp_p_fog, "dep", 0, "moy", 1 );
+	pp_echantillons( s_pp_p_pre, "src", 0, NULL, 0 );
+	pp_echantillons( s_pp_p_down, "src", 0, NULL, 0 );
+	pp_echantillons( s_pp_p_up, "src", 0, NULL, 0 );
+
+	GLint tex = 0;
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
+	bool ok = true;
+	for( int i = 0; i < PP_NIV; ++i )
 	{
-		DLOG( "!! sun shadow map incomplete (0x%x), sun shadows off", (unsigned)st );
+		s_pp_w[i] = s_rt_w >> ( i + 1 ); if( s_pp_w[i] < 1 ) s_pp_w[i] = 1;
+		s_pp_h[i] = s_rt_h >> ( i + 1 ); if( s_pp_h[i] < 1 ) s_pp_h[i] = 1;
+		ok = ok && ( s_pp_tex[i] = pp_cible( &s_pp_fbo[i], s_pp_w[i], s_pp_h[i], false ));
+	}
+	ok = ok && ( s_pp_ciel_tex = pp_cible( &s_pp_ciel_fbo, 64, 64, true ));
+	ok = ok && ( s_pp_moy_tex[0] = pp_cible( &s_pp_moy_fbo[0], 1, 1, false ));
+	ok = ok && ( s_pp_moy_tex[1] = pp_cible( &s_pp_moy_fbo[1], 1, 1, false ));
+	glBindTexture( GL_TEXTURE_2D, tex );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
+	if( !ok )
+	{
+		DLOG( "!! bloom/haze targets incomplete, both off" );
 		return false;
 	}
-	DLOG( "sun shadows on: %dx%d map", SUN_TAILLE, SUN_TAILLE );
-	s_sun_etat = 1;
+	DLOG( "post effects on: bloom %d, haze %d, depth of field %d", desktop_config().bloom, desktop_config().fog,
+	      desktop_config().dof );
+	s_pp_etat = 1;
 	return true;
 }
 
-// State saved around the map: the game's own caches (bound buffers, enabled
-// attribute arrays) must find GL as they left it.
-static GLint s_sv_prog, s_sv_tex0, s_sv_act, s_sv_ab, s_sv_eab;
-static GLint s_sv_attr[4];
-
-extern "C" int desktop_sun_begin( const float *lvp )
+static void pp_vers( GLuint fbo, int w, int h )
 {
-	if( !s_window || !on_screen() || !sun_pret())
-		return 0;
-	glGetIntegerv( GL_CURRENT_PROGRAM, &s_sv_prog );
-	glGetIntegerv( GL_ACTIVE_TEXTURE, &s_sv_act );
-	glActiveTexture( GL_TEXTURE0 );
-	glGetIntegerv( GL_TEXTURE_BINDING_2D, &s_sv_tex0 );
-	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &s_sv_ab );
-	glGetIntegerv( GL_ELEMENT_ARRAY_BUFFER_BINDING, &s_sv_eab );
-	for( int i = 0; i < 4; ++i )
-		dgl_glGetVertexAttribiv( i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &s_sv_attr[i] );
-	// Bound BEFORE the push (see desktop_ssao): the pop then lands on s_fbo.
-	glPushAttrib( GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT
-	              | GL_SCISSOR_BIT | GL_POLYGON_BIT );
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_sun_fbo );
-	glViewport( 0, 0, SUN_TAILLE, SUN_TAILLE );
-	glDisable( GL_SCISSOR_TEST );
-	glDisable( GL_BLEND );
-	glDisable( GL_ALPHA_TEST );
-	glDisable( GL_STENCIL_TEST );
-	glDisable( GL_CULL_FACE );
-	glEnable( GL_DEPTH_TEST );
-	glDepthFunc( GL_LESS );
-	glDepthMask( GL_TRUE );
-	glDepthRange( 0.0, 1.0 );
-	glClearDepth( 1.0 );
-	glClear( GL_DEPTH_BUFFER_BIT );
-	glEnable( GL_POLYGON_OFFSET_FILL );
-	glPolygonOffset( 1.5f, 4.0f );
-	glUseProgram( s_sun_prog );
-	glUniformMatrix4fv( s_sun_l_lvp, 1, GL_FALSE, lvp );
-	dgl_glEnableVertexAttribArray( 0 );
-	for( int i = 2; i < 4; ++i )
-		dgl_glDisableVertexAttribArray( i );
-	return 1;
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, fbo );
+	glViewport( 0, 0, w, h );
 }
 
-extern "C" void desktop_sun_mesh( unsigned int vbo, unsigned int uvbo, unsigned int ibo,
-                                  int num_indices, unsigned int texture, float seuil )
+static void pp_resoudre( void )
 {
-	const bool test = ( seuil > 0.0f ) && texture && uvbo;
-	glBindBuffer( GL_ARRAY_BUFFER, vbo );
-	dgl_glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
-	if( test )
-	{
-		glBindBuffer( GL_ARRAY_BUFFER, uvbo );
-		dgl_glVertexAttribPointer( 1, 2, GL_FLOAT, GL_FALSE, 0, NULL );
-		dgl_glEnableVertexAttribArray( 1 );
-		glBindTexture( GL_TEXTURE_2D, texture );
-	}
-	else
-		dgl_glDisableVertexAttribArray( 1 );
-	glUniform1f( s_sun_l_seuil, test ? seuil : 0.0f );
-	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo );
-	glDrawElements( GL_TRIANGLE_STRIP, num_indices, GL_UNSIGNED_SHORT, NULL );
-}
-
-extern "C" void desktop_sun_end( void )
-{
+	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
+	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_fbo_resolve );
+	dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_COLOR_BUFFER_BIT, GL_NEAREST );
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
-	glPopAttrib();
-	for( int i = 0; i < 4; ++i )
-	{
-		if( s_sv_attr[i] ) dgl_glEnableVertexAttribArray( i );
-		else               dgl_glDisableVertexAttribArray( i );
-	}
-	glBindBuffer( GL_ARRAY_BUFFER, s_sv_ab );
-	glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, s_sv_eab );
-	glBindTexture( GL_TEXTURE_2D, s_sv_tex0 );
-	glActiveTexture( s_sv_act );
-	glUseProgram( s_sv_prog );
-	appliquer_vp();
-	appliquer_sc();
-	s_sun_carte = true;
 }
 
-extern "C" void desktop_sun_forget( void ) { s_sun_carte = false; }
-
-// vw: view -> world; lvp: world -> map clip; lv: towards the sun, view space.
-extern "C" void desktop_sun_apply( const float *vw, const float *lvp, const float *lv,
-                                   const float *ombre, const float *soleil )
+extern "C" void desktop_post( void )
 {
-	if( !s_window || !on_screen() || !s_proj_ok || !s_sun_carte || s_sun_etat <= 0 ||
-	    s_vp[0] != 0 || s_vp[1] != 0 || s_vp[2] < VIRT_W || s_vp[3] < VIRT_H )
+	const DesktopConfig &cfg = desktop_config();
+	const bool brume = cfg.fog && cfg.fog_strength > 0.0f && cfg.fog_distance > 1.0f;
+	const bool halo = cfg.bloom && cfg.bloom_strength > 0.0f;
+	const bool flou = cfg.dof && cfg.dof_strength > 0.0f;
+	if(( !brume && !halo && !flou ) || !s_window || !on_screen() || !s_proj_ok ||
+	    s_vp[0] != 0 || s_vp[1] != 0 || s_vp[2] < VIRT_W || s_vp[3] < VIRT_H || !pp_pret())
 		return;
-	copier_profondeur();
 
 	GLint prog = 0, act = 0, tex0 = 0, tex1 = 0, buf = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
@@ -1363,10 +1373,8 @@ extern "C" void desktop_sun_apply( const float *vw, const float *lvp, const floa
 	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &buf );
 	glActiveTexture( GL_TEXTURE1 );
 	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex1 );
-	glBindTexture( GL_TEXTURE_2D, s_sun_tex );
 	glActiveTexture( GL_TEXTURE0 );
 	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex0 );
-	glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
 	glPushAttrib( GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
 	glDisable( GL_DEPTH_TEST );
 	glDepthMask( GL_FALSE );
@@ -1374,178 +1382,124 @@ extern "C" void desktop_sun_apply( const float *vw, const float *lvp, const floa
 	glDisable( GL_ALPHA_TEST );
 	glDisable( GL_STENCIL_TEST );
 	glDisable( GL_SCISSOR_TEST );
+	glDisable( GL_BLEND );
 	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 	glBindBuffer( GL_ARRAY_BUFFER, 0 );
-	glViewport( 0, 0, s_rt_w, s_rt_h );
-	// dst x 2 x src: the shader writes half the multiplier, so it can go
-	// above 1 (sunlit faces).
-	glEnable( GL_BLEND );
 	glBlendEquation( GL_FUNC_ADD );
-	glBlendFunc( GL_DST_COLOR, GL_SRC_COLOR );
-	glUseProgram( s_sun_app );
-	glUniform4f( s_sa_l_proj, s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
-	glUniformMatrix4fv( s_sa_l_vw, 1, GL_FALSE, vw );
-	glUniformMatrix4fv( s_sa_l_lvp, 1, GL_FALSE, lvp );
-	glUniform3f( s_sa_l_lv, lv[0], lv[1], lv[2] );
-	glUniform3f( s_sa_l_ombre, ombre[0], ombre[1], ombre[2] );
-	glUniform3f( s_sa_l_soleil, soleil[0], soleil[1], soleil[2] );
-	glUniform2f( s_sa_l_tx, 1.0f / s_rt_w, 1.0f / s_rt_h );
-	glUniform1f( s_sa_l_tm, 1.0f / SUN_TAILLE );
-	ao_quad();
 
+	if( brume )
+	{
+		copier_profondeur();
+		pp_resoudre();
+		// Sky colour of this image, averaged down to one texel.
+		pp_vers( s_pp_ciel_fbo, 64, 64 );
+		glUseProgram( s_pp_p_ciel );
+		glActiveTexture( GL_TEXTURE1 );
+		glBindTexture( GL_TEXTURE_2D, s_tex_resolve );
+		glActiveTexture( GL_TEXTURE0 );
+		glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
+		ao_quad();
+		glBindTexture( GL_TEXTURE_2D, s_pp_ciel_tex );
+		dgl_glGenerateMipmap( GL_TEXTURE_2D );
+		// Smoothed over time.
+		const int src = s_pp_moy, dst = 1 - s_pp_moy;
+		pp_vers( s_pp_moy_fbo[dst], 1, 1 );
+		glUseProgram( s_pp_p_moy );
+		glActiveTexture( GL_TEXTURE1 );
+		glBindTexture( GL_TEXTURE_2D, s_pp_moy_tex[src] );
+		glActiveTexture( GL_TEXTURE0 );
+		ao_quad();
+		s_pp_moy = dst;
+		// Haze over the geometry.
+		pp_vers( s_fbo, s_rt_w, s_rt_h );
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glUseProgram( s_pp_p_fog );
+		glUniform4f( glGetUniformLocation( s_pp_p_fog, "proj" ), s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
+		glUniform2f( glGetUniformLocation( s_pp_p_fog, "par" ),
+		             cfg.fog_strength > 1.0f ? 1.0f : cfg.fog_strength, cfg.fog_distance );
+		glActiveTexture( GL_TEXTURE1 );
+		glBindTexture( GL_TEXTURE_2D, s_pp_moy_tex[s_pp_moy] );
+		glActiveTexture( GL_TEXTURE0 );
+		glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
+		ao_quad();
+		glDisable( GL_BLEND );
+	}
+
+	if( flou )
+	{
+		// Depth of field: the image at a quarter size, blended back where it
+		// lies well behind what's in the middle of the screen (the skater).
+		if( !brume )
+			copier_profondeur();
+		pp_resoudre();
+		glUseProgram( s_pp_p_down );
+		const GLint l_dhx = glGetUniformLocation( s_pp_p_down, "hx" );
+		pp_vers( s_pp_fbo[0], s_pp_w[0], s_pp_h[0] );
+		glUniform2f( l_dhx, 1.0f / s_rt_w, 1.0f / s_rt_h );
+		glBindTexture( GL_TEXTURE_2D, s_tex_resolve );
+		ao_quad();
+		pp_vers( s_pp_fbo[1], s_pp_w[1], s_pp_h[1] );
+		glUniform2f( l_dhx, 1.0f / s_pp_w[0], 1.0f / s_pp_h[0] );
+		glBindTexture( GL_TEXTURE_2D, s_pp_tex[0] );
+		ao_quad();
+		pp_vers( s_fbo, s_rt_w, s_rt_h );
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+		glUseProgram( s_pp_p_dof );
+		glUniform4f( glGetUniformLocation( s_pp_p_dof, "proj" ), s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
+		glUniform2f( glGetUniformLocation( s_pp_p_dof, "hx" ), 1.0f / s_pp_w[1], 1.0f / s_pp_h[1] );
+		glUniform1f( glGetUniformLocation( s_pp_p_dof, "force" ), cfg.dof_strength > 1.0f ? 1.0f : cfg.dof_strength );
+		glActiveTexture( GL_TEXTURE1 );
+		glBindTexture( GL_TEXTURE_2D, s_pp_tex[1] );
+		glActiveTexture( GL_TEXTURE0 );
+		glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
+		ao_quad();
+		glDisable( GL_BLEND );
+	}
+
+	if( halo )
+	{
+		pp_resoudre();
+		// Bright parts, half size, then down to 1/32.
+		pp_vers( s_pp_fbo[0], s_pp_w[0], s_pp_h[0] );
+		glUseProgram( s_pp_p_pre );
+		glUniform2f( glGetUniformLocation( s_pp_p_pre, "hx" ), 1.0f / s_rt_w, 1.0f / s_rt_h );
+		glUniform1f( glGetUniformLocation( s_pp_p_pre, "seuil" ), cfg.bloom_threshold );
+		glBindTexture( GL_TEXTURE_2D, s_tex_resolve );
+		ao_quad();
+		glUseProgram( s_pp_p_down );
+		const GLint l_dhx = glGetUniformLocation( s_pp_p_down, "hx" );
+		for( int i = 1; i < PP_NIV; ++i )
+		{
+			pp_vers( s_pp_fbo[i], s_pp_w[i], s_pp_h[i] );
+			glUniform2f( l_dhx, 1.0f / s_pp_w[i - 1], 1.0f / s_pp_h[i - 1] );
+			glBindTexture( GL_TEXTURE_2D, s_pp_tex[i - 1] );
+			ao_quad();
+		}
+		// Back up, each level added onto the one above, the last onto the image.
+		glUseProgram( s_pp_p_up );
+		const GLint l_uhx = glGetUniformLocation( s_pp_p_up, "hx" ), l_k = glGetUniformLocation( s_pp_p_up, "k" );
+		glEnable( GL_BLEND );
+		glBlendFunc( GL_ONE, GL_ONE );
+		for( int i = PP_NIV - 1; i >= 0; --i )
+		{
+			if( i > 0 ) pp_vers( s_pp_fbo[i - 1], s_pp_w[i - 1], s_pp_h[i - 1] );
+			else        pp_vers( s_fbo, s_rt_w, s_rt_h );
+			glUniform2f( l_uhx, 1.0f / s_pp_w[i], 1.0f / s_pp_h[i] );
+			glUniform1f( l_k, i > 0 ? 1.0f : ( cfg.bloom_strength > 1.0f ? 1.0f : cfg.bloom_strength ) / (float)PP_NIV );
+			glBindTexture( GL_TEXTURE_2D, s_pp_tex[i] );
+			ao_quad();
+		}
+		glDisable( GL_BLEND );
+	}
+
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
 	glPopAttrib();
 	glBindBuffer( GL_ARRAY_BUFFER, buf );
 	glActiveTexture( GL_TEXTURE1 );
 	glBindTexture( GL_TEXTURE_2D, tex1 );
 	glActiveTexture( GL_TEXTURE0 );
-	glBindTexture( GL_TEXTURE_2D, tex0 );
-	glActiveTexture( act );
-	glUseProgram( prog );
-	appliquer_vp();
-	appliquer_sc();
-}
-
-// ---------------------------------------------------------------------------
-// Sun search (F4): which of a set of world points the current sun map puts
-// in shadow. One point per pixel of a small target, read back at once.
-// ---------------------------------------------------------------------------
-
-static const int EVAL_W = 128, EVAL_MAX = 128 * 64;
-static GLuint s_ev_prog = 0, s_ev_fbo = 0, s_ev_tex = 0, s_ev_vbo = 0;
-static GLint  s_ev_l_lvp = -1, s_ev_l_dec = -1;
-static int    s_ev_n = 0, s_ev_etat = 0;
-
-static const char *s_ev_vs =
-	"#version 130\n"
-	"in vec3 a_pos;\n"
-	"uniform mat4 lvp;\n"
-	"uniform vec3 dec;\n"			// push towards the sun, off the decal
-	"out vec3 s;\n"
-	"void main() {\n"
-	"	vec4 S = lvp * vec4(a_pos + dec, 1.0);\n"
-	"	s = S.xyz * 0.5 + 0.5;\n"
-	"	vec2 px = vec2(float(gl_VertexID % 128), float(gl_VertexID / 128)) + 0.5;\n"
-	"	gl_Position = vec4(px / vec2(128.0, 64.0) * 2.0 - 1.0, 0.0, 1.0);\n"
-	"	gl_PointSize = 1.0;\n"
-	"}\n";
-
-static const char *s_ev_fs =
-	"#version 130\n"
-	"uniform sampler2DShadow sm;\n"
-	"in vec3 s;\n"
-	"void main() {\n"
-	"	float hors = (any(lessThan(s.xy, vec2(0.0))) || any(greaterThan(s.xy, vec2(1.0)))) ? 1.0 : 0.0;\n"
-	"	gl_FragColor = vec4(texture(sm, s), hors, 0.0, 1.0);\n"
-	"}\n";
-
-static bool ev_pret( void )
-{
-	if( s_ev_etat )
-		return s_ev_etat > 0;
-	s_ev_etat = -1;
-	if( !sun_pret())
-		return false;
-	s_ev_prog = ao_lier( s_ev_vs, s_ev_fs, "sun search" );
-	if( !s_ev_prog )
-		return false;
-	glBindAttribLocation( s_ev_prog, 0, "a_pos" );
-	dgl_glLinkProgram( s_ev_prog );
-	GLint ok = 0;
-	glGetProgramiv( s_ev_prog, GL_LINK_STATUS, &ok );
-	if( !ok )
-		return false;
-	GLint avant = 0, tex = 0;
-	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
-	glUseProgram( s_ev_prog );
-	glUniform1i( glGetUniformLocation( s_ev_prog, "sm" ), 0 );
-	s_ev_l_lvp = glGetUniformLocation( s_ev_prog, "lvp" );
-	s_ev_l_dec = glGetUniformLocation( s_ev_prog, "dec" );
-	glUseProgram( avant );
-	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
-	glGenTextures( 1, &s_ev_tex );
-	glBindTexture( GL_TEXTURE_2D, s_ev_tex );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, EVAL_W, EVAL_MAX / EVAL_W, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
-	glBindTexture( GL_TEXTURE_2D, tex );
-	dgl_glGenFramebuffers( 1, &s_ev_fbo );
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ev_fbo );
-	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_ev_tex, 0 );
-	const GLenum st = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
-	if( st != GL_FRAMEBUFFER_COMPLETE )
-		return false;
-	glGenBuffers( 1, &s_ev_vbo );
-	s_ev_etat = 1;
-	return true;
-}
-
-// Points (x, y, z) to test, up to EVAL_MAX.
-extern "C" int desktop_sun_points( const float *pts, int n )
-{
-	if( !ev_pret())
-		return 0;
-	if( n > EVAL_MAX ) n = EVAL_MAX;
-	GLint ab = 0;
-	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &ab );
-	glBindBuffer( GL_ARRAY_BUFFER, s_ev_vbo );
-	glBufferData( GL_ARRAY_BUFFER, n * 3 * sizeof( float ), pts, GL_STATIC_DRAW );
-	glBindBuffer( GL_ARRAY_BUFFER, ab );
-	s_ev_n = n;
-	return n;
-}
-
-// After desktop_sun_begin/mesh/end with `lvp`: vis[i] = 1 lit, 0 shadowed,
-// -1 outside the map.
-extern "C" void desktop_sun_eval( const float *lvp, const float *dec, float *vis )
-{
-	if( s_ev_etat <= 0 || !s_ev_n )
-		return;
-	GLint prog = 0, act = 0, tex0 = 0, ab = 0;
-	GLint attr[4];
-	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
-	glGetIntegerv( GL_ACTIVE_TEXTURE, &act );
-	glActiveTexture( GL_TEXTURE0 );
-	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex0 );
-	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &ab );
-	for( int i = 0; i < 4; ++i )
-		dgl_glGetVertexAttribiv( i, GL_VERTEX_ATTRIB_ARRAY_ENABLED, &attr[i] );
-	glPushAttrib( GL_ENABLE_BIT | GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_VIEWPORT_BIT | GL_SCISSOR_BIT );
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ev_fbo );
-	glViewport( 0, 0, EVAL_W, EVAL_MAX / EVAL_W );
-	glDisable( GL_DEPTH_TEST );
-	glDisable( GL_BLEND );
-	glDisable( GL_SCISSOR_TEST );
-	glDisable( GL_ALPHA_TEST );
-	glDisable( GL_STENCIL_TEST );
-	glDisable( GL_CULL_FACE );
-	glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
-	glEnable( GL_PROGRAM_POINT_SIZE );
-	glClearColor( 0, 0, 0, 0 );
-	glClear( GL_COLOR_BUFFER_BIT );
-	glUseProgram( s_ev_prog );
-	glUniformMatrix4fv( s_ev_l_lvp, 1, GL_FALSE, lvp );
-	glUniform3f( s_ev_l_dec, dec[0], dec[1], dec[2] );
-	glBindTexture( GL_TEXTURE_2D, s_sun_tex );
-	glBindBuffer( GL_ARRAY_BUFFER, s_ev_vbo );
-	dgl_glVertexAttribPointer( 0, 3, GL_FLOAT, GL_FALSE, 0, NULL );
-	dgl_glEnableVertexAttribArray( 0 );
-	for( int i = 1; i < 4; ++i )
-		dgl_glDisableVertexAttribArray( i );
-	glDrawArrays( GL_POINTS, 0, s_ev_n );
-	static std::vector<unsigned char> px;
-	px.resize( EVAL_MAX * 4 );
-	glReadPixels( 0, 0, EVAL_W, EVAL_MAX / EVAL_W, GL_RGBA, GL_UNSIGNED_BYTE, px.data());
-	for( int i = 0; i < s_ev_n; ++i )
-		vis[i] = px[i * 4 + 1] > 127 ? -1.0f : px[i * 4] / 255.0f;
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
-	glPopAttrib();
-	for( int i = 0; i < 4; ++i )
-	{
-		if( attr[i] ) dgl_glEnableVertexAttribArray( i );
-		else          dgl_glDisableVertexAttribArray( i );
-	}
-	glBindBuffer( GL_ARRAY_BUFFER, ab );
 	glBindTexture( GL_TEXTURE_2D, tex0 );
 	glActiveTexture( act );
 	glUseProgram( prog );

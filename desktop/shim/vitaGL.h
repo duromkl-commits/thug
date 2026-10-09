@@ -122,7 +122,6 @@ typedef void (APIENTRYP DESKTOP_PFNGLCLIENTACTIVETEXTUREPROC)( GLenum texture );
 	X( PFNGLVERTEXATTRIBPOINTERPROC,      glVertexAttribPointer ) \
 	X( PFNGLENABLEVERTEXATTRIBARRAYPROC,  glEnableVertexAttribArray ) \
 	X( PFNGLDISABLEVERTEXATTRIBARRAYPROC, glDisableVertexAttribArray ) \
-	X( PFNGLGETVERTEXATTRIBIVPROC,        glGetVertexAttribiv ) \
 	X( PFNGLGENFRAMEBUFFERSPROC,          glGenFramebuffers ) \
 	X( PFNGLDELETEFRAMEBUFFERSPROC,       glDeleteFramebuffers ) \
 	X( PFNGLBINDFRAMEBUFFERPROC,          glBindFramebuffer_real ) \
