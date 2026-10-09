@@ -57,6 +57,9 @@ shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 
 [gameplay]
 walk_lean=1.0       ; on foot, lean with the stick into running and turns (American Wasteland style); 0 = off, 2 = double
+camera_shake=1.0    ; camera dips on hard landings and shakes on bails; 0 = off, 2 = double
+camera_fov_push=4.0 ; the view widens by this many degrees at top skating speed; 0 = off
+head_bob=1.0        ; on foot, the camera bobs a little with each step; 0 = off, 2 = double
 
 [difficulty]
 score_scale=1.0     ; goal score targets x this (1.5 = half as many points again)

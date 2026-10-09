@@ -869,11 +869,44 @@ extern "C" void custom_music_playlist_set( const char *title, int off )
 	s_liste_existe = true;
 }
 
+// The sound options' "Soundtrack" item (the Xbox's own user-soundtrack
+// switch): the whole theme_menu_add_item { ... id = menu_soundtrack ... }
+// call is taken out, so the menu never shows it.
+static void patch_soundtrack( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t ajoute = crc( "theme_menu_add_item" ), id = crc( "id" ), menu = crc( "menu_soundtrack" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( !est_nom( qb, j[k], ajoute )) continue;
+		const size_t d = sans_eol( qb, j, k + 1 );
+		if( d >= j.size() || qb[j[d].pos] != T_STRUCT ) continue;
+		int niveau = 0;
+		size_t f = d;
+		for( ; f < j.size(); ++f )
+		{
+			const unsigned char t = qb[j[f].pos];
+			if( t == T_STRUCT ) ++niveau;
+			else if( t == T_FSTRUCT && --niveau == 0 ) break;
+			else if( t == T_FIN ) break;
+		}
+		if( f >= j.size() || qb[j[f].pos] != T_FSTRUCT ) continue;
+		bool trouve = false;
+		for( size_t n = d; n + 2 < f; ++n )
+			if( est_nom( qb, j[n], id ) && qb[j[n + 1].pos] == T_EGAL && est_nom( qb, j[n + 2], menu )) trouve = true;
+		if( !trouve ) continue;
+		Modif x;
+		x.pos = j[k].pos;
+		x.enleve = j[f].pos + j[f].taille - j[k].pos;
+		m.push_back( x );
+		VLOG( "MUS", "removed the Soundtrack menu item" );
+		k = f;
+	}
+}
+
 extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const unsigned char *qb )
 {
 	if( !qb ) return NULL;
 	scanne();
-	if( s_pistes.empty()) return NULL;
 	std::vector<Jeton> j;
 	if( !decoupe( qb, j ))
 	{
@@ -881,7 +914,8 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		return NULL;
 	}
 	std::vector<Modif> m;
-	patch_liste( qb, j, m );
+	if( !s_pistes.empty()) patch_liste( qb, j, m );
+	patch_soundtrack( qb, j, m );
 	if( m.empty()) return NULL;
 	return applique( qb, j.back().pos + 1, m );
 }

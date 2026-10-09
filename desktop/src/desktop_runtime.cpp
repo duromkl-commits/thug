@@ -73,6 +73,12 @@ static const char *s_default_ini =
 	"[gameplay]\n"
 	"; on foot, the skater leans into running and into turns (American Wasteland style): 0 = off, 1 = default, 2 = double\n"
 	"walk_lean=1.0\n"
+	"; camera weight: a dip on hard landings and a shake on bails: 0 = off, 1 = default, 2 = double\n"
+	"camera_shake=1.0\n"
+	"; the view widens by this many degrees at top skating speed: 0 = off\n"
+	"camera_fov_push=4.0\n"
+	"; on foot, the camera bobs a little with each step: 0 = off, 1 = default, 2 = double\n"
+	"head_bob=1.0\n"
 	"\n"
 	"[difficulty]\n"
 	"; goal score targets and time limits: 1.0 = as shipped; score_scale=1.5 wants half as many points\n"
@@ -161,6 +167,9 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "soften" ))        s_cfg.soften = (float)atof( v );
 		else if( !strcmp( k, "ghosting" ))      s_cfg.ghosting = (float)atof( v );
 		else if( !strcmp( k, "walk_lean" ))     s_cfg.walk_lean = (float)atof( v );
+		else if( !strcmp( k, "camera_shake" ))  s_cfg.camera_shake = (float)atof( v );
+		else if( !strcmp( k, "camera_fov_push" )) s_cfg.camera_fov_push = (float)atof( v );
+		else if( !strcmp( k, "head_bob" ))      s_cfg.head_bob = (float)atof( v );
 		else if( !strcmp( k, "score_scale" ))   s_cfg.score_scale = (float)atof( v );
 		else if( !strcmp( k, "time_scale" ))    s_cfg.time_scale = (float)atof( v );
 		else if( !strcmp( k, "prestige" ))      s_cfg.prestige = iv;
@@ -206,6 +215,9 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
 	s_cfg.walk_lean = 1.0f;
+	s_cfg.camera_shake = 1.0f;
+	s_cfg.camera_fov_push = 4.0f;
+	s_cfg.head_bob = 1.0f;
 	s_cfg.score_scale = 1.0f;
 	s_cfg.time_scale = 1.0f;
 	s_cfg.prestige = 1;
@@ -304,6 +316,24 @@ extern "C" float desktop_walk_lean( void )
 {
 	const float l = desktop_config().walk_lean;
 	return ( l < 0.0f ) ? 0.0f : ( l > 3.0f ) ? 3.0f : l;
+}
+
+extern "C" float desktop_camera_shake( void )
+{
+	const float v = desktop_config().camera_shake;
+	return ( v < 0.0f ) ? 0.0f : ( v > 3.0f ) ? 3.0f : v;
+}
+
+extern "C" float desktop_camera_fov_push( void )
+{
+	const float v = desktop_config().camera_fov_push;
+	return ( v < 0.0f ) ? 0.0f : ( v > 15.0f ) ? 15.0f : v;
+}
+
+extern "C" float desktop_head_bob( void )
+{
+	const float v = desktop_config().head_bob;
+	return ( v < 0.0f ) ? 0.0f : ( v > 3.0f ) ? 3.0f : v;
 }
 
 // --- difficulty and prestige ---------------------------------------------------

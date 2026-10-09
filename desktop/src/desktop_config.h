@@ -32,6 +32,9 @@ struct DesktopConfig
 	float shadow_softness;		// skater shadow edge blur, shadow-map texels (0 = hard)
 	int  voices;			// voice acting streams (pcm.wad)
 	float walk_lean;		// on-foot body lean into speed and turns (0 = off, 1 = default)
+	float camera_shake;		// camera dip on hard landings, shake on bails (0 = off, 1 = default)
+	float camera_fov_push;		// degrees the view widens at top skating speed (0 = off)
+	float head_bob;			// on-foot camera bob with each step (0 = off, 1 = default)
 	float score_scale;		// goal score targets x this (1 = as shipped)
 	float time_scale;		// goal time limits x this (1 = as shipped)
 	int  prestige;			// 1: beating the story raises the prestige level (thug_prestige.txt)
@@ -48,6 +51,9 @@ extern "C" int desktop_ecran_43( void );
 extern "C" float desktop_shadow_softness( void );
 extern "C" int desktop_voices( void );
 extern "C" float desktop_walk_lean( void );
+extern "C" float desktop_camera_shake( void );
+extern "C" float desktop_camera_fov_push( void );
+extern "C" float desktop_head_bob( void );
 extern "C" float desktop_goal_score_scale( void );
 extern "C" float desktop_goal_time_scale( void );
 extern "C" void desktop_prestige_story_beaten( void );
