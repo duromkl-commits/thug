@@ -16,6 +16,9 @@
 **  précisément ce que les logs VITA_STUB() serviront à repérer au palier 2. **
 *****************************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_ecran_43( void );
+#endif
 #include <float.h>
 #include <stdlib.h>
 #include <gfx/nx.h>
@@ -634,6 +637,10 @@ void	CEngine::s_plat_start_engine()
 	// (camera.qb) pose l'aspect 1,7778 et widescreen_camera_fov = 88,18 :
 	// meme champ VERTICAL que les 72 degres en 4:3, le cadrage XBox (xemu).
 	// Sans lui, 72 degres a l'horizontale en 16:9 zoomaient l'image de 1,3.
+#ifdef THUG_DESKTOP
+	// Desktop in 4:3: the Xbox's non-widescreen setup (no script).
+	if( !desktop_ecran_43())
+#endif
 	Script::RunScript( "screen_setup_widescreen" );
 }
 

@@ -2,6 +2,9 @@
 // NX.CPP - Platform independent interface to the platfrom specific engine code 
 
 #ifdef __PLAT_VITA__
+#ifdef THUG_DESKTOP
+extern "C" int desktop_ecran_43( void );
+#endif
 #include "vita_log.h"
 #endif
 
@@ -138,6 +141,12 @@ void			CEngine::sStartEngine()
 	//
 	// C'est aussi ce que le commentaire du placement 2D annoncait : � se
 	// reglera au palier 4, avec une image a regarder �. L'image est la.
+#ifdef THUG_DESKTOP
+	// Desktop in 4:3 (thug_desktop.ini): the original consoles' screen shape.
+	if( desktop_ecran_43())
+		CViewportManager::sSetScreenAspect( 4.0f / 3.0f );
+	else
+#endif
 	CViewportManager::sSetScreenAspect( 960.0f / 544.0f );
 #else
 	CViewportManager::sSetScreenAspect(4.0f/3.0f);
@@ -166,6 +175,11 @@ void			CEngine::sStartEngine()
 	// elargit l'image d'environ 3,6 % et comble ce bord avec de la marge.
 	// Les 80 degres du commentaire d'origine sont un ordre de grandeur
 	// (« 80 is okay »), pas une valeur imposee.
+#ifdef THUG_DESKTOP
+	if( desktop_ecran_43())
+		CViewportManager::sSetScreenAngle( 0.0f );		// default (72), as in 4:3 on Xbox
+	else
+#endif
 	CViewportManager::sSetScreenAngle( 78.0f );
 #else
 	CViewportManager::sSetScreenAngle( 0.0f);		// set to default

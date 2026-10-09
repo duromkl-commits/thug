@@ -32,6 +32,7 @@ render_width=0      ; internal resolution; 0 = match the window
 render_height=0
 msaa=4              ; antialiasing samples (0 = off)
 vsync=1
+aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your screen
 
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe
@@ -71,4 +72,5 @@ Both build from a copy of the sources with case-fixed include links
 - Cg shaders are translated to GLSL at load time (`src/cg_to_glsl.cpp`).
 - The game draws into an offscreen 960x544-shaped screen scaled to the render
   size, then letterboxed into the window.
+- The game is paced to 60 fps whatever the monitor refresh rate.
 - No videos yet, no network play.

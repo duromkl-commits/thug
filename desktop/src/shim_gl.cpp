@@ -129,6 +129,8 @@ static bool screen_targets_create( void )
 
 // -- vgl* ------------------------------------------------------------------------
 extern "C" void desktop_crash_handler_install( void );
+static void cadence_vsync( void );
+static void cadence_attendre( void );
 
 extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMultisampleMode )
 {
@@ -185,10 +187,10 @@ extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMul
 		DLOG( "!! OpenGL context: %s", SDL_GetError());
 		exit( 1 );
 	}
-	SDL_GL_SetSwapInterval( cfg.vsync ? 1 : 0 );
 	DLOG( "GL_VENDOR=%s", (const char *)glGetString( GL_VENDOR ));
 	DLOG( "GL_RENDERER=%s", (const char *)glGetString( GL_RENDERER ));
 	DLOG( "GL_VERSION=%s", (const char *)glGetString( GL_VERSION ));
+	cadence_vsync();
 	if( desktop_gl_load() != 0 )
 	{
 		DLOG( "!! this GPU driver lacks OpenGL functions the game needs" );
@@ -205,9 +207,12 @@ extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMul
 	{
 		int dw = desktop_window_width(), dh = desktop_window_height();
 		if( dw <= 0 || dh <= 0 ) { dw = width; dh = height; }
+		// 4:3 (the game drawn like the PS2/Xbox originals, its 960x544 Vita
+		// coordinates stretched to 4:3) or the Vita's own shape.
+		const int aw = desktop_ecran_43() ? 4 : VIRT_W, ah = desktop_ecran_43() ? 3 : VIRT_H;
 		s_rt_h = dh;
-		s_rt_w = ( dh * VIRT_W + VIRT_H / 2 ) / VIRT_H;
-		if( s_rt_w > dw ) { s_rt_w = dw; s_rt_h = ( dw * VIRT_H + VIRT_W / 2 ) / VIRT_W; }
+		s_rt_w = ( dh * aw + ah / 2 ) / ah;
+		if( s_rt_w > dw ) { s_rt_w = dw; s_rt_h = ( dw * ah + aw / 2 ) / aw; }
 	}
 	s_msaa = cfg.msaa;
 	DLOG( "window %dx%d, render %dx%d, MSAA %d", desktop_window_width(), desktop_window_height(), s_rt_w, s_rt_h, s_msaa );
@@ -362,16 +367,60 @@ extern "C" void vglSwapBuffers( GLboolean )
 	else
 		dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, x, y, x + w, y + h, GL_COLOR_BUFFER_BIT, GL_NEAREST );
 
+	cadence_attendre();
 	SDL_GL_SwapWindow( s_window );
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
 	if( scissor ) glEnable( GL_SCISSOR_TEST );
 	desktop_pump_events();
 }
 
+// Frame pacing. The game's logic advances one step per displayed frame and
+// expects the Vita's 60 Hz (or 30 with swap interval 2). On a 144 Hz monitor
+// vsync alone would run it 2.4x too fast, so frames are paced by the clock;
+// vsync is kept only when the refresh rate is a multiple of the target rate.
+static bool   s_vsync_rythme = false;	// vsync paces the frames itself
+static int    s_intervalle = 1;		// Vita vsyncs per frame (1 = 60 fps, 2 = 30)
+static Uint64 s_prochaine = 0;		// perf-counter time the next frame may show
+
+static void cadence_vsync( void )
+{
+	const DesktopConfig &cfg = desktop_config();
+	int hz = 0;
+	SDL_DisplayMode m;
+	if( s_window && SDL_GetCurrentDisplayMode( SDL_GetWindowDisplayIndex( s_window ), &m ) == 0 )
+		hz = m.refresh_rate;
+	const int fps = 60 / s_intervalle;
+	s_vsync_rythme = cfg.vsync && hz > 0 && ( hz % fps ) == 0
+	                 && SDL_GL_SetSwapInterval( hz / fps ) == 0;
+	if( !s_vsync_rythme )
+		SDL_GL_SetSwapInterval( 0 );
+	DLOG( "frame pacing: %d fps, display %d Hz, vsync %s", fps, hz,
+	      s_vsync_rythme ? "on" : "off (timer)" );
+}
+
+static void cadence_attendre( void )
+{
+	if( s_vsync_rythme )
+		return;
+	const Uint64 f = SDL_GetPerformanceFrequency();
+	const Uint64 periode = f * s_intervalle / 60;
+	Uint64 t = SDL_GetPerformanceCounter();
+	if( s_prochaine == 0 || t > s_prochaine + periode * 4 )
+		s_prochaine = t;			// first frame, or far behind (loading): restart
+	while( t < s_prochaine )
+	{
+		const Uint64 reste_ms = ( s_prochaine - t ) * 1000 / f;
+		if( reste_ms > 2 )
+			SDL_Delay( (Uint32)( reste_ms - 1 ));
+		t = SDL_GetPerformanceCounter();
+	}
+	s_prochaine += periode;
+}
+
 extern "C" void desktop_swap_interval( int n )
 {
-	if( desktop_config().vsync )
-		SDL_GL_SetSwapInterval( n );
+	s_intervalle = ( n >= 2 ) ? 2 : 1;
+	cadence_vsync();
 }
 
 extern "C" size_t vglMemFree( vglMemType ) { return 512u * 1024u * 1024u; }

@@ -69,8 +69,46 @@ endif()
 
 add_executable(thug ${THUG_SOURCES} ${DESKTOP_SOURCES})
 
-# The 2003 engine code: gnu++98, as on Vita. Our own files: C++11.
-set_source_files_properties(${THUG_SOURCES} PROPERTIES COMPILE_OPTIONS "-std=gnu++98")
+# The 2003 engine code: gnu++98, and the Vita build's optimisation policy
+# (vita/CMakeLists.txt): the engine as a whole is NOT optimised (it relies on
+# undefined behaviour, e.g. methods called on NULL that test 'this', which
+# the optimiser deletes), and a list of hot files tested one by one is -O2.
+# -funsigned-char: char is unsigned on ARM, which the Vita build was tested
+# with. -fno-delete-null-pointer-checks keeps the 'this == NULL' tests even
+# in optimised files.
+set(THUG_ENGINE_OPTS "-std=gnu++98;-funsigned-char;-fno-strict-aliasing;-fno-delete-null-pointer-checks")
+set_source_files_properties(${THUG_SOURCES} PROPERTIES COMPILE_OPTIONS "${THUG_ENGINE_OPTS};-O0")
+set(R "${THUG_SRC_ROOT}")
+set(THUG_HOT_SOURCES
+    "${R}/Code/Gfx/Vita/p_NxModel.cpp"
+    "${R}/Code/Gfx/Vita/p_world_render.cpp"
+    "${R}/Code/Gfx/Vita/p_scene_load.cpp"
+    "${R}/Code/Gfx/Vita/p_NxTexture.cpp"
+    "${R}/Code/Core/Vita/adpcm.cpp"
+    "${R}/Code/Gel/Music/Vita/p_music.cpp"
+    "${R}/Code/Gel/SoundFX/Vita/p_sfx.cpp"
+    "${R}/Code/Gfx/Vita/p_shader_decor.cpp"
+    "${R}/Code/Gfx/Vita/p_NxSprite.cpp"
+    "${R}/Code/Gfx/Vita/p_NxFont.cpp"
+    "${R}/Code/Gfx/Vita/p_NxLight.cpp"
+    "${R}/Code/Gfx/Vita/p_occlusion.cpp"
+    "${R}/Code/Gfx/Vita/p_nx.cpp"
+    "${R}/Code/Gfx/Vita/p_ombre.cpp"
+    "${R}/Code/Gfx/Vita/p_gamma.cpp"
+    "${R}/Code/Gfx/Vita/p_NxNewParticle.cpp"
+    "${R}/Code/Gfx/Vita/p_NxParticle.cpp")
+file(GLOB THUG_HOT_GLOBS
+     "${R}/Code/Core/Math/*.cpp" "${R}/Code/Gel/Collision/*.cpp"
+     "${R}/Code/Gfx/*.cpp" "${R}/Code/Gel/Components/*.cpp" "${R}/Code/Sk/Objects/*.cpp"
+     "${R}/Code/Gel/Scripting/*.cpp" "${R}/Code/Gel/Object/*.cpp" "${R}/Code/Sk/Components/*.cpp"
+     "${R}/Code/Sys/File/*.cpp")
+list(APPEND THUG_HOT_SOURCES ${THUG_HOT_GLOBS})
+foreach(f ${THUG_HOT_SOURCES})
+  list(FIND THUG_SOURCES "${f}" idx)
+  if(NOT idx EQUAL -1)
+    set_source_files_properties("${f}" PROPERTIES COMPILE_OPTIONS "${THUG_ENGINE_OPTS};-O2")
+  endif()
+endforeach()
 foreach(f ${DESKTOP_SOURCES})
   if(f MATCHES "\\.cpp$")
     set_source_files_properties(${f} PROPERTIES COMPILE_OPTIONS "-std=gnu++11")

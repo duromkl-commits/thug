@@ -26,6 +26,8 @@ static const char *s_default_ini =
 	"; 3D render size; 0 = match the window\n"
 	"render_width=0\n"
 	"render_height=0\n"
+	"; picture shape: 4:3 (like the PS2/Xbox originals), 16:9 (the Vita's), or auto = your screen's\n"
+	"aspect=auto\n"
 	"; anti-aliasing samples: 0, 2, 4 or 8\n"
 	"msaa=4\n"
 	"vsync=1\n"
@@ -78,6 +80,7 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "render_height" )) s_cfg.render_h = iv;
 		else if( !strcmp( k, "msaa" ))          s_cfg.msaa = iv;
 		else if( !strcmp( k, "vsync" ))         s_cfg.vsync = iv;
+		else if( !strcmp( k, "aspect" ))        s_cfg.aspect = !strcmp( v, "4:3" ) ? 43 : !strcmp( v, "16:9" ) ? 169 : 0;
 		else if( !strcmp( k, "dump_shaders" ))  s_cfg.dump_shaders = iv;
 		else if( !strcmp( k, "data" ))          snprintf( s_cfg.data_root, sizeof( s_cfg.data_root ), "%s", v );
 	}
@@ -171,4 +174,24 @@ extern "C" void desktop_fatal( const char *msg )
 	fprintf( stderr, "%s\n", msg );
 	SDL_ShowSimpleMessageBox( SDL_MESSAGEBOX_ERROR, "Tony Hawk's Underground", msg, NULL );
 	exit( 1 );
+}
+
+extern "C" int desktop_ecran_43( void )
+{
+	static int s_43 = -1;
+	if( s_43 >= 0 )
+		return s_43;
+	const DesktopConfig &cfg = desktop_config();
+	if( cfg.aspect == 43 )
+		s_43 = 1;
+	else if( cfg.aspect == 169 )
+		s_43 = 0;
+	else
+	{
+		// auto: 4:3 on a screen narrower than 16:10.
+		SDL_InitSubSystem( SDL_INIT_VIDEO );
+		SDL_DisplayMode m;
+		s_43 = ( SDL_GetDesktopDisplayMode( 0, &m ) == 0 && m.h > 0 && m.w * 10 < m.h * 16 ) ? 1 : 0;
+	}
+	return s_43;
 }
