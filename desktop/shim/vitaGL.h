@@ -96,6 +96,7 @@ typedef void (APIENTRYP DESKTOP_PFNGLCLIENTACTIVETEXTUREPROC)( GLenum texture );
 	X( PFNGLBUFFERDATAPROC,               glBufferData ) \
 	X( PFNGLBUFFERSUBDATAPROC,            glBufferSubData ) \
 	X( PFNGLGETBUFFERSUBDATAPROC,         glGetBufferSubData ) \
+	X( PFNGLGETBUFFERPARAMETERIVPROC,     glGetBufferParameteriv ) \
 	X( PFNGLCREATESHADERPROC,             glCreateShader_real ) \
 	X( PFNGLSHADERSOURCEPROC,             glShaderSource_real ) \
 	X( PFNGLCOMPILESHADERPROC,            glCompileShader ) \
@@ -149,6 +150,7 @@ DESKTOP_GL_FUNCS( DESKTOP_GL_DECLARE )
 #define glBufferData               dgl_glBufferData
 #define glBufferSubData            dgl_glBufferSubData
 #define glGetBufferSubData         dgl_glGetBufferSubData
+#define glGetBufferParameteriv     dgl_glGetBufferParameteriv
 #define glCompileShader            dgl_glCompileShader
 #define glGetShaderiv              dgl_glGetShaderiv
 #define glGetShaderInfoLog         dgl_glGetShaderInfoLog
@@ -204,7 +206,22 @@ void   desktop_glViewport( GLint x, GLint y, GLsizei w, GLsizei h );
 void   desktop_glScissor( GLint x, GLint y, GLsizei w, GLsizei h );
 void   desktop_glGetIntegerv( GLenum pname, GLint *data );
 void   desktop_glReadPixels( GLint x, GLint y, GLsizei w, GLsizei h, GLenum format, GLenum type, void *pixels );
+// vitaGL buffer names are pointers to the buffer's memory, and the Vita code
+// reads and writes vertex data through them (vertex colour wibble, tints,
+// billboards). Here a name is a number: desktop_buffer_data gives a CPU copy
+// of the buffer, kept in step with glBufferData/SubData, and sent back to
+// the GPU at the end of the frame (the caller may have written it).
+unsigned char *desktop_buffer_data( GLuint name );
+void   desktop_glBufferData( GLenum target, GLsizeiptr size, const void *data, GLenum usage );
+void   desktop_glBufferSubData( GLenum target, GLintptr offset, GLsizeiptr size, const void *data );
+void   desktop_glDeleteBuffers( GLsizei n, const GLuint *buffers );
 #ifndef DESKTOP_GL_IMPL
+#undef glBufferData
+#undef glBufferSubData
+#undef glDeleteBuffers
+#define glBufferData               desktop_glBufferData
+#define glBufferSubData            desktop_glBufferSubData
+#define glDeleteBuffers            desktop_glDeleteBuffers
 #define glCreateShader             desktop_glCreateShader
 #define glShaderSource             desktop_glShaderSource
 #define glBindFramebuffer          desktop_glBindFramebuffer

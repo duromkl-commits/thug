@@ -131,6 +131,7 @@ static bool screen_targets_create( void )
 extern "C" void desktop_crash_handler_install( void );
 static void cadence_vsync( void );
 static void cadence_attendre( void );
+static void tampons_envoyer( void );
 
 extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMultisampleMode )
 {
@@ -334,6 +335,7 @@ extern "C" void vglSwapBuffers( GLboolean )
 {
 	if( !s_window )
 		return;
+	tampons_envoyer();
 	GLboolean scissor = glIsEnabled( GL_SCISSOR_TEST );
 	if( scissor ) glDisable( GL_SCISSOR_TEST );
 
@@ -673,4 +675,103 @@ extern "C" void desktop_glLinkProgram( GLuint program )
 		log[( n > 0 && n < (GLsizei)sizeof( log )) ? n : 0] = 0;
 		DLOG( "!! program link failed: %s", log );
 	}
+}
+
+// -- CPU copies of buffers (see desktop_buffer_data in vitaGL.h) -------------------
+struct SCopieTampon
+{
+	std::vector<unsigned char> octets;
+	bool sale;			// handed out since the last upload: may have been written
+};
+static std::map<GLuint, SCopieTampon> s_copies;
+static std::vector<GLuint> s_sales;
+
+static GLuint tampon_lie( GLenum target )
+{
+	GLint n = 0;
+	glGetIntegerv( target == GL_ELEMENT_ARRAY_BUFFER ? GL_ELEMENT_ARRAY_BUFFER_BINDING : GL_ARRAY_BUFFER_BINDING, &n );
+	return (GLuint)n;
+}
+
+extern "C" unsigned char *desktop_buffer_data( GLuint name )
+{
+	if( !name )
+		return NULL;
+	std::map<GLuint, SCopieTampon>::iterator it = s_copies.find( name );
+	if( it == s_copies.end())
+	{
+		GLint avant = 0, taille = 0;
+		glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &avant );
+		glBindBuffer( GL_ARRAY_BUFFER, name );
+		glGetBufferParameteriv( GL_ARRAY_BUFFER, GL_BUFFER_SIZE, &taille );
+		SCopieTampon &c = s_copies[name];
+		c.sale = false;
+		if( taille > 0 )
+		{
+			c.octets.resize( (size_t)taille );
+			glGetBufferSubData( GL_ARRAY_BUFFER, 0, taille, &c.octets[0] );
+		}
+		glBindBuffer( GL_ARRAY_BUFFER, (GLuint)avant );
+		it = s_copies.find( name );
+	}
+	if( it->second.octets.empty())
+		return NULL;
+	if( !it->second.sale )
+	{
+		it->second.sale = true;
+		s_sales.push_back( name );
+	}
+	return &it->second.octets[0];
+}
+
+extern "C" void desktop_glBufferData( GLenum target, GLsizeiptr size, const void *data, GLenum usage )
+{
+	glBufferData( target, size, data, usage );
+	if( s_copies.empty())
+		return;
+	std::map<GLuint, SCopieTampon>::iterator it = s_copies.find( tampon_lie( target ));
+	if( it == s_copies.end())
+		return;
+	it->second.octets.assign( (size_t)size, 0 );
+	if( data && size > 0 )
+		memcpy( &it->second.octets[0], data, (size_t)size );
+}
+
+extern "C" void desktop_glBufferSubData( GLenum target, GLintptr offset, GLsizeiptr size, const void *data )
+{
+	glBufferSubData( target, offset, size, data );
+	if( s_copies.empty())
+		return;
+	std::map<GLuint, SCopieTampon>::iterator it = s_copies.find( tampon_lie( target ));
+	if( it != s_copies.end() && (size_t)( offset + size ) <= it->second.octets.size())
+		memcpy( &it->second.octets[(size_t)offset], data, (size_t)size );
+}
+
+extern "C" void desktop_glDeleteBuffers( GLsizei n, const GLuint *buffers )
+{
+	for( GLsizei i = 0; i < n; ++i )
+		s_copies.erase( buffers[i] );
+	glDeleteBuffers( n, buffers );
+}
+
+// End of frame: copies handed out this frame go back to the GPU.
+static void tampons_envoyer( void )
+{
+	if( s_sales.empty())
+		return;
+	GLint avant = 0;
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &avant );
+	for( size_t i = 0; i < s_sales.size(); ++i )
+	{
+		std::map<GLuint, SCopieTampon>::iterator it = s_copies.find( s_sales[i] );
+		if( it == s_copies.end())
+			continue;
+		it->second.sale = false;
+		if( it->second.octets.empty())
+			continue;
+		glBindBuffer( GL_ARRAY_BUFFER, it->first );
+		glBufferSubData( GL_ARRAY_BUFFER, 0, (GLsizeiptr)it->second.octets.size(), &it->second.octets[0] );
+	}
+	s_sales.clear();
+	glBindBuffer( GL_ARRAY_BUFFER, (GLuint)avant );
 }

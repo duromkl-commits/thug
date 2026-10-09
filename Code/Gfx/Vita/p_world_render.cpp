@@ -4305,7 +4305,11 @@ static bool s_vcw_ecrit = false;		// des couleurs animees sont en place
 
 static inline unsigned char *vcw_donnees( GLuint nom )
 {
+#ifdef THUG_DESKTOP
+	return desktop_buffer_data( nom );
+#else
 	return nom ? *(unsigned char * const *)nom : NULL;
+#endif
 }
 
 // --- Sommets de rendu des secteurs (#5), voir p_world_render.h --------------
