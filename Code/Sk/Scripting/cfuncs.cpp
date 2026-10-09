@@ -12930,6 +12930,13 @@ bool ScriptRotateVector( Script::CStruct* pParams, Script::CScript* pScript )
 // @script | IsPS2 | Returns true if the current hardware is PS2 (proview/devkit/regular).
 bool ScriptIsPS2( Script::CStruct* pParams, Script::CScript* pScript )
 {
+#ifdef THUG_DESKTOP
+	// PS2-only feature the desktop build plays with: R2 during a grind drops
+	// you off the rail (the Grind script only adds its GrindRelease trick when
+	// IsPS2 is true). Everywhere else (memory card, menus...) stays non-PS2.
+	if( pScript && pScript->mScriptChecksum == Script::GenerateCRC( "Grind" ))
+		return true;
+#endif
 	// lwss add
 #ifdef __PLAT_WN32__
 	return false;
