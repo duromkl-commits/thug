@@ -294,13 +294,17 @@ static bool gamma_prog( void )
 		"	vec3 c = texture2D(img, u).rgb;\n"
 		"	vec3 o = floor(256.0 * pow(c * (255.0 / 256.0), k) + 0.001);\n"
 		"	o = min(o, 255.0);\n"
-		// A touch of the PS2's video-out look: blacks not quite black,
-		// whites not quite white, mid-tones very slightly lifted. The full
+		// A touch of the PS2's video-out look: whites not quite white, mid-tones very slightly lifted. The full
 		// 16-235 range with a 1.15 lift matched the capture's numbers but
 		// looked flat and washed out on a PC screen (Marcus).
 		"	float l = dot(o, vec3(0.299, 0.587, 0.114));\n"
 		"	o = clamp(mix(vec3(l), o, sat), 0.0, 255.0);\n"
-		"	if (tv > 0.5) o = 8.0 + 239.0 * pow(o / 255.0, vec3(1.0 / 1.05));\n"
+		"	if (tv > 0.5) {\n"
+		"		o = 247.0 * pow(o / 255.0, vec3(1.0 / 1.05));\n"
+		// Deeper blacks (Marcus: ~20% darker): the darks scaled down by up
+		// to 20%, fading out by the mid-tones.
+		"		o *= mix(vec3(0.8), vec3(1.0), smoothstep(0.0, 128.0, o));\n"
+		"	}\n"
 		"	if (tram > 1.5) {\n"
 		// Whole screen pixels per cell, counted from the picture's corner:
 		// a cell size that isn't a whole number of pixels breaks the
