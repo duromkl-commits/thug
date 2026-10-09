@@ -35,8 +35,8 @@ vsync=1
 aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your screen
 
 [graphics]
-ssao=1              ; ambient occlusion: darkens corners and contact points
-ssao_strength=0.6   ; 0.0 - 1.0
+ssao=1              ; ambient occlusion: darkens corners and contact points (2 = show only the occlusion, as a test)
+ssao_strength=0.8   ; 0.0 - 1.0
 ssao_radius=28      ; reach, in inches of game world
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 

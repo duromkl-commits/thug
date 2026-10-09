@@ -33,10 +33,10 @@ static const char *s_default_ini =
 	"vsync=1\n"
 	"\n"
 	"[graphics]\n"
-	"; ambient occlusion (darkens corners and contact points): 0 = off, 1 = on\n"
+	"; ambient occlusion (darkens corners and contact points): 0 = off, 1 = on, 2 = show only the occlusion (test view)\n"
 	"ssao=1\n"
 	"; how dark it gets (0.0 - 1.0) and how far it reaches, in inches\n"
-	"ssao_strength=0.6\n"
+	"ssao_strength=0.8\n"
 	"ssao_radius=28\n"
 	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
 	"shadow_softness=2.5\n"
@@ -114,7 +114,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.msaa = 4;
 	s_cfg.vsync = 1;
 	s_cfg.ssao = 1;
-	s_cfg.ssao_strength = 0.6f;
+	s_cfg.ssao_strength = 0.8f;
 	s_cfg.ssao_radius = 28.0f;
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;

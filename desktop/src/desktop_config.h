@@ -14,8 +14,8 @@ struct DesktopConfig
 	int  ssao;			// ambient occlusion on the 3D image
 	float ssao_strength;		// 0..1, how dark creases get
 	float ssao_radius;		// world inches
-	float shadow_softness;
-	int  voices;			// voice acting streams (pcm.wad)		// skater shadow edge blur, shadow-map texels (0 = hard)
+	float shadow_softness;		// skater shadow edge blur, shadow-map texels (0 = hard)
+	int  voices;			// voice acting streams (pcm.wad)
 	char data_root[1024];		// folder holding "data" (default: the exe's folder)
 };
 

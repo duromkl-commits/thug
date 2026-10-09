@@ -859,7 +859,7 @@ static const char *s_ao_fs =
 	"		float l = length(v) + 0.001;\n"
 	"		occ += max(0.0, dot(v, N) / l - 0.15) * (1.0 - smoothstep(0.6 * par.x, par.x, l));\n"
 	"	}\n"
-	"	float ao = 1.0 - par.y * occ / (12.0 * 0.85);\n"
+	"	float ao = 1.0 - par.y * min(1.0, occ / 6.0);\n"
 	"	ao = mix(ao, 1.0, smoothstep(0.6 * par.z, par.z, z));\n"
 	"	gl_FragColor = vec4(vec3(clamp(ao, 0.0, 1.0)), 1.0);\n"
 	"}\n";
@@ -993,9 +993,20 @@ static void ao_quad( void )
 extern "C" void desktop_ssao( void )
 {
 	// Full-screen 3D only (split screen draws the world once per viewport).
-	if( !s_window || !on_screen() || !s_proj_ok ||
-	    s_vp[0] != 0 || s_vp[1] != 0 || s_vp[2] < VIRT_W || s_vp[3] < VIRT_H || !ao_pret())
+	static unsigned s_n_ok = 0, s_n_saut[4] = { 0, 0, 0, 0 };
+	const int saut = !s_window || !on_screen() ? 1 : !s_proj_ok ? 2
+	               : ( s_vp[0] != 0 || s_vp[1] != 0 || s_vp[2] < VIRT_W || s_vp[3] < VIRT_H ) ? 3 : 0;
+	if(( s_n_ok + s_n_saut[1] + s_n_saut[2] + s_n_saut[3] ) % 1800 == 1799 )
+		DLOG( "SSAO: %u frames applied, skipped %u offscreen / %u no projection / %u viewport (last %d,%d %dx%d)",
+		      s_n_ok, s_n_saut[1], s_n_saut[2], s_n_saut[3], s_vp[0], s_vp[1], s_vp[2], s_vp[3] );
+	if( saut )
+	{
+		++s_n_saut[saut];
 		return;
+	}
+	if( !ao_pret())
+		return;
+	++s_n_ok;
 	const DesktopConfig &cfg = desktop_config();
 	const int hw = ( s_rt_w + 1 ) / 2, hh = ( s_rt_h + 1 ) / 2;
 
@@ -1040,9 +1051,13 @@ extern "C" void desktop_ssao( void )
 	// Blur and multiply onto the image.
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
 	glViewport( 0, 0, s_rt_w, s_rt_h );
-	glEnable( GL_BLEND );
-	glBlendEquation( GL_FUNC_ADD );
-	glBlendFunc( GL_ZERO, GL_SRC_COLOR );
+	// ssao=2 in the ini: show the occlusion itself (debug view).
+	if( cfg.ssao != 2 )
+	{
+		glEnable( GL_BLEND );
+		glBlendEquation( GL_FUNC_ADD );
+		glBlendFunc( GL_ZERO, GL_SRC_COLOR );
+	}
 	glUseProgram( s_ao_mix );
 	glUniform4f( s_mix_l_proj, s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
 	glUniform2f( s_mix_l_hx, 1.0f / hw, 1.0f / hh );

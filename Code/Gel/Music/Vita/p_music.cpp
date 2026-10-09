@@ -848,7 +848,10 @@ void	PCMAudio_Pause( bool pause, int ch )
 
 int		PCMAudio_SetMusicVolume( float volume )
 {
-	s_volume = volume;
+	// The engine passes a percentage (MusicVolume, 0-100, music.cpp:1155 ;
+	// the Xbox stream takes it as such). As a 0-1 gain anything above 1%
+	// was clamped to full volume.
+	s_volume = volume * 0.01f;
 	applique_volume();
 	return 0;
 }
