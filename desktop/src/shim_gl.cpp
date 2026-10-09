@@ -1185,7 +1185,9 @@ static const char *s_sun_app_fs =
 	"		vis += shadow2D(sm, vec3(s.xy + o, s.z)).r;\n"
 	"	}\n"
 	"	vis /= 12.0;\n"
-	"	float lum = min(vis, smoothstep(-0.05, 0.2, nl));\n"
+	// Cast shadows only: a face turned from the sun is already dark in the
+	// baked lighting, darkening it again doubled the shade.
+	"	float lum = nl < -0.05 ? 1.0 : vis;\n"
 	"	lum = mix(lum, 1.0, bord);\n"
 	"	vec3 m = mix(ombre, soleil, lum);\n"
 	"	gl_FragColor = vec4(m * 0.5, 1.0);\n"

@@ -4165,6 +4165,8 @@ extern "C" void  desktop_sun_forget( void );
 extern "C" void  desktop_sun_apply( const float *vw, const float *lvp, const float *lv,
                                     const float *ombre, const float *soleil );
 extern "C" float desktop_sun_strength( void );
+extern "C" int   desktop_sun_level( unsigned level, float *heading, float *pitch, float *strength );
+extern "C" void  desktop_sun_seed( float heading, float pitch );
 
 static const float SOL_R = 3500.0f;		// half width of the map, inches (~90 m)
 static const float SOL_D = 12000.0f;	// half depth along the light
@@ -4208,17 +4210,50 @@ static int lev_composante( const char *p_nom )
 
 static void soleil_desktop( void )
 {
-	const float force = desktop_sun_strength();
-	if(( force <= 0.0f ) || !s_cur_view_ok || ( s_num_world <= 0 ))
+	if(( desktop_sun_strength() <= 0.0f ) || !s_cur_view_ok || ( s_num_world <= 0 ))
 		return;
 
-	// Towards the light: -direction (p_NxModel.cpp lights models the same
-	// way). Every TOD uses pitch 330, a sun 30 degrees up; keep it above the
-	// horizon whatever the sign convention, and not too low.
+	// Per level only (thug_desktop.ini [sun], F5-F11 in game): the baked
+	// vertex lighting already holds the level's shadows, and new ones only
+	// look right lined up with them.
+	const unsigned niveau = Mdl::Skate::Instance() ? Mdl::Skate::Instance()->m_requested_level : 0;
 	const Mth::Vector v0 = Nx::CLightManager::sGetLightDirection( 0 );
-	float L[3] = { -v0[0], -v0[1], -v0[2] };
+	{
+		// Starting point for a level switched on in game: the game's own
+		// light 0 as heading/pitch (ScriptSetLightDirection), found by search
+		// once per level and light.
+		static unsigned s_gr_niveau = 0;
+		static float s_gr_v[3] = { 0.0f, 0.0f, 0.0f };
+		if( niveau != s_gr_niveau || s_gr_v[0] != v0[0] || s_gr_v[1] != v0[1] || s_gr_v[2] != v0[2] )
+		{
+			s_gr_niveau = niveau;
+			s_gr_v[0] = v0[0]; s_gr_v[1] = v0[1]; s_gr_v[2] = v0[2];
+			float best = 1e30f, bh = 60.0f, bp = 330.0f;
+			for( int h = 0; h < 360; h += 2 )
+				for( int pi = 272; pi < 360; pi += 2 )
+				{
+					Mth::Vector d( 0.0f, 0.0f, 1.0f, 0.0f );
+					d.RotateX( Mth::DegToRad( (float)pi ));
+					d.RotateY( Mth::DegToRad( (float)h ));
+					const float e = ( d[0] - v0[0] ) * ( d[0] - v0[0] ) + ( d[1] - v0[1] ) * ( d[1] - v0[1] )
+					              + ( d[2] - v0[2] ) * ( d[2] - v0[2] );
+					if( e < best ) { best = e; bh = (float)h; bp = (float)pi; }
+				}
+			desktop_sun_seed( bh, bp );
+		}
+	}
+	float heading, pitch, force;
+	if( !desktop_sun_level( niveau, &heading, &pitch, &force ))
+		return;
+	Mth::Vector dir( 0.0f, 0.0f, 1.0f, 0.0f );
+	dir.RotateX( Mth::DegToRad( pitch ));
+	dir.RotateY( Mth::DegToRad( heading ));
+
+	// Towards the light: -direction (p_NxModel.cpp lights models the same
+	// way). Kept above the horizon whatever the sign convention.
+	float L[3] = { -dir[0], -dir[1], -dir[2] };
 	if( L[1] < 0.0f ) L[1] = -L[1];
-	if( L[1] < 0.3f ) L[1] = 0.3f;
+	if( L[1] < 0.1f ) L[1] = 0.1f;
 	{
 		const float n = sqrtf( L[0] * L[0] + L[1] * L[1] + L[2] * L[2] );
 		if( n < 1e-4f ) return;
@@ -4248,7 +4283,8 @@ static void soleil_desktop( void )
 		if( q < 0.25f ) q = 0.25f;
 		ombre[c] = 1.0f - k * ( 1.0f - q );
 		const float dc = ( c == 0 ) ? d0.r : ( c == 1 ) ? d0.g : d0.b;
-		soleil[c] = 1.0f + 0.12f * k * ( dmax > 0.0f ? dc / dmax : 1.0f );
+		soleil[c] = 1.0f;	// lit areas keep their baked light
+		(void)dc;
 	}
 
 	float vw[16];

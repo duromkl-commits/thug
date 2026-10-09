@@ -76,6 +76,9 @@ extern "C" void desktop_pump_events( void )
 				}
 				break;
 			case SDL_KEYDOWN:
+				// F5-F11: per-level sun shadows (desktop_runtime.cpp).
+				if( e.key.keysym.sym >= SDLK_F5 && e.key.keysym.sym <= SDLK_F11 )
+					desktop_sun_key( 5 + ( e.key.keysym.sym - SDLK_F5 ), ( e.key.keysym.mod & KMOD_SHIFT ) != 0 );
 				// Alt+Enter: toggle borderless fullscreen.
 				if( e.key.keysym.sym == SDLK_RETURN && ( e.key.keysym.mod & KMOD_ALT ) && desktop_sdl_window())
 				{
