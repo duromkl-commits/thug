@@ -31,6 +31,7 @@ struct DesktopConfig
 	float overscan;			// black border each side, fraction of the width (PS2 look)
 	float shadow_softness;		// skater shadow edge blur, shadow-map texels (0 = hard)
 	int  voices;			// voice acting streams (pcm.wad)
+	float walk_lean;		// on-foot body lean into speed and turns (0 = off, 1 = default)
 	char data_root[1024];		// folder holding "data" (default: the exe's folder)
 };
 
@@ -39,5 +40,6 @@ const DesktopConfig &desktop_config( void );
 extern "C" int desktop_ecran_43( void );
 extern "C" float desktop_shadow_softness( void );
 extern "C" int desktop_voices( void );
+extern "C" float desktop_walk_lean( void );
 
 #endif

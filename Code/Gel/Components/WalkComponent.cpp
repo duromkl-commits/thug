@@ -113,6 +113,10 @@ inline const Mth::Vector& CWalkComponent::GetEffectivePos()
 CWalkComponent::CWalkComponent() : CBaseComponent()
 {
 	SetType( CRC_WALK );
+#ifdef THUG_DESKTOP
+	m_lean_valid = false;
+	m_lean_forward = m_lean_side = m_lean_turn = m_lean_last_speed = 0.0f;
+#endif
 	
 	mp_collision_cache = Nx::CCollCacheManager::sCreateCollCache();
 	
@@ -702,6 +706,9 @@ void CWalkComponent::ReadyWalkState ( bool to_ground_state )
 	m_critical_point_offset.Set();
 	
 	m_display_offset = 0.0f;
+#ifdef THUG_DESKTOP
+	m_lean_valid = false;
+#endif
 }
 
 /******************************************************************/
@@ -2947,6 +2954,74 @@ void CWalkComponent::extract_state_from_object (   )
 /*                                                                */
 /******************************************************************/
 	
+#ifdef THUG_DESKTOP
+extern "C" float desktop_walk_lean( void );
+
+// Procedural lean on foot, like Tony Hawk's American Wasteland: the body
+// tips forward with speed (more while speeding up, back a little while
+// slowing down) and banks into turns, more the faster the skater runs.
+// Only the drawn matrix tilts, about the feet; the physics matrix, the
+// camera and collision keep the upright one.
+void CWalkComponent::desktop_lean ( Mth::Matrix& display )
+{
+	const float strength = desktop_walk_lean();
+	const float dt = m_frame_length;
+	const bool on_foot = (m_state == WALKING_GROUND || m_state == WALKING_AIR);
+	if (strength <= 0.0f || !on_foot || dt <= 0.0f)
+	{
+		m_lean_valid = false;
+		m_lean_forward = m_lean_side = m_lean_turn = 0.0f;
+		return;
+	}
+
+	const Mth::Vector facing = display[Z];
+	const float speed = m_horizontal_vel.Length();
+	const float run = get_run_speed();
+	const float speed_ratio = run > 0.0f ? Mth::Clamp(speed / run, 0.0f, 1.5f) : 0.0f;
+	if (!m_lean_valid)
+	{
+		m_lean_last_facing = facing;
+		m_lean_last_speed = speed;
+		m_lean_valid = true;
+	}
+
+	// Turn rate toward the skater's right-hand axis (X), radians per second.
+	const float turn = Mth::DotProduct(facing - m_lean_last_facing, display[X]) / dt;
+	const float accel = run > 0.0f ? (speed - m_lean_last_speed) / (run * dt) : 0.0f;
+	m_lean_last_facing = facing;
+	m_lean_last_speed = speed;
+
+	// Smoothed inputs and angles (the input is noisy frame to frame).
+	const float k = 1.0f - expf(-8.0f * dt);
+	m_lean_turn += (turn - m_lean_turn) * k;
+
+	float forward = 0.0f, side = 0.0f;
+	if (m_state == WALKING_GROUND)
+	{
+		// Degrees: about 1 walking, 3 running flat out, +-2.5 from speeding up / slowing down.
+		forward = 3.0f * speed_ratio * sqrtf(speed_ratio) + Mth::Clamp(accel * 1.2f, -2.5f, 2.5f);
+		side = Mth::Clamp(m_lean_turn * 2.5f * speed_ratio, -7.0f, 7.0f);
+	}
+	forward = Mth::Clamp(forward * strength, -6.0f, 10.0f);
+	side = Mth::Clamp(side * strength, -14.0f, 14.0f);
+
+	const float k_angle = 1.0f - expf(-6.0f * dt);
+	m_lean_forward += (forward - m_lean_forward) * k_angle;
+	m_lean_side += (side - m_lean_side) * k_angle;
+
+	if (fabsf(m_lean_forward) < 0.01f && fabsf(m_lean_side) < 0.01f) return;
+	Mth::Vector up = display[Y]
+		+ tanf(Mth::DegToRad(m_lean_forward)) * display[Z]
+		+ tanf(Mth::DegToRad(m_lean_side)) * display[X];
+	up.Normalize();
+	Mth::Vector x = Mth::CrossProduct(up, display[Z]);
+	x.Normalize();
+	display[X] = x;
+	display[Y] = up;
+	display[Z] = Mth::CrossProduct(x, up);
+}
+#endif
+
 void CWalkComponent::copy_state_into_object (   )
 {
 	// build the object's matrix based on our facing
@@ -2965,7 +3040,15 @@ void CWalkComponent::copy_state_into_object (   )
 	DUMP_WPOSITION
 	GetObject()->SetPos(m_pos);
 	GetObject()->SetMatrix(matrix);
+#ifdef THUG_DESKTOP
+	{
+		Mth::Matrix display = matrix;
+		desktop_lean(display);
+		GetObject()->SetDisplayMatrix(display);
+	}
+#else
 	GetObject()->SetDisplayMatrix(matrix);
+#endif
 	
 	// construct the object's velocity
 	switch (m_state)

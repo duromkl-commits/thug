@@ -67,6 +67,10 @@ static const char *s_default_ini =
 	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
 	"shadow_softness=2.5\n"
 	"\n"
+	"[gameplay]\n"
+	"; on foot, the skater leans into running and into turns (American Wasteland style): 0 = off, 1 = default, 2 = double\n"
+	"walk_lean=1.0\n"
+	"\n"
 	"[audio]\n"
 	"; voice acting: 0 = off, 1 = on\n"
 	"voices=1\n"
@@ -137,6 +141,7 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "tv_levels" ))     s_cfg.tv_levels = iv;
 		else if( !strcmp( k, "soften" ))        s_cfg.soften = (float)atof( v );
 		else if( !strcmp( k, "ghosting" ))      s_cfg.ghosting = (float)atof( v );
+		else if( !strcmp( k, "walk_lean" ))     s_cfg.walk_lean = (float)atof( v );
 		else if( !strcmp( k, "overscan" ))      s_cfg.overscan = (float)atof( v );
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
 		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
@@ -174,6 +179,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.ghosting = 0.2f;
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
+	s_cfg.walk_lean = 1.0f;
 
 	char path[1200];
 	char *base = SDL_GetBasePath();
@@ -259,6 +265,12 @@ extern "C" float desktop_shadow_softness( void )
 {
 	const float v = desktop_config().shadow_softness;
 	return v < 0.0f ? 0.0f : v > 8.0f ? 8.0f : v;
+}
+
+extern "C" float desktop_walk_lean( void )
+{
+	const float l = desktop_config().walk_lean;
+	return ( l < 0.0f ) ? 0.0f : ( l > 3.0f ) ? 3.0f : l;
 }
 
 extern "C" int desktop_voices( void )

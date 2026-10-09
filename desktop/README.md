@@ -55,9 +55,21 @@ ghosting=0.2        ; 0.0 - 0.8, last frame left over in each new one (GTA III /
 overscan=0.04       ; black border round the picture like the PS2 output (0.0 - 0.15)
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 
+[gameplay]
+walk_lean=1.0       ; on foot, lean into running and turns (American Wasteland style); 0 = off, 2 = double
+
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe
 ```
+
+## Smooth motion
+
+The game runs at 60 frames a second, like the consoles. That divides evenly
+into 60, 120 and 240 Hz displays (59/119 Hz too), and there vsync shows
+every frame for the same time. On 144 or 165 Hz there is no even split: some
+frames stay up longer than others, and fast movement judders. Set the
+monitor to 120 Hz in Windows display settings, or use G-Sync/FreeSync, for
+smooth motion. thug.log's `frame pacing` line shows what the game picked.
 
 ## Custom soundtrack
 

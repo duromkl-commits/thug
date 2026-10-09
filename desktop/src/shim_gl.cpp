@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include <string>
 #include <vector>
@@ -130,6 +131,7 @@ static bool screen_targets_create( void )
 // -- vgl* ------------------------------------------------------------------------
 extern "C" void desktop_crash_handler_install( void );
 static void cadence_vsync( void );
+static void cadence_mesure( void );
 static void cadence_attendre( void );
 static void tampons_envoyer( void );
 
@@ -474,6 +476,7 @@ extern "C" void vglSwapBuffers( GLboolean )
 
 	cadence_attendre();
 	SDL_GL_SwapWindow( s_window );
+	cadence_mesure();
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
 	if( scissor ) glEnable( GL_SCISSOR_TEST );
 	desktop_pump_events();
@@ -486,6 +489,39 @@ extern "C" void vglSwapBuffers( GLboolean )
 static bool   s_vsync_rythme = false;	// vsync paces the frames itself
 static int    s_intervalle = 1;		// Vita vsyncs per frame (1 = 60 fps, 2 = 30)
 static Uint64 s_prochaine = 0;		// perf-counter time the next frame may show
+static int    s_hz = 0;			// display refresh rate
+static int    s_vblanks_par_image = 0;	// vsync paced: refreshes per frame
+static Uint64 s_derniere = 0;		// perf-counter time of the last present
+static double s_pas = 1.0 / 60.0;	// time the last frame was on screen, seconds
+
+// How long the frame just presented stays on screen, which is how far the
+// game should step. Measured CPU time jitters by a millisecond or two around
+// the true value (timer sleeps, driver queueing); stepping by it makes motion
+// wobble against a display that shows frames at exact intervals. So it is
+// snapped to what the display actually does: whole refreshes with vsync,
+// whole pacing periods with the timer.
+static void cadence_mesure( void )
+{
+	const Uint64 f = SDL_GetPerformanceFrequency();
+	const Uint64 t = SDL_GetPerformanceCounter();
+	const double dt = s_derniere ? (double)( t - s_derniere ) / (double)f : 1.0 / 60.0;
+	s_derniere = t;
+	double unite;
+	if( s_vsync_rythme && s_hz > 0 )
+		unite = 1.0 / s_hz;
+	else
+		unite = s_intervalle / 60.0;
+	// Snapped only when the time is near a whole number of them: a frame
+	// that genuinely ran late (no vsync to wait for) keeps its real length,
+	// or the game would fall behind the clock.
+	const double r = dt / unite;
+	double n = floor( r + 0.5 );
+	if( n < 1.0 ) n = 1.0;
+	if( s_vsync_rythme && n < s_vblanks_par_image ) n = s_vblanks_par_image;
+	s_pas = ( fabs( r - n ) < 0.25 ) ? n * unite : dt;
+}
+
+extern "C" double desktop_frame_step( void ) { return s_pas; }
 
 static void cadence_vsync( void )
 {
@@ -495,8 +531,13 @@ static void cadence_vsync( void )
 	if( s_window && SDL_GetCurrentDisplayMode( SDL_GetWindowDisplayIndex( s_window ), &m ) == 0 )
 		hz = m.refresh_rate;
 	const int fps = 60 / s_intervalle;
-	s_vsync_rythme = cfg.vsync && hz > 0 && ( hz % fps ) == 0
-	                 && SDL_GL_SetSwapInterval( hz / fps ) == 0;
+	// 59 Hz is how Windows reports 59.94 Hz (and 119 for 119.88): close
+	// enough to vsync at, since the game steps by elapsed time.
+	const int n = ( hz + fps / 2 ) / fps;
+	s_hz = hz;
+	s_vsync_rythme = cfg.vsync && n >= 1 && abs( hz - n * fps ) <= 1
+	                 && SDL_GL_SetSwapInterval( n ) == 0;
+	s_vblanks_par_image = s_vsync_rythme ? n : 0;
 	if( !s_vsync_rythme )
 		SDL_GL_SetSwapInterval( 0 );
 	DLOG( "frame pacing: %d fps, display %d Hz, vsync %s", fps, hz,
