@@ -35,7 +35,12 @@ class CStreamFrameAmpManager;
 #define DEFAULT_MUSIC_VOLUME		50.0f
 #define DEFAULT_MUSIC_STREAM_VOLUME	100.0f
 
-#define MAX_NUM_TRACKS				128		// two uint64 on/off masks; the desktop custom soundtrack fills it
+#ifdef THUG_DESKTOP
+#define MAX_NUM_TRACKS				512		// the game's songs + the custom_music folder (desktop/src/custom_music.cpp)
+#else
+#define MAX_NUM_TRACKS				128
+#endif
+#define TRACK_MASK_WORDS			( MAX_NUM_TRACKS / 64 )
 #define MAX_TRACKNAME_STRING_LENGTH	40
 #define TRACK_TITLE_MAX_SIZE		100
 
@@ -81,10 +86,9 @@ struct TrackList
 	TrackInfo 		trackInfo[ MAX_NUM_TRACKS ];
 	int				numTracks;
 	// the following are bitflags:
-	uint64			trackForbidden0;
-    uint64			trackForbidden1;
-	uint64			trackPlayed0;
-    uint64			trackPlayed1;
+	// one bit per track, 64 per word
+	uint64			trackForbidden[ TRACK_MASK_WORDS ];
+	uint64			trackPlayed[ TRACK_MASK_WORDS ];
 	bool			allTracksForbidden;
 };
 

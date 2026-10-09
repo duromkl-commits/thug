@@ -32,6 +32,12 @@ int  custom_music_open( int i );
    (malloc'd, the caller frees it) or NULL to parse the original. */
 unsigned char *custom_music_patch_qb( const char *file_name, const unsigned char *qb );
 
+/* Playlist on/off by song title ("band: title"), kept in thug_playlist.txt
+   (music.cpp asks these instead of trusting the save's bits by position). */
+int  custom_music_playlist_known( void );	/* the file exists */
+int  custom_music_playlist_off( const char *title );
+void custom_music_playlist_set( const char *title, int off );
+
 #ifdef __cplusplus
 }
 #endif

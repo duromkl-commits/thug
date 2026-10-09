@@ -64,7 +64,7 @@ static std::vector<Piste> s_pistes;			// every file found
 static int  s_nb_actives = -1;				// how many joined playlist_tracks
 static bool s_scanne = false;
 
-const int MAX_PISTES_JEU = 128;				// the engine's on/off bits
+const int MAX_PISTES_JEU = 512;				// MAX_NUM_TRACKS (Gel/Music/music.h)
 const int GENRE_AUTRE = 2;		// the menu's Rock/Other
 
 // --- text --------------------------------------------------------------------
@@ -518,7 +518,30 @@ static void parcourt( const std::string &dossier, const std::string &relatif, in
 }
 #endif
 
-static bool par_cle( const Piste &a, const Piste &b ) { return a.cle < b.cle; }
+// Sort key for band names, as a music player would: case and punctuation
+// ignored ("P.U.T.S." sorts as "puts"), "The" kept (the game files its own
+// "The ..." bands under T).
+static std::string cle_tri( const std::string &t )
+{
+	std::string k;
+	for( size_t i = 0; i < t.size(); ++i )
+	{
+		const unsigned char c = (unsigned char)t[i];
+		if( isalnum( c )) k += (char)tolower( c );
+		else if( c == ' ' && !k.empty() && k[k.size() - 1] != ' ' ) k += ' ';
+	}
+	return k;
+}
+
+static bool par_cle( const Piste &a, const Piste &b )
+{
+	// Band, then title, then file: the playlist's order.
+	const std::string ba = cle_tri( a.bande ), bb = cle_tri( b.bande );
+	if( ba != bb ) return ba < bb;
+	const std::string ta = cle_tri( a.titre ), tb = cle_tri( b.titre );
+	if( ta != tb ) return ta < tb;
+	return a.cle < b.cle;
+}
 
 static void scanne( void )
 {
@@ -660,53 +683,191 @@ static unsigned char *applique( const unsigned char *qb, size_t taille, std::vec
 // --- the patches --------------------------------------------------------------------------
 
 // playlist_tracks = [ {...} ... ]: the custom songs go in before ']'.
+// The string value of field 'champ' in the struct of tokens [d, f), or "".
+static std::string champ_texte( const unsigned char *qb, const std::vector<Jeton> &j, size_t d, size_t f, uint32_t champ )
+{
+	for( size_t k = d; k + 2 < f; ++k )
+		if( est_nom( qb, j[k], champ ) && qb[j[k + 1].pos] == T_EGAL && qb[j[k + 2].pos] == T_CHAINE )
+			return std::string((const char *)qb + j[k + 2].pos + 5 );
+	return "";
+}
+
+// playlist_tracks = [ {...} ... ]: the custom songs are merged in by band
+// name, the way the game's own are listed. The game names two of its songs
+// by position (locked_track1/2, the unlockable KISS songs, same file): those
+// numbers are moved with them; if they aren't found the songs go at the end
+// instead, leaving every position as it was.
 static void patch_liste( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
 {
-	const uint32_t n_liste = crc( "playlist_tracks" );
+	const uint32_t n_liste = crc( "playlist_tracks" ), n_band = crc( "band" );
 	for( size_t k = 0; k + 2 < j.size(); ++k )
 	{
 		if( !est_nom( qb, j[k], n_liste ) || qb[j[k + 1].pos] != T_EGAL ) continue;
 		size_t a = sans_eol( qb, j, k + 2 );
 		if( a >= j.size() || qb[j[a].pos] != T_TAB ) continue;
-		// Count the top-level entries, find the closing bracket.
-		int niveau = 0, nb = 0;
+
+		// The game's entries: token ranges and band names. Find ']'.
+		struct Entree { size_t d, f; std::string cle; };
+		std::vector<Entree> jeu;
+		int niveau = 0;
 		size_t e = a + 1;
 		for( ; e < j.size(); ++e )
 		{
 			const unsigned char c = qb[j[e].pos];
-			if( c == T_STRUCT || c == T_TAB ) { if( niveau == 0 && c == T_STRUCT ) ++nb; ++niveau; }
-			else if( c == T_FSTRUCT ) --niveau;
+			if( c == T_STRUCT || c == T_TAB )
+			{
+				if( niveau == 0 && c == T_STRUCT ) jeu.push_back( Entree{ e, 0, "" } );
+				++niveau;
+			}
+			else if( c == T_FSTRUCT )
+			{
+				if( --niveau == 0 && !jeu.empty())
+				{
+					jeu.back().f = e + 1;
+					jeu.back().cle = cle_tri( champ_texte( qb, j, jeu.back().d, e, n_band ));
+				}
+			}
 			else if( c == T_FTAB ) { if( niveau == 0 ) break; --niveau; }
 			else if( c == T_FIN ) return;
 		}
 		if( e >= j.size()) return;
+		const int nb = (int)jeu.size();
 		const int place = MAX_PISTES_JEU - nb;
 		const int n = std::min((int)s_pistes.size(), std::max( place, 0 ));
 		s_nb_actives = n;
 		if( n < (int)s_pistes.size())
 			VLOG( "MUS", "custom music: room for %d of %d songs (the game has %d, the playlist holds %d)",
 			      n, (int)s_pistes.size(), nb, MAX_PISTES_JEU );
-		Ecrit w;
-		for( int i = 0; i < n; ++i )
+
+		// locked_track1 = 33 / locked_track2 = 34: where those ints are.
+		size_t verrou[2] = { 0, 0 };
+		const uint32_t n_verrou[2] = { crc( "locked_track1" ), crc( "locked_track2" ) };
+		for( size_t v = 0; v + 2 < j.size(); ++v )
+			for( int w = 0; w < 2; ++w )
+				if( est_nom( qb, j[v], n_verrou[w] ) && qb[j[v + 1].pos] == T_EGAL && qb[j[v + 2].pos] == T_ENTIER )
+					verrou[w] = v + 2;
+		const bool trie = verrou[0] && verrou[1];
+		if( !trie )
+			VLOG( "MUS", "custom music: locked_track1/2 not in this file, songs go after the game's" );
+
+		// Merge: a custom song goes before the first game song whose band
+		// sorts after it (custom songs are already in band order).
+		std::vector<int> ordre;		// >= 0: game entry, < 0: custom song -1-i
+		std::vector<int> nouvelle( nb );
+		int g = 0, p = 0;
+		while( g < nb || p < n )
 		{
-			char chemin[64];
-			snprintf( chemin, sizeof( chemin ), "music\\vag\\songs\\THUGCUSTOM%03d", i );
+			const bool prendre_perso = p < n &&
+				( g >= nb || ( trie && cle_tri( s_pistes[p].bande ) < jeu[g].cle ));
+			if( prendre_perso ) ordre.push_back( -1 - p++ );
+			else { nouvelle[g] = (int)ordre.size(); ordre.push_back( g++ ); }
+		}
+
+		Ecrit w;
+		for( size_t i = 0; i < ordre.size(); ++i )
+		{
 			w.eol();
+			if( ordre[i] >= 0 )
+			{
+				const Entree &x = jeu[ordre[i]];
+				for( size_t t = x.d; t < x.f; ++t )
+					w.o.insert( w.o.end(), qb + j[t].pos, qb + j[t].pos + j[t].taille );
+				continue;
+			}
+			const int c = -1 - ordre[i];
+			char chemin[64];
+			snprintf( chemin, sizeof( chemin ), "music\\vag\\songs\\THUGCUSTOM%03d", c );
 			w.octet( T_STRUCT );
-			w.champ_chaine( "band", s_pistes[i].bande );
-			w.champ_chaine( "track_title", s_pistes[i].titre );
-			w.champ_entier( "genre", s_pistes[i].genre );
+			w.champ_chaine( "band", s_pistes[c].bande );
+			w.champ_chaine( "track_title", s_pistes[c].titre );
+			w.champ_entier( "genre", s_pistes[c].genre );
 			w.champ_chaine( "path", chemin );
 			w.octet( T_FSTRUCT );
 		}
 		w.eol();
-		m.push_back( Modif{ j[e].pos, 0, w.o } );
-		VLOG( "MUS", "custom music: %d songs added after the game's %d", n, nb );
+		m.push_back( Modif{ j[a + 1].pos, j[e].pos - j[a + 1].pos, w.o } );
+		if( trie )
+			for( int v = 0; v < 2; ++v )
+			{
+				const int ancien = (int)lit32( qb + j[verrou[v]].pos + 1 );
+				if( ancien < 0 || ancien >= nb ) continue;
+				Ecrit x; x.entier( nouvelle[ancien] );
+				m.push_back( Modif{ j[verrou[v]].pos, j[verrou[v]].taille, x.o } );
+			}
+		VLOG( "MUS", "custom music: %d songs %s the game's %d", n, trie ? "sorted in with" : "added after", nb );
 		return;
 	}
 }
 
 } // namespace
+
+// --- on/off by song name ------------------------------------------------------
+//
+// thug_playlist.txt next to thug.exe: the songs switched off in the playlist
+// menu, one "band: title" per line. The save game keeps on/off as bits by
+// position (and only 128 of them); custom songs move the game's own songs
+// around and outnumber that, so on the desktop the names decide.
+
+namespace
+{
+static bool s_liste_lue = false, s_liste_existe = false;
+static std::vector<std::string> s_eteints;
+
+static std::string chemin_liste( void )
+{
+	char *base = SDL_GetBasePath();
+	std::string c = std::string( base ? base : "" ) + "thug_playlist.txt";
+	SDL_free( base );
+	return c;
+}
+
+static void lit_liste( void )
+{
+	if( s_liste_lue ) return;
+	s_liste_lue = true;
+	FILE *f = fopen( chemin_liste().c_str(), "r" );
+	if( !f ) return;
+	s_liste_existe = true;
+	char l[256];
+	while( fgets( l, sizeof( l ), f ))
+	{
+		size_t n = strlen( l );
+		while( n && ( l[n - 1] == '\n' || l[n - 1] == '\r' )) l[--n] = 0;
+		if( n && l[0] != ';' ) s_eteints.push_back( l );
+	}
+	fclose( f );
+}
+} // namespace
+
+extern "C" int custom_music_playlist_known( void )
+{
+	lit_liste();
+	return s_liste_existe;
+}
+
+extern "C" int custom_music_playlist_off( const char *title )
+{
+	lit_liste();
+	return title && std::find( s_eteints.begin(), s_eteints.end(), std::string( title )) != s_eteints.end();
+}
+
+extern "C" void custom_music_playlist_set( const char *title, int off )
+{
+	if( !title ) return;
+	lit_liste();
+	std::vector<std::string>::iterator it = std::find( s_eteints.begin(), s_eteints.end(), std::string( title ));
+	const bool est = it != s_eteints.end();
+	if( est == ( off != 0 ) && s_liste_existe ) return;
+	if( off && !est ) s_eteints.push_back( title );
+	if( !off && est ) s_eteints.erase( it );
+	FILE *f = fopen( chemin_liste().c_str(), "w" );
+	if( !f ) return;
+	fputs( "; Songs switched off in the playlist menu (written by the game).\n", f );
+	for( size_t i = 0; i < s_eteints.size(); ++i )
+		fprintf( f, "%s\n", s_eteints[i].c_str());
+	fclose( f );
+	s_liste_existe = true;
+}
 
 extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const unsigned char *qb )
 {

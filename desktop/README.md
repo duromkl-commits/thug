@@ -85,11 +85,14 @@ own songs and shuffle in with them.
   and the title, from the file's tags. Untagged files use
   `Artist - Title.mp3` file names. Accented letters lose their accent; other
   non-Latin characters are dropped, since the game's fonts can't draw them.
-- The game keeps the playlist as 128 on/off switches: the stock songs
-  take most of them (76 in the PC version), so roughly 50 custom songs fit. Extra files are skipped (thug.log says
-  how many).
-- Songs are ordered by file path. Adding or removing files shifts the saved
-  on/off switches of the custom songs after them.
+- The playlist is in band order, like the game's own list: custom songs are
+  sorted in among the stock ones by album artist (case and punctuation
+  ignored), then title.
+- Up to 512 songs in total: the game's 76 plus about 436 of yours. Extra
+  files are skipped (thug.log says how many).
+- Which songs are switched on or off is kept by song name in
+  `thug_playlist.txt` next to `thug.exe`, so adding or removing files doesn't
+  shuffle your choices. Delete it to switch everything back on.
 - M4A/AAC and WMA aren't supported.
 
 ## Controls
