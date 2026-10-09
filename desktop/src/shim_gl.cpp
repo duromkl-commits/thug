@@ -842,9 +842,12 @@ static const char *s_ao_fs =
 	"	vec3 P = pos(t);\n"
 	"	float z = -P.z;\n"
 	"	if (d >= 0.99999 || z > par.z) { gl_FragColor = vec4(1.0); return; }\n"
-	// Normal from the neighbours on the nearer side (no smearing across edges).
-	"	vec3 pr = pos(t + vec2(tx.x, 0.0)) - P, pl = P - pos(t - vec2(tx.x, 0.0));\n"
-	"	vec3 pu = pos(t + vec2(0.0, tx.y)) - P, pd = P - pos(t - vec2(0.0, tx.y));\n"
+	// Normal from the neighbours on the nearer side (no smearing across edges),
+	// 3 texels away: one texel apart, depth steps on ground seen at a low
+	// angle tilt the normal row by row -- horizontal bands of false occlusion.
+	"	vec2 e = 3.0 * tx;\n"
+	"	vec3 pr = pos(t + vec2(e.x, 0.0)) - P, pl = P - pos(t - vec2(e.x, 0.0));\n"
+	"	vec3 pu = pos(t + vec2(0.0, e.y)) - P, pd = P - pos(t - vec2(0.0, e.y));\n"
 	"	vec3 dx = abs(pr.z) < abs(pl.z) ? pr : pl;\n"
 	"	vec3 dy = abs(pu.z) < abs(pd.z) ? pu : pd;\n"
 	"	vec3 N = normalize(cross(dx, dy));\n"
@@ -857,7 +860,7 @@ static const char *s_ao_fs =
 	"		float g = a + float(i) * 2.3999632;\n"
 	"		vec3 v = pos(t + vec2(cos(g), sin(g)) * r * sqrt(k)) - P;\n"
 	"		float l = length(v) + 0.001;\n"
-	"		occ += max(0.0, dot(v, N) / l - 0.15) * (1.0 - smoothstep(0.6 * par.x, par.x, l));\n"
+	"		occ += max(0.0, (dot(v, N) - 0.002 * z) / l - 0.2) * (1.0 - smoothstep(0.6 * par.x, par.x, l));\n"
 	"	}\n"
 	"	float ao = 1.0 - par.y * min(1.0, occ / 6.0);\n"
 	"	ao = mix(ao, 1.0, smoothstep(0.6 * par.z, par.z, z));\n"
@@ -871,8 +874,8 @@ static const char *s_mix_fs =
 	"void main() {\n"
 	"	float zc = lin(texture2D(dep, t).r);\n"
 	"	float s = 0.0, w = 0.0;\n"
-	"	for (int j = -1; j <= 1; ++j)\n"
-	"		for (int i = -1; i <= 1; ++i) {\n"
+	"	for (int j = -2; j <= 2; ++j)\n"
+	"		for (int i = -2; i <= 2; ++i) {\n"
 	"			vec2 o = vec2(float(i), float(j)) * hx;\n"
 	"			float zs = lin(texture2D(dep, t + o).r);\n"
 	"			float k = exp(-abs(zs - zc) / (0.03 * zc));\n"
@@ -914,6 +917,49 @@ static GLuint ao_lier( const char *vs, const char *fs, const char *nom )
 	return p;
 }
 
+// Single-sample copy of the scene depth, shared by SSAO and the sun shadows.
+static int s_dep_etat = 0;		// 0 not tried, 1 ready, -1 failed
+
+static bool dep_pret( void )
+{
+	if( s_dep_etat )
+		return s_dep_etat > 0;
+	s_dep_etat = -1;
+	GLint tex = 0;
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
+	glGenTextures( 1, &s_ao_dep_tex );
+	glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, s_rt_w, s_rt_h, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL );
+	glBindTexture( GL_TEXTURE_2D, tex );
+	dgl_glGenFramebuffers( 1, &s_ao_dep_fbo );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ao_dep_fbo );
+	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, s_ao_dep_tex, 0 );
+	glDrawBuffer( GL_NONE );
+	glReadBuffer( GL_NONE );
+	const GLenum st = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+	if( st != GL_FRAMEBUFFER_COMPLETE )
+	{
+		DLOG( "!! depth copy target incomplete (0x%x)", (unsigned)st );
+		return false;
+	}
+	s_dep_etat = 1;
+	return true;
+}
+
+// Depth copy (resolves MSAA: one sample per pixel). Leaves s_fbo bound.
+static void copier_profondeur( void )
+{
+	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
+	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_ao_dep_fbo );
+	dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_DEPTH_BUFFER_BIT, GL_NEAREST );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+}
+
 static bool ao_pret( void )
 {
 	if( s_ao_etat )
@@ -941,15 +987,10 @@ static bool ao_pret( void )
 	s_mix_l_hx   = glGetUniformLocation( s_ao_mix, "hx" );
 	glUseProgram( avant );
 
+	if( !dep_pret())
+		return false;
 	GLint tex = 0;
 	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
-	glGenTextures( 1, &s_ao_dep_tex );
-	glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, s_rt_w, s_rt_h, 0, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, NULL );
 	glGenTextures( 1, &s_ao_tex );
 	glBindTexture( GL_TEXTURE_2D, s_ao_tex );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
@@ -959,12 +1000,7 @@ static bool ao_pret( void )
 	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, ( s_rt_w + 1 ) / 2, ( s_rt_h + 1 ) / 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL );
 	glBindTexture( GL_TEXTURE_2D, tex );
 
-	dgl_glGenFramebuffers( 1, &s_ao_dep_fbo );
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ao_dep_fbo );
-	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, s_ao_dep_tex, 0 );
-	glDrawBuffer( GL_NONE );
-	glReadBuffer( GL_NONE );
-	const GLenum st1 = dgl_glCheckFramebufferStatus( GL_FRAMEBUFFER );
+	const GLenum st1 = GL_FRAMEBUFFER_COMPLETE;
 	dgl_glGenFramebuffers( 1, &s_ao_fbo );
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_ao_fbo );
 	dgl_glFramebufferTexture2D( GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, s_ao_tex, 0 );
@@ -1010,14 +1046,11 @@ extern "C" void desktop_ssao( void )
 	const DesktopConfig &cfg = desktop_config();
 	const int hw = ( s_rt_w + 1 ) / 2, hh = ( s_rt_h + 1 ) / 2;
 
-	// Depth copy (resolves MSAA: one sample per pixel).
-	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
-	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_ao_dep_fbo );
-	dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_DEPTH_BUFFER_BIT, GL_NEAREST );
-	// Back on the screen target BEFORE glPushAttrib: GL_COLOR_BUFFER_BIT saves
-	// the bound framebuffer's draw buffer, and the depth copy's is GL_NONE --
-	// popping that onto the screen target stopped all drawing to the screen.
-	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+	// Back on the screen target BEFORE glPushAttrib (copier_profondeur does
+	// it): GL_COLOR_BUFFER_BIT saves the bound framebuffer's draw buffer, and
+	// the depth copy's is GL_NONE -- popping that onto the screen target
+	// stopped all drawing to the screen.
+	copier_profondeur();
 
 	GLint prog = 0, act = 0, tex0 = 0, tex1 = 0, buf = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
