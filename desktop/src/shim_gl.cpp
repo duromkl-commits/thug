@@ -148,8 +148,29 @@ extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMul
 	Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
 	if( cfg.fullscreen == 1 ) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 	if( cfg.fullscreen == 2 ) flags |= SDL_WINDOW_FULLSCREEN;
+	// Window size: the configured one, never larger than the screen
+	// (a 1920x1080 window on a 1440x1080 desktop shows only part of the game).
+	int win_w = cfg.window_w, win_h = cfg.window_h;
+	SDL_Rect ecran;
+	if( SDL_GetDisplayUsableBounds( 0, &ecran ) != 0 )
+	{
+		SDL_DisplayMode m;
+		if( SDL_GetDesktopDisplayMode( 0, &m ) == 0 ) { ecran.w = m.w; ecran.h = m.h; }
+		else { ecran.w = 1280; ecran.h = 720; }
+	}
+	if( cfg.fullscreen == 1 || win_w <= 0 || win_h <= 0 )
+	{
+		SDL_DisplayMode m;
+		if( SDL_GetDesktopDisplayMode( 0, &m ) == 0 ) { win_w = m.w; win_h = m.h; }
+		else { win_w = ecran.w; win_h = ecran.h; }
+	}
+	if( cfg.fullscreen == 0 )
+	{
+		if( win_w > ecran.w ) win_w = ecran.w;
+		if( win_h > ecran.h ) win_h = ecran.h;
+	}
 	s_window = SDL_CreateWindow( "Tony Hawk's Underground", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-	                             cfg.window_w, cfg.window_h, flags );
+	                             win_w, win_h, flags );
 	if( !s_window )
 	{
 		DLOG( "!! window: %s", SDL_GetError());
@@ -203,6 +224,104 @@ extern "C" GLboolean vglInit( int legacy_pool_size )
 extern "C" void (*g_desktop_post_hook)( GLuint resolve_tex, int w, int h );
 void (*g_desktop_post_hook)( GLuint, int, int ) = NULL;
 
+// Display gamma ramp (Code/Gfx/Vita/p_gamma.cpp hands it over each frame): on
+// Vita it is a full-screen pass from a 960x544 texture; here it is applied
+// while scaling the finished image into the window. k = 1/gamma per channel,
+// same formula as the Vita shader (the Xbox gamma table).
+static float  s_gamma_k[3] = { 1.0f, 1.0f, 1.0f };
+static GLuint s_gamma_prog = 0;
+static GLint  s_gamma_loc_k = -1;
+static bool   s_gamma_echec = false;
+
+extern "C" void desktop_set_gamma( float kr, float kg, float kb )
+{
+	s_gamma_k[0] = kr; s_gamma_k[1] = kg; s_gamma_k[2] = kb;
+}
+
+static bool gamma_prog( void )
+{
+	if( s_gamma_prog || s_gamma_echec )
+		return s_gamma_prog != 0;
+	static const char *vs =
+		"#version 120\n"
+		"varying vec2 t;\n"
+		"void main() { t = gl_MultiTexCoord0.xy; gl_Position = gl_Vertex; }\n";
+	static const char *fs =
+		"#version 120\n"
+		"uniform sampler2D img;\n"
+		"uniform vec3 k;\n"
+		"varying vec2 t;\n"
+		"void main() {\n"
+		"	vec3 c = texture2D(img, t).rgb;\n"
+		"	vec3 o = floor(256.0 * pow(c * (255.0 / 256.0), k) + 0.001);\n"
+		"	gl_FragColor = vec4(min(o, 255.0) / 255.0, 1.0);\n"
+		"}\n";
+	GLuint sh[2] = { dgl_glCreateShader_real( GL_VERTEX_SHADER ), dgl_glCreateShader_real( GL_FRAGMENT_SHADER ) };
+	const char *src[2] = { vs, fs };
+	GLuint p = glCreateProgram();
+	for( int i = 0; i < 2; ++i )
+	{
+		dgl_glShaderSource_real( sh[i], 1, &src[i], NULL );
+		glCompileShader( sh[i] );
+		glAttachShader( p, sh[i] );
+	}
+	dgl_glLinkProgram( p );
+	GLint ok = 0;
+	glGetProgramiv( p, GL_LINK_STATUS, &ok );
+	if( !ok )
+	{
+		DLOG( "!! gamma pass: program refused, gamma ignored" );
+		s_gamma_echec = true;
+		return false;
+	}
+	s_gamma_prog = p;
+	s_gamma_loc_k = glGetUniformLocation( p, "k" );
+	GLint avant = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
+	glUseProgram( p );
+	glUniform1i( glGetUniformLocation( p, "img" ), 0 );
+	glUseProgram( avant );
+	return true;
+}
+
+// Draws s_tex_resolve into the window's (x, y, w, h) through the ramp.
+static void gamma_draw( int x, int y, int w, int h )
+{
+	GLint prog = 0, act = 0, tex = 0, vp[4];
+	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
+	glGetIntegerv( GL_ACTIVE_TEXTURE, &act );
+	glGetIntegerv( GL_VIEWPORT, vp );
+	glActiveTexture( GL_TEXTURE0 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
+	glPushAttrib( GL_ENABLE_BIT );
+	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_CULL_FACE );
+	glDisable( GL_BLEND );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_STENCIL_TEST );
+	GLint buf = 0;
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &buf );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
+
+	glViewport( x, y, w, h );
+	glUseProgram( s_gamma_prog );
+	glUniform3f( s_gamma_loc_k, s_gamma_k[0], s_gamma_k[1], s_gamma_k[2] );
+	glBindTexture( GL_TEXTURE_2D, s_tex_resolve );
+	glBegin( GL_TRIANGLE_STRIP );
+	glTexCoord2f( 0, 0 ); glVertex2f( -1, -1 );
+	glTexCoord2f( 1, 0 ); glVertex2f(  1, -1 );
+	glTexCoord2f( 0, 1 ); glVertex2f( -1,  1 );
+	glTexCoord2f( 1, 1 ); glVertex2f(  1,  1 );
+	glEnd();
+
+	glBindBuffer( GL_ARRAY_BUFFER, buf );
+	glPopAttrib();
+	glBindTexture( GL_TEXTURE_2D, tex );
+	glActiveTexture( act );
+	glUseProgram( prog );
+	glViewport( vp[0], vp[1], vp[2], vp[3] );
+}
+
 extern "C" void vglSwapBuffers( GLboolean )
 {
 	if( !s_window )
@@ -220,7 +339,15 @@ extern "C" void vglSwapBuffers( GLboolean )
 	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, 0 );
 	glClearColor( 0, 0, 0, 1 );
 	glClear( GL_COLOR_BUFFER_BIT );
-	if( s_msaa > 1 || ( w != s_rt_w || h != s_rt_h ))
+	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f ) && gamma_prog();
+	if( gamma )
+	{
+		dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_fbo_resolve );
+		dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_COLOR_BUFFER_BIT, GL_NEAREST );
+		dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, 0 );
+		gamma_draw( x, y, w, h );
+	}
+	else if( s_msaa > 1 || ( w != s_rt_w || h != s_rt_h ))
 	{
 		// MSAA needs a same-size resolve before a scaled blit.
 		dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_fbo_resolve );

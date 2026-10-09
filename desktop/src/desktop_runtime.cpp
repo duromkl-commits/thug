@@ -18,11 +18,11 @@
 static const char *s_default_ini =
 	"; Tony Hawk's Underground -- desktop settings\n"
 	"[display]\n"
-	"; window size\n"
-	"width=1920\n"
-	"height=1080\n"
+	"; window size; 0 = your desktop's resolution\n"
+	"width=0\n"
+	"height=0\n"
 	"; 0 = window, 1 = borderless fullscreen, 2 = exclusive fullscreen (Alt+Enter toggles)\n"
-	"fullscreen=0\n"
+	"fullscreen=1\n"
 	"; 3D render size; 0 = match the window\n"
 	"render_width=0\n"
 	"render_height=0\n"
@@ -61,6 +61,13 @@ static void parse( FILE *f )
 		if( !eq ) continue;
 		*eq = 0;
 		char *k = line, *v = eq + 1;
+		// Inline comment: " ; ..." (a path can hold ';' without a space before it).
+		for( char *c = v; *c; ++c )
+			if(( *c == ';' || *c == '#' ) && ( c == v || isspace( (unsigned char)c[-1] )))
+			{
+				*c = 0;
+				break;
+			}
 		trim( k );
 		trim( v );
 		const int iv = atoi( v );
@@ -82,8 +89,7 @@ const DesktopConfig &desktop_config( void )
 		return s_cfg;
 	s_loaded = true;
 	memset( &s_cfg, 0, sizeof( s_cfg ));
-	s_cfg.window_w = 1920;
-	s_cfg.window_h = 1080;
+	s_cfg.fullscreen = 1;
 	s_cfg.msaa = 4;
 	s_cfg.vsync = 1;
 
@@ -109,8 +115,10 @@ const DesktopConfig &desktop_config( void )
 	const char *data = getenv( "THUG_DATA" );
 	if( data && *data )
 		snprintf( s_cfg.data_root, sizeof( s_cfg.data_root ), "%s", data );
-	if( s_cfg.window_w < 320 ) s_cfg.window_w = 960;
-	if( s_cfg.window_h < 200 ) s_cfg.window_h = 544;
+	// 0 (or nonsense) = the desktop's size; the window code also keeps a
+	// window inside the screen.
+	if( s_cfg.window_w < 320 || s_cfg.window_h < 200 )
+		s_cfg.window_w = s_cfg.window_h = 0;
 	return s_cfg;
 }
 

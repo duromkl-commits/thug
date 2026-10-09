@@ -230,6 +230,19 @@ static bool pret( void )
 	return true;
 }
 
+#ifdef THUG_DESKTOP
+// Desktop: no intermediate 960x544 target (the screen is rendered at the
+// window's resolution); the ramp is applied by the final scaling pass.
+extern "C" void desktop_set_gamma( float kr, float kg, float kb );
+void GammaImageDebut( void ) {}
+void GammaImageFin( void )
+{
+	if( g_vita_gamma )
+		desktop_set_gamma( 1.0f / s_gamma[0], 1.0f / s_gamma[1], 1.0f / s_gamma[2] );
+	else
+		desktop_set_gamma( 1.0f, 1.0f, 1.0f );
+}
+#else
 void GammaImageDebut( void )
 {
 	if( s_lie || !g_vita_gamma || !pret() )
@@ -309,6 +322,7 @@ void GammaImageFin( void )
 		s_us = 0;
 	}
 }
+#endif // THUG_DESKTOP
 
 } // namespace NxVita
 

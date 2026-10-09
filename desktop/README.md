@@ -25,9 +25,9 @@ If the game files aren't found, a message says where it looked.
 
 ```ini
 [display]
-width=1920          ; window size
-height=1080
-fullscreen=0        ; 1 = borderless fullscreen (Alt+Enter toggles it)
+width=0             ; window size; 0 = your desktop resolution
+height=0
+fullscreen=1        ; 0 = window, 1 = borderless fullscreen, 2 = exclusive (Alt+Enter toggles)
 render_width=0      ; internal resolution; 0 = match the window
 render_height=0
 msaa=4              ; antialiasing samples (0 = off)
