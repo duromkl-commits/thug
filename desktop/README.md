@@ -56,7 +56,7 @@ overscan=0.04       ; black border round the picture like the PS2 output (0.0 - 
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 
 [gameplay]
-walk_lean=1.0       ; on foot, lean into running and turns (American Wasteland style); 0 = off, 2 = double
+walk_lean=1.0       ; on foot, lean with the stick into running and turns (American Wasteland style); 0 = off, 2 = double
 
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe

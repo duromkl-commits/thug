@@ -280,8 +280,7 @@ private:
 	// Desktop: on-foot body lean (WalkComponent.cpp, desktop_lean).
 	void							desktop_lean ( Mth::Matrix& display );
 	bool							m_lean_valid;
-	float							m_lean_forward, m_lean_side, m_lean_turn, m_lean_last_speed;
-	Mth::Vector						m_lean_last_facing;
+	float							m_lean_forward, m_lean_side, m_lean_side_rate, m_lean_forward_rate;
 #endif
 	
 	struct SContact
