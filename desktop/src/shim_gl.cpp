@@ -266,7 +266,7 @@ static bool gamma_prog( void )
 		"#version 120\n"
 		"uniform sampler2D img;\n"
 		"uniform vec3 k;\n"
-		"uniform float zoom;\n"		// overscan: the picture's edges past the screen
+		"uniform vec2 zoom;\n"		// overscan: the picture shrunk inside a black border
 		"uniform float tram;\n"		// 1 = PS2 dither
 		"uniform vec2 grille;\n"		// PS2 pixels across the picture
 		"varying vec2 t;\n"
@@ -285,6 +285,7 @@ static bool gamma_prog( void )
 		"}\n"
 		"void main() {\n"
 		"	vec2 u = 0.5 + (t - 0.5) * zoom;\n"
+		"	if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }\n"
 		"	vec3 c = texture2D(img, u).rgb;\n"
 		"	vec3 o = floor(256.0 * pow(c * (255.0 / 256.0), k) + 0.001);\n"
 		"	o = min(o, 255.0);\n"
@@ -351,7 +352,9 @@ static void gamma_draw( int x, int y, int w, int h )
 	{
 		const DesktopConfig &cfg = desktop_config();
 		float os = cfg.overscan < 0.0f ? 0.0f : cfg.overscan > 0.15f ? 0.15f : cfg.overscan;
-		glUniform1f( s_gamma_loc_zoom, 1.0f - os );
+		// Like the PS2 on a capture card (Marcus's footage): black bars of
+		// about 4% of the width each side and a bit less top and bottom.
+		glUniform2f( s_gamma_loc_zoom, 1.0f / ( 1.0f - 2.0f * os ), 1.0f / ( 1.0f - 1.6f * os ));
 		glUniform1f( s_gamma_loc_tram, cfg.ps2_dither ? 1.0f : 0.0f );
 		// 640x448 like the PS2 game in 4:3; the same pixel size across a
 		// wider picture.

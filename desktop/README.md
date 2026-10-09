@@ -47,7 +47,7 @@ fog_distance=8000   ; inches to reach half of that (8000 = about 200 m)
 dof=1               ; depth of field: blurs what's far behind your skater
 dof_strength=0.6    ; 0.0 - 1.0
 ps2_dither=1        ; PS2 16-bit colour dithering over the whole picture
-overscan=0.04       ; share of the picture's edge cut off like a TV (0.0 - 0.15)
+overscan=0.04       ; black border round the picture like the PS2 output (0.0 - 0.15)
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)
 
 [paths]

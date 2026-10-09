@@ -52,7 +52,7 @@ static const char *s_default_ini =
 	"dof_strength=0.6\n"
 	"; PS2-style dithering over the whole picture (its 16-bit colour): 0 = off, 1 = on\n"
 	"ps2_dither=1\n"
-	"; overscan: how much of the picture's edge falls off the screen, like a TV (0.0 - 0.15)\n"
+	"; overscan: black border round the picture like the PS2 on a TV capture, share of the width each side (0.0 - 0.15)\n"
 	"overscan=0.04\n"
 	"; skater shadow edge blur (0 = hard like the Xbox, 2.5 = default soft)\n"
 	"shadow_softness=2.5\n"

@@ -23,7 +23,7 @@ struct DesktopConfig
 	int   dof;			// depth of field: blur well behind the skater
 	float dof_strength;		// 0-1, blur mix at its farthest
 	int   ps2_dither;		// PS2 16-bit frame buffer dither over the whole picture
-	float overscan;			// fraction of the picture past the screen edges, like a CRT
+	float overscan;			// black border each side, fraction of the width (PS2 look)
 	float shadow_softness;		// skater shadow edge blur, shadow-map texels (0 = hard)
 	int  voices;			// voice acting streams (pcm.wad)
 	char data_root[1024];		// folder holding "data" (default: the exe's folder)
