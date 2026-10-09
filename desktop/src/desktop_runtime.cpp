@@ -79,11 +79,12 @@ static const char *s_default_ini =
 	"; again, time_scale=0.8 gives a fifth less time\n"
 	"score_scale=1.0\n"
 	"time_scale=1.0\n"
-	"; prestige (new game+): each time you beat the story, every later goal gets harder by these steps\n"
-	"; (the level is kept in thug_prestige.txt; delete it or set prestige=0 to stop)\n"
+	"; prestige (new game+): each time you beat the story, point targets go up by prestige_points_per_level\n"
+	"; (0.10 = +10%), up to prestige_points_max times the original; time limits are left alone.\n"
+	"; The level is kept in thug_prestige.txt; delete it or set prestige=0 to stop.\n"
 	"prestige=1\n"
-	"prestige_score_step=1.25\n"
-	"prestige_time_step=0.9\n"
+	"prestige_points_per_level=0.10\n"
+	"prestige_points_max=2.0\n"
 	"\n"
 	"[audio]\n"
 	"; voice acting: 0 = off, 1 = on\n"
@@ -159,8 +160,8 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "score_scale" ))   s_cfg.score_scale = (float)atof( v );
 		else if( !strcmp( k, "time_scale" ))    s_cfg.time_scale = (float)atof( v );
 		else if( !strcmp( k, "prestige" ))      s_cfg.prestige = iv;
-		else if( !strcmp( k, "prestige_score_step" )) s_cfg.prestige_score_step = (float)atof( v );
-		else if( !strcmp( k, "prestige_time_step" ))  s_cfg.prestige_time_step = (float)atof( v );
+		else if( !strcmp( k, "prestige_points_per_level" )) s_cfg.prestige_points_per_level = (float)atof( v );
+		else if( !strcmp( k, "prestige_points_max" ))       s_cfg.prestige_points_max = (float)atof( v );
 		else if( !strcmp( k, "overscan" ))      s_cfg.overscan = (float)atof( v );
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
 		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
@@ -202,8 +203,8 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.score_scale = 1.0f;
 	s_cfg.time_scale = 1.0f;
 	s_cfg.prestige = 1;
-	s_cfg.prestige_score_step = 1.25f;
-	s_cfg.prestige_time_step = 0.9f;
+	s_cfg.prestige_points_per_level = 0.10f;
+	s_cfg.prestige_points_max = 2.0f;
 
 	char path[1200];
 	char *base = SDL_GetBasePath();
@@ -335,17 +336,21 @@ extern "C" float desktop_goal_score_scale( void )
 	const DesktopConfig &c = desktop_config();
 	float s = clampf( c.score_scale, 0.1f, 20.0f );
 	if( c.prestige )
-		s *= powf( clampf( c.prestige_score_step, 0.5f, 4.0f ), (float)prestige_level());
+	{
+		// Linear and capped: +10% a level up to 2x (defaults). Compounding
+		// made level 10 ~9x the points, which no goal survives.
+		const float mx = clampf( c.prestige_points_max, 1.0f, 5.0f );
+		s *= clampf( 1.0f + clampf( c.prestige_points_per_level, 0.0f, 1.0f ) * prestige_level(), 1.0f, mx );
+	}
 	return clampf( s, 0.1f, 100.0f );
 }
 
 extern "C" float desktop_goal_time_scale( void )
 {
 	const DesktopConfig &c = desktop_config();
-	float t = clampf( c.time_scale, 0.1f, 10.0f );
-	if( c.prestige )
-		t *= powf( clampf( c.prestige_time_step, 0.25f, 2.0f ), (float)prestige_level());
-	return clampf( t, 0.05f, 10.0f );
+	// Prestige leaves time alone: many goals' limits are their route
+	// (Muska's drive between stops, races, tours).
+	return clampf( c.time_scale, 0.1f, 10.0f );
 }
 
 // The story's ending (script HI_Endgame_show_messages_spawned) started.

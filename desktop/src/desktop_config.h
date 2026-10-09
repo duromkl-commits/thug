@@ -35,8 +35,8 @@ struct DesktopConfig
 	float score_scale;		// goal score targets x this (1 = as shipped)
 	float time_scale;		// goal time limits x this (1 = as shipped)
 	int  prestige;			// 1: beating the story raises the prestige level (thug_prestige.txt)
-	float prestige_score_step;	// per prestige level: score targets x this
-	float prestige_time_step;	// per prestige level: time limits x this
+	float prestige_points_per_level;	// per prestige level: score targets +this share
+	float prestige_points_max;	// prestige never takes score targets past this multiple
 	char data_root[1024];		// folder holding "data" (default: the exe's folder)
 };
 

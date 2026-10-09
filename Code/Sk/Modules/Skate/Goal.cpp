@@ -42,6 +42,17 @@
 #include <ctype.h>
 extern "C" float desktop_goal_score_scale( void );
 extern "C" float desktop_goal_time_scale( void );
+
+// Goals built around stops or a route (tours, H.O.R.S.E., per-spot score
+// clusters such as Muska's moving SUV) keep their figures: their limits and
+// targets are set per stop.
+static bool desktop_unscaled_goal( Script::CStruct *p_params )
+{
+	Script::CArray *p_array;
+	return p_params->GetArray( CRCD(0x160b3220,"tour_spots"), &p_array, Script::NO_ASSERT )
+		|| p_params->GetArray( CRCD(0x92c6e839,"horse_spots"), &p_array, Script::NO_ASSERT )
+		|| p_params->GetArray( CRCD(0x191f66e9,"kill_clusters"), &p_array, Script::NO_ASSERT );
+}
 #endif
 
 
@@ -473,7 +484,7 @@ void CGoal::SetTimer()
 	m_timeLeft *= 1000;
 #ifdef THUG_DESKTOP
 	// Desktop difficulty / prestige: shorter (or longer) limits, never under 10 s.
-	if ( !IsMinigame() && !IsCompetition() && !IsNetGoal() )
+	if ( !desktop_unscaled_goal( mp_params ) && !IsMinigame() && !IsCompetition() && !IsNetGoal() )
 	{
 		float scaled = (float)m_timeLeft * desktop_goal_time_scale();
 		if ( scaled < 10000.0f && m_timeLeft > 10000 ) scaled = 10000.0f;
@@ -637,7 +648,7 @@ bool CGoal::Activate()
     if ( !IsActive() )
 	{
 #ifdef THUG_DESKTOP
-		desktop_scale_goal( mp_params, IsMinigame() || IsCompetition() || IsNetGoal() );
+		desktop_scale_goal( mp_params, desktop_unscaled_goal( mp_params ) || IsMinigame() || IsCompetition() || IsNetGoal() );
 #endif
 		Mem::Manager::sHandle().PushContext(Mem::Manager::sHandle().BottomUpHeap());
 		// Warning! Make sure there are no 'return's between the above pushcontext and the 

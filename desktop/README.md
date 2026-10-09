@@ -61,9 +61,9 @@ walk_lean=1.0       ; on foot, lean with the stick into running and turns (Ameri
 [difficulty]
 score_scale=1.0     ; goal score targets x this (1.5 = half as many points again)
 time_scale=1.0      ; goal time limits x this (0.8 = a fifth less time)
-prestige=1          ; new game+: each time you beat the story, later goals get harder by the steps below
-prestige_score_step=1.25
-prestige_time_step=0.9
+prestige=1          ; new game+: each time you beat the story, point targets go up (time limits don't)
+prestige_points_per_level=0.10 ; +10% points per prestige level...
+prestige_points_max=2.0        ; ...up to 2x the original
 
 [paths]
 data=               ; folder that contains "data"; empty = next to the .exe
@@ -80,16 +80,17 @@ smooth motion. thug.log's `frame pacing` line shows what the game picked.
 
 ## Difficulty and prestige
 
-`score_scale` and `time_scale` change every story goal's point target and
-time limit (goals with a point target of 1,000 or more; counters such as
+`score_scale` and `time_scale` change story goals' point targets and
+time limits (goals with a point target of 1,000 or more; counters such as
 "collect 5" stay as they are). The goal's text shows the new figure.
 
 Prestige is a new game+: when the story's ending plays, the prestige level
-goes up by one (kept in `thug_prestige.txt`), and from then on point targets
-are multiplied by `prestige_score_step` and time limits by
-`prestige_time_step` once per level, on top of the two scales. Level 2 with
-the defaults: 1.56x the points in 81% of the time. Time limits never go
-under 10 seconds. Delete `thug_prestige.txt` to go back to level 0.
+goes up by one (kept in `thug_prestige.txt`), and point targets grow by
+`prestige_points_per_level` per level (+10%), up to `prestige_points_max`
+(2x) of the original, on top of `score_scale`. Prestige doesn't touch time
+limits. Goals built around stops or a route (tours, H.O.R.S.E., moving score
+spots like Chad Muska's SUV) keep their own figures. Delete
+`thug_prestige.txt` to go back to level 0.
 
 ## Custom soundtrack
 
