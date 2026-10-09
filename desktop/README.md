@@ -49,8 +49,8 @@ dof_strength=0.45   ; 0.0 - 1.0
 ps2_dither=1        ; 4x4 Bayer dithering over the whole picture (PS2 16-bit colour)
 dither_bits=5       ; bits per colour channel it dithers to: 5 = PS2, 6 = subtler, 8 = none
 soften=1.0          ; 0.0 - 1.0, TV-like softness over the finished picture (hides most of the dither)
-tv_levels=1         ; PS2 video-out levels: lifted greys, black 16, white 235
-saturation=0.9      ; colour strength, 1.0 = as rendered
+tv_levels=1         ; a touch of the PS2 video-out look: blacks and whites slightly softened
+saturation=1.0      ; colour strength, 1.0 = as rendered
 ghosting=0.2        ; 0.0 - 0.8, last frame left over in each new one (GTA III / Bully trails)
 overscan=0.04       ; black border round the picture like the PS2 output (0.0 - 0.15)
 shadow_softness=2.5 ; skater shadow edge blur (0 = hard, like the Xbox)

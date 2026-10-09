@@ -56,10 +56,10 @@ static const char *s_default_ini =
 	"dither_bits=5\n"
 	"; softens the finished picture like the PS2 on a TV (0.0 - 1.0); also hides most of the dither weave\n"
 	"soften=1.0\n"
-	"; PS2 video-out levels: greys lifted, no pure black or white, like a capture of the PS2: 0 = off, 1 = on\n"
+	"; a touch of the PS2 video-out look: blacks and whites slightly softened: 0 = off, 1 = on\n"
 	"tv_levels=1\n"
-	"; colour strength: 1.0 = as rendered; 0.9 matches the PS2 capture\n"
-	"saturation=0.9\n"
+	"; colour strength: 1.0 = as rendered\n"
+	"saturation=1.0\n"
 	"; ghosting: a little of the last frame left over in each new one, like GTA III or Bully (0.0 - 0.8)\n"
 	"ghosting=0.2\n"
 	"; overscan: black border round the picture like the PS2 on a TV capture, share of the width each side (0.0 - 0.15)\n"
@@ -170,7 +170,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.dither_bits = 5;
 	s_cfg.soften = 1.0f;
 	s_cfg.tv_levels = 1;
-	s_cfg.saturation = 0.9f;
+	s_cfg.saturation = 1.0f;
 	s_cfg.ghosting = 0.2f;
 	s_cfg.shadow_softness = 2.5f;
 	s_cfg.voices = 1;
