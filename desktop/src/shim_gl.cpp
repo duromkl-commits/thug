@@ -860,9 +860,9 @@ static const char *s_ao_fs =
 	"		float g = a + float(i) * 2.3999632;\n"
 	"		vec3 v = pos(t + vec2(cos(g), sin(g)) * r * sqrt(k)) - P;\n"
 	"		float l = length(v) + 0.001;\n"
-	"		occ += max(0.0, (dot(v, N) - 0.002 * z) / l - 0.2) * (1.0 - smoothstep(0.6 * par.x, par.x, l));\n"
+	"		occ += max(0.0, (dot(v, N) - 0.001 * z) / l - 0.1) * (1.0 - smoothstep(0.6 * par.x, par.x, l));\n"
 	"	}\n"
-	"	float ao = 1.0 - par.y * min(1.0, occ / 6.0);\n"
+	"	float ao = 1.0 - par.y * min(1.0, occ / 3.0);\n"
 	"	ao = mix(ao, 1.0, smoothstep(0.6 * par.z, par.z, z));\n"
 	"	gl_FragColor = vec4(vec3(clamp(ao, 0.0, 1.0)), 1.0);\n"
 	"}\n";
@@ -1076,7 +1076,7 @@ extern "C" void desktop_ssao( void )
 	glViewport( 0, 0, hw, hh );
 	glUseProgram( s_ao_prog );
 	glUniform4f( s_ao_l_proj, s_proj[0], s_proj[1], s_proj[2], s_proj[3] );
-	glUniform3f( s_ao_l_par, cfg.ssao_radius, cfg.ssao_strength, 6000.0f );
+	glUniform3f( s_ao_l_par, cfg.ssao_radius * 1.75f, cfg.ssao_strength, 6000.0f );
 	glUniform2f( s_ao_l_tx, 1.0f / s_rt_w, 1.0f / s_rt_h );
 	glBindTexture( GL_TEXTURE_2D, s_ao_dep_tex );
 	ao_quad();

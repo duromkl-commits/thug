@@ -7064,12 +7064,6 @@ void RenderWorld( void )
 	{
 		VitaMondeEtape( MW_OMBRE );
 		ombre_reception();
-#ifdef THUG_DESKTOP
-		// Sun shadows, then ambient occlusion, on the opaque world (and the
-		// models already drawn), before translucents and 2D.
-		soleil_desktop();
-		desktop_ssao();
-#endif
 	}
 	// Puis apres TOUS les translucides, tries compris (XBox/NX/render.cpp:
 	// 2793) : RANG_TRI est la derniere passe. "omt 0" : rien.
@@ -7077,6 +7071,13 @@ void RenderWorld( void )
 	{
 		VitaMondeEtape( MW_OMBRE );
 		ombre_reception( true, RANG_TRANSP, RANG_TRI );
+#ifdef THUG_DESKTOP
+		// Sun shadows, then ambient occlusion, once the whole world is down:
+		// roads, grass and decals are blended "opaques" drawn in the
+		// translucent passes, and after the opaque pass they missed both.
+		soleil_desktop();
+		desktop_ssao();
+#endif
 	}
 	if( pass == RANG_CIEL )
 	{
