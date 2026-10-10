@@ -3566,12 +3566,11 @@ bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScrip
 }
 
 // @script | DesktopAddModelItems | desktop: runs desktop_model_item once per
-// unlocked skater, in the select screen's order, with name, display_name,
-// item_id and mark ("Current" on the one in use)
+// unlocked skater, in the select screen's order, with name, display_name
+// and item_id
 bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScript)
 {
 	Obj::CPlayerProfileManager*	pPlayerProfileManager=Mdl::Skate::Instance()->GetPlayerProfileManager();
-	const uint32 current = Mdl::Skate::Instance()->GetCurrentProfile()->GetSkaterNameChecksum();
 	const int n = (int)pPlayerProfileManager->GetNumProfileTemplates();
 	int done = -1;
 	for ( int count = 0; count < n; count++ )
@@ -3601,7 +3600,6 @@ bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScri
 		pItem->AddChecksum( CRCD(0xa1dc81f9,"name"), name );
 		pItem->AddString( CRCD(0x2ab66cb8,"display_name"), p_display );
 		pItem->AddChecksum( Script::GenerateCRC( "item_id" ), name ^ 0x5eed0003 );
-		pItem->AddString( Script::GenerateCRC( "mark" ), name == current ? "Current" : "" );
 		Script::RunScript( Script::GenerateCRC( "desktop_model_item" ), pItem, pScript->mpObject );
 		delete pItem;
 	}

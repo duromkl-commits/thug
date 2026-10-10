@@ -1009,7 +1009,8 @@ static void compile_q( Ecrit &w, const char *t )
 // item, under Edit Appearance (created skater) or on its own (a pro in use);
 // it opens a list like the cheats menu, one line per unlocked skater (built
 // by DesktopAddModelItems, skfuncs.cpp); picking one switches to it and Back
-// returns to Edit Skater.
+// returns to Edit Skater. Names only, centred; ignore_width keeps the list
+// out of widest_menu_item_width, which later menus size themselves from.
 static const char *s_menu_modele =
 	"script desktop_model_menu\n"
 	"if ObjectExists id = current_menu_anchor\n"
@@ -1027,7 +1028,7 @@ static const char *s_menu_modele =
 	"endif\n"
 	"endscript\n"
 	"script desktop_model_item\n"
-	"theme_menu_add_item text = <display_name> id = <item_id> highlight_bar_scale = (2.8,0.8) extra_text = <mark> no_bg pad_choose_script = desktop_pick_model pad_choose_params = { name = <name> focus_id = <item_id> }\n"
+	"theme_menu_add_item text = <display_name> id = <item_id> highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_pick_model pad_choose_params = { name = <name> focus_id = <item_id> }\n"
 	"endscript\n"
 	"script desktop_pick_model\n"
 	"if DesktopSelectSkater name = <name>\n"
