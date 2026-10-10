@@ -52,6 +52,8 @@ static void open_pad( void )
 }
 
 extern "C" SDL_Window *desktop_sdl_window( void );
+extern "C" Uint32 desktop_fullscreen_flag( void );
+extern "C" void desktop_cadence_refresh( void );
 
 extern "C" void desktop_pump_events( void )
 {
@@ -76,13 +78,21 @@ extern "C" void desktop_pump_events( void )
 				}
 				break;
 			case SDL_KEYDOWN:
-				// Alt+Enter: toggle borderless fullscreen.
+				// Alt+Enter: toggle fullscreen (borderless, or exclusive when the
+				// refresh rate was switched).
 				if( e.key.keysym.sym == SDLK_RETURN && ( e.key.keysym.mod & KMOD_ALT ) && desktop_sdl_window())
 				{
 					SDL_Window *w = desktop_sdl_window();
-					const bool fs = ( SDL_GetWindowFlags( w ) & SDL_WINDOW_FULLSCREEN_DESKTOP ) != 0;
-					SDL_SetWindowFullscreen( w, fs ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP );
+					const bool fs = ( SDL_GetWindowFlags( w ) & SDL_WINDOW_FULLSCREEN ) != 0;
+					SDL_SetWindowFullscreen( w, fs ? 0 : desktop_fullscreen_flag());
+					desktop_cadence_refresh();
 				}
+				break;
+			case SDL_WINDOWEVENT:
+				// The display rate can change (mode switch, Alt+Tab, another monitor).
+				if( e.window.event == SDL_WINDOWEVENT_RESTORED || e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED
+				 || e.window.event == SDL_WINDOWEVENT_MOVED )
+					desktop_cadence_refresh();
 				break;
 			default:
 				break;

@@ -131,6 +131,48 @@ static bool screen_targets_create( void )
 // -- vgl* ------------------------------------------------------------------------
 extern "C" void desktop_crash_handler_install( void );
 static void cadence_vsync( void );
+
+static bool   s_mode_pair = false;
+static Uint32 s_plein = SDL_WINDOW_FULLSCREEN_DESKTOP;
+
+// 60 fps shows evenly on a multiple of 60 Hz (59/119 count: 59.94 Hz).
+static bool multiple_60( int hz )
+{
+	const int n = ( hz + 30 ) / 60;
+	return n >= 1 && abs( hz - n * 60 ) <= 1;
+}
+
+// refresh_rate: a display mode at the desktop's resolution with a rate 60
+// divides into, when the desktop's isn't one (auto), or the asked rate.
+// The highest such rate not above the desktop's: 120 on 144 or 165 Hz.
+static bool mode_pair( SDL_DisplayMode *out )
+{
+	const int voulu = desktop_config().refresh_rate;
+	SDL_DisplayMode d;
+	if( voulu == 0 || SDL_GetDesktopDisplayMode( 0, &d ) != 0 || d.refresh_rate <= 0 )
+		return false;
+	if( voulu < 0 ? multiple_60( d.refresh_rate ) : abs( d.refresh_rate - voulu ) <= 1 )
+		return false;
+	bool trouve = false;
+	const int n = SDL_GetNumDisplayModes( 0 );
+	for( int i = 0; i < n; ++i )
+	{
+		SDL_DisplayMode m;
+		if( SDL_GetDisplayMode( 0, i, &m ) != 0 || m.w != d.w || m.h != d.h )
+			continue;
+		const bool ok = voulu < 0 ? ( multiple_60( m.refresh_rate ) && m.refresh_rate <= d.refresh_rate )
+		                          : abs( m.refresh_rate - voulu ) <= 1;
+		if( ok && ( !trouve || m.refresh_rate > out->refresh_rate ))
+		{
+			*out = m;
+			trouve = true;
+		}
+	}
+	if( !trouve )
+		DLOG( "display: no %s mode at %dx%d, staying at %d Hz", voulu < 0 ? "60-multiple" : "requested",
+		      d.w, d.h, d.refresh_rate );
+	return trouve;
+}
 static void cadence_mesure( void );
 static void cadence_attendre( void );
 static void tampons_envoyer( void );
@@ -154,8 +196,10 @@ extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMul
 	SDL_GL_SetAttribute( SDL_GL_STENCIL_SIZE, 0 );
 
 	Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
-	if( cfg.fullscreen == 1 ) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-	if( cfg.fullscreen == 2 ) flags |= SDL_WINDOW_FULLSCREEN;
+	SDL_DisplayMode mode_ecran;
+	s_mode_pair = cfg.fullscreen && mode_pair( &mode_ecran );
+	s_plein = ( cfg.fullscreen == 1 && !s_mode_pair ) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN;
+	if( cfg.fullscreen && !s_mode_pair ) flags |= s_plein;
 	// Window size: the configured one, never larger than the screen
 	// (a 1920x1080 window on a 1440x1080 desktop shows only part of the game).
 	int win_w = cfg.window_w, win_h = cfg.window_h;
@@ -177,12 +221,27 @@ extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMul
 		if( win_w > ecran.w ) win_w = ecran.w;
 		if( win_h > ecran.h ) win_h = ecran.h;
 	}
+	if( s_mode_pair ) { win_w = mode_ecran.w; win_h = mode_ecran.h; }
 	s_window = SDL_CreateWindow( "Tony Hawk's Underground", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 	                             win_w, win_h, flags );
 	if( !s_window )
 	{
 		DLOG( "!! window: %s", SDL_GetError());
 		exit( 1 );
+	}
+	if( s_mode_pair )
+	{
+		// Exclusive fullscreen in the even-rate mode; borderless if refused.
+		if( SDL_SetWindowDisplayMode( s_window, &mode_ecran ) != 0
+		 || SDL_SetWindowFullscreen( s_window, SDL_WINDOW_FULLSCREEN ) != 0 )
+		{
+			DLOG( "display: %d Hz refused (%s), staying at the desktop's rate", mode_ecran.refresh_rate, SDL_GetError());
+			s_mode_pair = false;
+			s_plein = SDL_WINDOW_FULLSCREEN_DESKTOP;
+			SDL_SetWindowFullscreen( s_window, cfg.fullscreen == 2 ? SDL_WINDOW_FULLSCREEN : SDL_WINDOW_FULLSCREEN_DESKTOP );
+		}
+		else
+			DLOG( "display: switched to %dx%d at %d Hz for even frame pacing", mode_ecran.w, mode_ecran.h, mode_ecran.refresh_rate );
 	}
 	s_context = SDL_GL_CreateContext( s_window );
 	if( !s_context )
@@ -522,6 +581,11 @@ static void cadence_mesure( void )
 }
 
 extern "C" double desktop_frame_step( void ) { return s_pas; }
+
+// Fullscreen flag Alt+Enter goes back to.
+extern "C" Uint32 desktop_fullscreen_flag( void ) { return s_plein; }
+
+extern "C" void desktop_cadence_refresh( void ) { if( s_window ) cadence_vsync(); }
 
 static void cadence_vsync( void )
 {

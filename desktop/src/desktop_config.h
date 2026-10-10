@@ -9,6 +9,7 @@ struct DesktopConfig
 	int  render_w, render_h;	// 0 = follow the window
 	int  msaa;			// 0/1 off, 2, 4, 8
 	int  vsync;
+	int  refresh_rate;		// fullscreen refresh: -1 auto (a multiple of 60), 0 the desktop's, else Hz
 	int  dump_shaders;
 	int  aspect;			// 0 = auto (from the desktop), 43 = 4:3, 169 = 16:9
 	int  ssao;			// ambient occlusion on the 3D image
