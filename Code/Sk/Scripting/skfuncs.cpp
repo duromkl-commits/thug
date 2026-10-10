@@ -3560,8 +3560,15 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 	if ( profileName == Script::GenerateCRC( "desktop_next_skater" ) )
 	{
 		profileName = pPlayerProfileManager->DesktopNextSkater( pSkaterProfile->GetSkaterNameChecksum() );
-		if ( !profileName )
+		if ( !profileName || pSkaterProfile->GetSkaterNameChecksum() == profileName )
 			return false;
+		// The pick plays with the created skater's stats and progress.
+		pPlayerProfileManager->DesktopLend( profileName );
+		pPlayerProfileManager->ApplyTemplateToCurrentProfile( profileName );
+		Obj::CSkater* pSkater = Mdl::Skate::Instance()->GetSkater( 0 );
+		if ( pSkater )
+			pSkater->UpdateStats( Mdl::Skate::Instance()->GetCurrentProfile() );
+		return true;
 	}
 #endif
 
@@ -3572,6 +3579,10 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 		return false;
 	}
 	
+#ifdef THUG_DESKTOP
+	// Any other pick (skate shop, story start) hands the loaned stats back.
+	pPlayerProfileManager->DesktopEndLend();
+#endif
 	pPlayerProfileManager->ApplyTemplateToCurrentProfile( profileName );
 	
 	return true;

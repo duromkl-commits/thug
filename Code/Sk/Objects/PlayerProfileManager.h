@@ -68,6 +68,8 @@ class CPlayerProfileManager : public Spt::Class
 		void					ApplyTemplateToCurrentProfile(uint32 checksum);
 #ifdef THUG_DESKTOP
 		uint32					DesktopNextSkater(uint32 current);
+		void					DesktopLend(uint32 pro);
+		void					DesktopEndLend( bool hand_back = true );
 #endif
 		CSkaterProfile*			GetCurrentProfile();
 		CSkaterProfile*			GetProfile(int i);

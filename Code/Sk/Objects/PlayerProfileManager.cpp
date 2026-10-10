@@ -391,6 +391,75 @@ uint32 CPlayerProfileManager::DesktopNextSkater( uint32 current )
 }
 #endif
 
+#ifdef THUG_DESKTOP
+// A pro picked with "Change Skater" plays with the created skater's stats
+// and progress: those fields are lent to the pro (its own kept aside) and
+// handed back, with anything earned meanwhile, when the pro is left or the
+// game is saved. The pro's looks and tricks stay its own.
+static const char *s_desktop_progress[] = { "points_available", "air", "run", "ollie", "speed", "spin",
+	"switch", "flip_speed", "rail_balance", "lip_balance", "manual_balance", "max_specials" };
+enum { vDESKTOP_PROGRESS = sizeof( s_desktop_progress ) / sizeof( s_desktop_progress[0] ) };
+static uint32 s_desktop_lent = 0;
+static int s_desktop_own[vDESKTOP_PROGRESS];
+static bool s_desktop_own_set[vDESKTOP_PROGRESS];
+
+static void desktop_copy_progress( CSkaterProfile* pFrom, CSkaterProfile* pTo )
+{
+	for ( int i = 0; i < vDESKTOP_PROGRESS; i++ )
+	{
+		int v;
+		const uint32 name = Script::GenerateCRC( s_desktop_progress[i] );
+		if ( pFrom->GetInfo()->GetInteger( name, &v, Script::NO_ASSERT ) )
+			pTo->GetInfo()->AddInteger( name, v );
+	}
+}
+
+static void desktop_swap_own( CSkaterProfile* pPro )
+{
+	for ( int i = 0; i < vDESKTOP_PROGRESS; i++ )
+	{
+		const uint32 name = Script::GenerateCRC( s_desktop_progress[i] );
+		int cur;
+		const bool has = pPro->GetInfo()->GetInteger( name, &cur, Script::NO_ASSERT );
+		if ( s_desktop_own_set[i] )
+			pPro->GetInfo()->AddInteger( name, s_desktop_own[i] );
+		s_desktop_own[i] = cur;
+		s_desktop_own_set[i] = has;
+	}
+}
+
+void CPlayerProfileManager::DesktopLend( uint32 pro )
+{
+	DesktopEndLend();
+	CSkaterProfile* pPro = m_Profiles.GetItem( pro );
+	CSkaterProfile* pCustom = m_Profiles.GetItem( CRCD(0xa7be964,"custom") );
+	if ( !pPro || !pCustom || !pPro->IsPro() )
+		return;
+	for ( int i = 0; i < vDESKTOP_PROGRESS; i++ )
+		s_desktop_own_set[i] = pPro->GetInfo()->GetInteger( Script::GenerateCRC( s_desktop_progress[i] ), &s_desktop_own[i], Script::NO_ASSERT );
+	desktop_copy_progress( pCustom, pPro );
+	s_desktop_lent = pro;
+}
+
+// hand_back false: a save is being loaded, the created skater's figures come
+// from it; the pro just gets its own back.
+void CPlayerProfileManager::DesktopEndLend( bool hand_back )
+{
+	if ( !s_desktop_lent )
+		return;
+	CSkaterProfile* pPro = m_Profiles.GetItem( s_desktop_lent );
+	CSkaterProfile* pCustom = m_Profiles.GetItem( CRCD(0xa7be964,"custom") );
+	s_desktop_lent = 0;
+	if ( !pPro || !pCustom )
+		return;
+	if ( hand_back )
+		desktop_copy_progress( pPro, pCustom );
+	for ( int i = 0; i < vDESKTOP_PROGRESS; i++ )
+		if ( s_desktop_own_set[i] )
+			pPro->GetInfo()->AddInteger( Script::GenerateCRC( s_desktop_progress[i] ), s_desktop_own[i] );
+}
+#endif
+
 CSkaterProfile* CPlayerProfileManager::GetCurrentProfile()
 {
 	return mp_CurrentProfile[m_CurrentProfileIndex];
@@ -476,6 +545,13 @@ void CPlayerProfileManager::Reset()
 void CPlayerProfileManager::AddAllProProfileInfo(Script::CStruct *pStuff)
 {
 	Dbg_MsgAssert(pStuff,("NULL pStuff"));
+
+#ifdef THUG_DESKTOP
+	// A pro on loan saves with its own stats, not the created skater's.
+	CSkaterProfile* pLent = s_desktop_lent ? m_Profiles.GetItem( s_desktop_lent ) : NULL;
+	if ( pLent )
+		desktop_swap_own( pLent );
+#endif
 	
 	uint32 tableSize = m_Profiles.getSize( );
 	for ( uint32 i = 0; i < tableSize; i++ )
@@ -489,6 +565,10 @@ void CPlayerProfileManager::AddAllProProfileInfo(Script::CStruct *pStuff)
 			pProfile->WriteIntoStructure(pStuff);
 		}
 	}
+#ifdef THUG_DESKTOP
+	if ( pLent )
+		desktop_swap_own( pLent );
+#endif
 	
 	
 	Dbg_MsgAssert(mp_CurrentProfile[m_CurrentProfileIndex],("NULL mp_CurrentProfile[%d]",m_CurrentProfileIndex));
@@ -531,6 +611,9 @@ void CPlayerProfileManager::AddAllProProfileInfo(Script::CStruct *pStuff)
 
 void CPlayerProfileManager::LoadAllProProfileInfo(Script::CStruct *pStuff)
 {
+#ifdef THUG_DESKTOP
+	DesktopEndLend( false );
+#endif
 	Dbg_MsgAssert(pStuff,("NULL pStuff"));
 
 	Mem::Manager::sHandle().PushContext(Mem::Manager::sHandle().SkaterInfoHeap());
@@ -562,6 +645,17 @@ void CPlayerProfileManager::LoadAllProProfileInfo(Script::CStruct *pStuff)
 void CPlayerProfileManager::AddCASProfileInfo(Script::CStruct *pStuff)
 {
 	Dbg_MsgAssert(pStuff,("NULL pStuff"));
+
+#ifdef THUG_DESKTOP
+	// Progress earned as a pro on loan goes into the save with the created skater.
+	if ( s_desktop_lent )
+	{
+		CSkaterProfile* pPro = m_Profiles.GetItem( s_desktop_lent );
+		CSkaterProfile* pCustom = m_Profiles.GetItem( CRCD(0xa7be964,"custom") );
+		if ( pPro && pCustom )
+			desktop_copy_progress( pPro, pCustom );
+	}
+#endif
 	
 	uint32 tableSize = m_Profiles.getSize( );
 	for ( uint32 i = 0; i < tableSize; i++ )
@@ -584,6 +678,9 @@ void CPlayerProfileManager::AddCASProfileInfo(Script::CStruct *pStuff)
 void CPlayerProfileManager::LoadCASProfileInfo( Script::CStruct *pStuff, bool load_info )
 {
 	Dbg_MsgAssert(pStuff,("NULL pStuff"));
+#ifdef THUG_DESKTOP
+	DesktopEndLend( false );
+#endif
 
 	ApplyTemplateToCurrentProfile(0xa7be964/*custom*/);
 	CSkaterProfile* pProfile=GetCurrentProfile();
