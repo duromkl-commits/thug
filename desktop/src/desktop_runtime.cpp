@@ -34,9 +34,10 @@ static const char *s_default_ini =
 	"; anti-aliasing samples: 0, 2, 4 or 8\n"
 	"msaa=4\n"
 	"vsync=1\n"
-	"; fullscreen refresh rate: auto = if your display's rate isn't a multiple of 60 (144, 165 Hz),\n"
-	"; switch it to one that is (120 Hz) while the game is in fullscreen, so every frame shows for the\n"
-	"; same time; 0 = leave the display alone; or a number, e.g. 120\n"
+	"; refresh rate: auto = if your display's rate isn't a multiple of 60 (144, 165 Hz), run it at one\n"
+	"; that is (120 Hz) while the game is open, so every frame shows for the same time. Borderless keeps\n"
+	"; its borderless window: the desktop switches, and Windows switches it back when the game closes.\n"
+	"; 0 = leave the display alone; or a number, e.g. 120\n"
 	"refresh_rate=auto\n"
 	"\n"
 	"[graphics]\n"
@@ -89,14 +90,15 @@ static const char *s_default_ini =
 	"; again, time_scale=0.8 gives a fifth less time\n"
 	"score_scale=1.0\n"
 	"time_scale=1.0\n"
-	"; prestige (new game+): each time you beat the story, point targets go up by prestige_points_per_level\n"
-	"; (0.10 = +10%) up to prestige_points_max times the original, and time limits go down by\n"
+	"; prestige (new game+): each time you beat the story, point targets go up by prestige_points_percent\n"
+	"; of the original (10 = +10% a level: level 10 = 2x, level 100 = 11x), with no ceiling unless\n"
+	"; prestige_points_cap is set (e.g. 3 = never past 3x); time limits go down by\n"
 	"; prestige_time_per_level (0.02 = -2%) down to prestige_time_min. Goals with stops or a route\n"
 	"; (tours, H.O.R.S.E., moving score spots) are left alone.\n"
 	"; The level is kept in thug_prestige.txt; delete it or set prestige=0 to stop.\n"
 	"prestige=1\n"
-	"prestige_points_per_level=0.10\n"
-	"prestige_points_max=2.0\n"
+	"prestige_points_percent=10\n"
+	"prestige_points_cap=0\n"
 	"prestige_time_per_level=0.02\n"
 	"prestige_time_min=0.8\n"
 	"\n"
@@ -178,8 +180,8 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "score_scale" ))   s_cfg.score_scale = (float)atof( v );
 		else if( !strcmp( k, "time_scale" ))    s_cfg.time_scale = (float)atof( v );
 		else if( !strcmp( k, "prestige" ))      s_cfg.prestige = iv;
-		else if( !strcmp( k, "prestige_points_per_level" )) s_cfg.prestige_points_per_level = (float)atof( v );
-		else if( !strcmp( k, "prestige_points_max" ))       s_cfg.prestige_points_max = (float)atof( v );
+		else if( !strcmp( k, "prestige_points_percent" ))   s_cfg.prestige_points_percent = (float)atof( v );
+		else if( !strcmp( k, "prestige_points_cap" ))       s_cfg.prestige_points_cap = (float)atof( v );
 		else if( !strcmp( k, "prestige_time_per_level" ))   s_cfg.prestige_time_per_level = (float)atof( v );
 		else if( !strcmp( k, "prestige_time_min" ))         s_cfg.prestige_time_min = (float)atof( v );
 		else if( !strcmp( k, "overscan" ))      s_cfg.overscan = (float)atof( v );
@@ -227,8 +229,8 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.score_scale = 1.0f;
 	s_cfg.time_scale = 1.0f;
 	s_cfg.prestige = 1;
-	s_cfg.prestige_points_per_level = 0.10f;
-	s_cfg.prestige_points_max = 2.0f;
+	s_cfg.prestige_points_percent = 10.0f;
+	s_cfg.prestige_points_cap = 0.0f;
 	s_cfg.prestige_time_per_level = 0.02f;
 	s_cfg.prestige_time_min = 0.8f;
 
@@ -381,12 +383,14 @@ extern "C" float desktop_goal_score_scale( void )
 	float s = clampf( c.score_scale, 0.1f, 20.0f );
 	if( c.prestige )
 	{
-		// Linear and capped: +10% a level up to 2x (defaults). Compounding
-		// made level 10 ~9x the points, which no goal survives.
-		const float mx = clampf( c.prestige_points_max, 1.0f, 5.0f );
-		s *= clampf( 1.0f + clampf( c.prestige_points_per_level, 0.0f, 1.0f ) * prestige_level(), 1.0f, mx );
+		// Linear, +10% of the original a level by default, no ceiling unless
+		// prestige_points_cap is set. (Compounding made level 10 ~9x.)
+		float p = 1.0f + clampf( c.prestige_points_percent, 0.0f, 10000.0f ) / 100.0f * (float)prestige_level();
+		if( c.prestige_points_cap >= 1.0f && p > c.prestige_points_cap )
+			p = c.prestige_points_cap;
+		s *= p;
 	}
-	return clampf( s, 0.1f, 100.0f );
+	return s < 0.1f ? 0.1f : s;
 }
 
 extern "C" float desktop_goal_time_scale( void )

@@ -3095,6 +3095,11 @@ bool ScriptTrackEnabled(Script::CStruct *pParams, Script::CScript *pScript)
 	
 	Dbg_MsgAssert( track_num>=0 && track_num < Pcm::GetNumTracks(Pcm::TRACKLIST_PERM),( "\n%s\nBad track number of %d sent to TrackEnabled, num tracks = %d", pScript->GetScriptInfo(), track_num, Pcm::GetNumTracks(Pcm::TRACKLIST_PERM) ));
 	
+#ifdef THUG_DESKTOP
+	// Up to 512 tracks on the desktop: the two 64-bit words below only cover
+	// 128 (and shifting by 64 or more reads some other track's bit).
+	return !Pcm::GetTrackForbiddenStatus(track_num, Pcm::TRACKLIST_PERM);
+#endif
 	uint64 list1,list2;
     Pcm::GetPlaylist(&list1, &list2);
     

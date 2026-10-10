@@ -32,7 +32,7 @@ render_width=0      ; internal resolution; 0 = match the window
 render_height=0
 msaa=4              ; antialiasing samples (0 = off)
 vsync=1
-refresh_rate=auto   ; fullscreen: on a 144/165 Hz display, switch to 120 Hz while playing (0 = leave the display alone, or a rate like 120)
+refresh_rate=auto   ; on a 144/165 Hz display, run it at 120 Hz while the game is open (0 = leave the display alone, or a rate like 120)
 aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your screen
 
 [graphics]
@@ -66,8 +66,8 @@ head_bob=1.0        ; on foot, the camera bobs a little with each step; 0 = off,
 score_scale=1.0     ; goal score targets x this (1.5 = half as many points again)
 time_scale=1.0      ; goal time limits x this (0.8 = a fifth less time)
 prestige=1          ; new game+: each time you beat the story, goals get a bit harder
-prestige_points_per_level=0.10 ; +10% points per prestige level...
-prestige_points_max=2.0        ; ...up to 2x the original
+prestige_points_percent=10     ; +10% of the original points per prestige level (level 10 = 2x, level 100 = 11x)
+prestige_points_cap=0          ; never past this multiple; 0 = no cap
 prestige_time_per_level=0.02   ; -2% time per prestige level...
 prestige_time_min=0.8          ; ...down to 80% of the original
 
@@ -84,12 +84,14 @@ frames stay up longer than others, and fast movement judders. Set the
 monitor to 120 Hz in Windows display settings, or use G-Sync/FreeSync, for
 smooth motion. thug.log's `frame pacing` line shows what the game picked.
 
-`refresh_rate=auto` (the default) does that switch for you: in fullscreen,
-when the display runs at a rate 60 doesn't divide into, the game takes the
-screen in exclusive fullscreen at the same resolution and the highest rate
-that is a multiple of 60 (120 Hz on a 144 Hz monitor). Windows puts the
-display back when you Alt+Tab out or quit; expect a brief black flash
-each time. `refresh_rate=0` keeps borderless at the desktop's rate.
+`refresh_rate=auto` (the default) does that switch for you: when the
+display runs at a rate 60 doesn't divide into, it runs at the highest rate
+that is (120 Hz on a 144 Hz monitor) while the game is open. In borderless
+(`fullscreen=1`) the window stays borderless and the whole desktop switches;
+Windows puts it back when the game closes. With `fullscreen=2` the game
+takes the screen in exclusive fullscreen at that rate instead. Nothing
+changes in a window (`fullscreen=0`). A brief black flash goes with each
+switch.
 
 ## Difficulty and prestige
 
@@ -99,10 +101,10 @@ time limits (goals with a point target of 1,000 or more; counters such as
 
 Prestige is a new game+: when the story's ending plays, the prestige level
 goes up by one (kept in `thug_prestige.txt`), and point targets grow by
-`prestige_points_per_level` per level (+10%), up to `prestige_points_max`
-(2x) of the original, on top of `score_scale`; time limits shrink by
-`prestige_time_per_level` (-2%) down to `prestige_time_min` (80%). Level 10
-with the defaults: 2x the points in 80% of the time. Goals built around stops or a route (tours, H.O.R.S.E., moving score
+`prestige_points_percent` of the original per level (10 = +10%: level 10
+is 2x, level 100 is 11x, level 10,000 is 1,001x), with no ceiling unless
+`prestige_points_cap` is set, on top of `score_scale`; time limits shrink by
+`prestige_time_per_level` (-2%) down to `prestige_time_min` (80%). Goals built around stops or a route (tours, H.O.R.S.E., moving score
 spots like Chad Muska's SUV) keep their own figures. Delete
 `thug_prestige.txt` to go back to level 0.
 

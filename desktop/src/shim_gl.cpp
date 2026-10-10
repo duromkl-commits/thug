@@ -12,6 +12,9 @@
 #define DESKTOP_GL_IMPL
 #include <vitaGL.h>
 #include <SDL.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,6 +145,61 @@ static bool multiple_60( int hz )
 	return n >= 1 && abs( hz - n * 60 ) <= 1;
 }
 
+#ifdef _WIN32
+// Borderless: the window stays a plain borderless window and the desktop
+// itself runs at an even rate while the game is open (CDS_FULLSCREEN: a
+// temporary change Windows undoes when the game exits).
+static bool s_bureau_change = false;
+
+static void bureau_restaure( void )
+{
+	if( s_bureau_change )
+		ChangeDisplaySettingsExW( NULL, NULL, NULL, 0, NULL );
+	s_bureau_change = false;
+}
+
+static void bureau_pair( void )
+{
+	const int voulu = desktop_config().refresh_rate;
+	DEVMODEW d;
+	memset( &d, 0, sizeof( d ));
+	d.dmSize = sizeof( d );
+	if( voulu == 0 || !EnumDisplaySettingsW( NULL, ENUM_CURRENT_SETTINGS, &d ))
+		return;
+	const int hz = (int)d.dmDisplayFrequency;
+	if( voulu < 0 ? multiple_60( hz ) : abs( hz - voulu ) <= 1 )
+		return;
+	DEVMODEW m, choix;
+	int meilleur = 0;
+	for( DWORD i = 0; ; ++i )
+	{
+		memset( &m, 0, sizeof( m ));
+		m.dmSize = sizeof( m );
+		if( !EnumDisplaySettingsW( NULL, i, &m )) break;
+		if( m.dmPelsWidth != d.dmPelsWidth || m.dmPelsHeight != d.dmPelsHeight || m.dmBitsPerPel != d.dmBitsPerPel )
+			continue;
+		const int f = (int)m.dmDisplayFrequency;
+		const bool ok = voulu < 0 ? ( multiple_60( f ) && f <= hz ) : abs( f - voulu ) <= 1;
+		if( ok && f > meilleur ) { meilleur = f; choix = m; }
+	}
+	if( !meilleur )
+	{
+		DLOG( "display: no %s rate at %lux%lu, staying at %d Hz", voulu < 0 ? "60-multiple" : "requested",
+		      d.dmPelsWidth, d.dmPelsHeight, hz );
+		return;
+	}
+	choix.dmFields = DM_PELSWIDTH | DM_PELSHEIGHT | DM_BITSPERPEL | DM_DISPLAYFREQUENCY;
+	if( ChangeDisplaySettingsExW( NULL, &choix, NULL, CDS_FULLSCREEN, NULL ) == DISP_CHANGE_SUCCESSFUL )
+	{
+		s_bureau_change = true;
+		atexit( bureau_restaure );
+		DLOG( "display: desktop switched from %d to %d Hz while the game runs (borderless)", hz, meilleur );
+	}
+	else
+		DLOG( "display: %d Hz refused, staying at %d Hz", meilleur, hz );
+}
+#endif
+
 // refresh_rate: a display mode at the desktop's resolution with a rate 60
 // divides into, when the desktop's isn't one (auto), or the asked rate.
 // The highest such rate not above the desktop's: 120 on 144 or 165 Hz.
@@ -184,6 +242,10 @@ extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMul
 	desktop_crash_handler_install();
 	const DesktopConfig &cfg = desktop_config();
 
+#ifdef _WIN32
+	if( cfg.fullscreen == 1 )
+		bureau_pair();
+#endif
 	if( SDL_InitSubSystem( SDL_INIT_VIDEO ) != 0 )
 	{
 		DLOG( "!! SDL video: %s", SDL_GetError());
@@ -197,7 +259,7 @@ extern "C" GLboolean vglInitExtended( int, int width, int height, int, SceGxmMul
 
 	Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
 	SDL_DisplayMode mode_ecran;
-	s_mode_pair = cfg.fullscreen && mode_pair( &mode_ecran );
+	s_mode_pair = cfg.fullscreen == 2 && mode_pair( &mode_ecran );
 	s_plein = ( cfg.fullscreen == 1 && !s_mode_pair ) ? SDL_WINDOW_FULLSCREEN_DESKTOP : SDL_WINDOW_FULLSCREEN;
 	if( cfg.fullscreen && !s_mode_pair ) flags |= s_plein;
 	// Window size: the configured one, never larger than the screen

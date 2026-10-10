@@ -544,6 +544,9 @@ void CGoal::AddTime( int time )
 // new prestige level applies from the next attempt.
 static int desktop_nice_number( float v )
 {
+	// Uncapped prestige: never past what a score counter holds.
+	if ( v > 2000000000.0f )
+		return 2000000000;
 	const int step = ( v >= 10000.0f ) ? 1000 : ( v >= 1000.0f ) ? 100 : 10;
 	return ( (int)( v / step + 0.5f ) ) * step;
 }
