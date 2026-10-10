@@ -142,9 +142,8 @@ static bool multiple_60( int hz )
 	return n >= 1 && abs( hz - n * 60 ) <= 1;
 }
 
-// refresh_rate: a display mode at the desktop's resolution with a rate 60
-// divides into, when the desktop's isn't one (auto), or the asked rate.
-// The highest such rate not above the desktop's: 120 on 144 or 165 Hz.
+// refresh_rate: a display mode at the desktop's resolution at 60 Hz, when
+// the desktop's rate isn't a multiple of 60 (auto), or the asked rate.
 static bool mode_pair( SDL_DisplayMode *out )
 {
 	const int voulu = desktop_config().refresh_rate;
@@ -160,8 +159,7 @@ static bool mode_pair( SDL_DisplayMode *out )
 		SDL_DisplayMode m;
 		if( SDL_GetDisplayMode( 0, i, &m ) != 0 || m.w != d.w || m.h != d.h )
 			continue;
-		const bool ok = voulu < 0 ? ( multiple_60( m.refresh_rate ) && m.refresh_rate <= d.refresh_rate )
-		                          : abs( m.refresh_rate - voulu ) <= 1;
+		const bool ok = abs( m.refresh_rate - ( voulu < 0 ? 60 : voulu )) <= 1;
 		if( ok && ( !trouve || m.refresh_rate > out->refresh_rate ))
 		{
 			*out = m;
@@ -169,7 +167,7 @@ static bool mode_pair( SDL_DisplayMode *out )
 		}
 	}
 	if( !trouve )
-		DLOG( "display: no %s mode at %dx%d, staying at %d Hz", voulu < 0 ? "60-multiple" : "requested",
+		DLOG( "display: no %s mode at %dx%d, staying at %d Hz", voulu < 0 ? "60 Hz" : "requested",
 		      d.w, d.h, d.refresh_rate );
 	return trouve;
 }

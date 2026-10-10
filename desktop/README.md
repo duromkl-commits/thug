@@ -32,7 +32,7 @@ render_width=0      ; internal resolution; 0 = match the window
 render_height=0
 msaa=4              ; antialiasing samples (0 = off)
 vsync=1
-refresh_rate=auto   ; fullscreen: on a 144/165 Hz display, switch to 120 Hz while playing (0 = leave the display alone, or a rate like 120)
+refresh_rate=auto   ; fullscreen: on a 144/165 Hz display, switch to 60 Hz while playing (0 = leave the display alone, or a rate like 120)
 aspect=auto        ; 4:3 (PS2/Xbox shape), 16:9 (Vita shape), auto = from your screen
 
 [graphics]
@@ -86,8 +86,7 @@ smooth motion. thug.log's `frame pacing` line shows what the game picked.
 
 `refresh_rate=auto` (the default) does that switch for you: in fullscreen,
 when the display runs at a rate 60 doesn't divide into, the game takes the
-screen in exclusive fullscreen at the same resolution and the highest rate
-that is a multiple of 60 (120 Hz on a 144 Hz monitor). Windows puts the
+screen in exclusive fullscreen at the same resolution at 60 Hz. Windows puts the
 display back when you Alt+Tab out or quit; expect a brief black flash
 each time. `refresh_rate=0` keeps borderless at the desktop's rate.
 
