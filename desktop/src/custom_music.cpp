@@ -571,7 +571,7 @@ enum
 	T_FIN = 0, T_EOL = 1, T_EOLNUM = 2, T_STRUCT = 3, T_FSTRUCT = 4, T_TAB = 5, T_FTAB = 6, T_EGAL = 7,
 	T_NOM = 22, T_ENTIER = 23, T_HEX = 24, T_FLOTTANT = 26, T_CHAINE = 27, T_CHAINE_LOC = 28,
 	T_VECTEUR = 30, T_PAIRE = 31, T_REPEAT = 33, T_SCRIPT = 35, T_ENDSCRIPT = 36,
-	T_NOMCRC = 43, T_JUMP = 46, T_RANDOM = 47, T_RANDOM2 = 55, T_CASE = 62,
+	T_ARG = 45, T_NOMCRC = 43, T_JUMP = 46, T_RANDOM = 47, T_RANDOM2 = 55, T_CASE = 62,
 	T_RANDOM_NR = 64, T_RANDOM_P = 65, T_RT_C = 67, T_RT_M = 68
 };
 
@@ -903,6 +903,37 @@ static void patch_soundtrack( const unsigned char *qb, const std::vector<Jeton> 
 	}
 }
 
+// Story pause menu: a "Change Skater" item before "View Goals". It runs the
+// game's own load_pro_skater with name = desktop_next_skater, which
+// SelectCurrentSkater (skfuncs.cpp) turns into the next unlocked skater.
+static void patch_change_skater( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t item = crc( "make_sprite_menu_item" ), id = crc( "id" ), chapitres = crc( "menu_chapters" );
+	for( size_t k = 2; k < j.size(); ++k )
+	{
+		if( !est_nom( qb, j[k], chapitres ) || qb[j[k - 1].pos] != T_EGAL || !est_nom( qb, j[k - 2], id )) continue;
+		size_t d = k;
+		while( d > 0 && k - d < 12 && !est_nom( qb, j[d], item )) --d;
+		if( !est_nom( qb, j[d], item )) return;
+		Ecrit w;
+		w.nom( "make_sprite_menu_item" );
+		w.champ_chaine( "text", "Change Skater" );
+		w.nom( "id" ); w.octet( T_EGAL ); w.nom( "menu_desktop_skater" );
+		w.nom( "pad_choose_script" ); w.octet( T_EGAL ); w.nom( "load_pro_skater" );
+		w.nom( "pad_choose_params" ); w.octet( T_EGAL ); w.octet( T_STRUCT );
+		w.nom( "name" ); w.octet( T_EGAL ); w.nom( "desktop_next_skater" );
+		w.octet( T_FSTRUCT );
+		w.eol();
+		w.nom( "make_text_sprite" );
+		w.nom( "texture" ); w.octet( T_EGAL ); w.octet( T_ARG ); w.nom( "edit_skater_icon" );
+		w.nom( "parent" ); w.octet( T_EGAL ); w.nom( "menu_desktop_skater" );
+		w.eol();
+		m.push_back( Modif{ j[d].pos, 0, w.o } );
+		VLOG( "MUS", "pause menu: Change Skater added" );
+		return;
+	}
+}
+
 extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const unsigned char *qb )
 {
 	if( !qb ) return NULL;
@@ -916,6 +947,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	std::vector<Modif> m;
 	if( !s_pistes.empty()) patch_liste( qb, j, m );
 	patch_soundtrack( qb, j, m );
+	patch_change_skater( qb, j, m );
 	if( m.empty()) return NULL;
 	return applique( qb, j.back().pos + 1, m );
 }

@@ -352,6 +352,45 @@ void CPlayerProfileManager::ApplyTemplateToCurrentProfile( uint32 checksum )
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+// Pause menu "Change Skater" (desktop): the unlocked skater after 'current'
+// in the select screen's order (skater_index), wrapping round. Hidden ones
+// (secret skaters not unlocked yet, the ped) are skipped.
+uint32 CPlayerProfileManager::DesktopNextSkater( uint32 current )
+{
+	int current_index = -1;
+	uint32 first = 0, next = 0;
+	int first_index = 0x7fffffff, next_index = 0x7fffffff;
+	uint32 tableSize = m_Profiles.getSize( );
+	for ( uint32 pass = 0; pass < 2; pass++ )
+	{
+		for ( uint32 i = 0; i < tableSize; i++ )
+		{
+			int key;
+			CSkaterProfile* pProfile = m_Profiles.GetItemByIndex( i, &key );
+			if ( !pProfile )
+				continue;
+			Script::CStruct* pInfo = pProfile->GetInfo();
+			int index = 0, hidden = 0;
+			pInfo->GetInteger( CRCD(0x6f14c39c,"skater_index"), &index, Script::NO_ASSERT );
+			pInfo->GetInteger( CRCD(0x27eb9b9d,"is_hidden"), &hidden, Script::NO_ASSERT );
+			const uint32 name = pProfile->GetSkaterNameChecksum();
+			if ( pass == 0 )
+			{
+				if ( name == current )
+					current_index = index;
+				continue;
+			}
+			if ( hidden )
+				continue;
+			if ( index < first_index ) { first_index = index; first = name; }
+			if ( index > current_index && index < next_index ) { next_index = index; next = name; }
+		}
+	}
+	return next ? next : first;
+}
+#endif
+
 CSkaterProfile* CPlayerProfileManager::GetCurrentProfile()
 {
 	return mp_CurrentProfile[m_CurrentProfileIndex];

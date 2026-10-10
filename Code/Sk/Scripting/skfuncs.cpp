@@ -3555,6 +3555,16 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 	Obj::CPlayerProfileManager*	pPlayerProfileManager=Mdl::Skate::Instance()->GetPlayerProfileManager();
 	Obj::CSkaterProfile* pSkaterProfile = Mdl::Skate::Instance()->GetCurrentProfile();
 
+#ifdef THUG_DESKTOP
+	// The pause menu's "Change Skater" (desktop) asks for the next unlocked one.
+	if ( profileName == Script::GenerateCRC( "desktop_next_skater" ) )
+	{
+		profileName = pPlayerProfileManager->DesktopNextSkater( pSkaterProfile->GetSkaterNameChecksum() );
+		if ( !profileName )
+			return false;
+	}
+#endif
+
 	// remember old checksum to see if the data has changed
 	if ( pSkaterProfile->GetSkaterNameChecksum() == profileName )
 	{
