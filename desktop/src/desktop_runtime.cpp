@@ -34,10 +34,10 @@ static const char *s_default_ini =
 	"; anti-aliasing samples: 0, 2, 4 or 8\n"
 	"msaa=4\n"
 	"vsync=1\n"
-	"; fullscreen refresh rate: 0 = leave the display alone; auto = if its rate isn't a multiple of 60\n"
-	"; (144, 165 Hz), switch it to 60 Hz in fullscreen so every frame shows for the same time;\n"
-	"; or a number, e.g. 120\n"
-	"refresh_rate=0\n"
+	"; fullscreen refresh rate: auto = if your display's rate isn't a multiple of 60 (144, 165 Hz),\n"
+	"; switch it to one that is (120 Hz) while the game is in fullscreen, so every frame shows for the\n"
+	"; same time; 0 = leave the display alone; or a number, e.g. 120\n"
+	"refresh_rate=auto\n"
 	"\n"
 	"[graphics]\n"
 	"; ambient occlusion (darkens corners and contact points): 0 = off, 1 = on, 2 = show only the occlusion (test view)\n"
@@ -199,7 +199,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.fullscreen = 1;
 	s_cfg.msaa = 4;
 	s_cfg.vsync = 1;
-	s_cfg.refresh_rate = 0;
+	s_cfg.refresh_rate = -1;
 	s_cfg.ssao = 1;
 	s_cfg.ssao_strength = 0.8f;
 	s_cfg.ssao_radius = 18.0f;
