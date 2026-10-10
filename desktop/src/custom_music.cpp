@@ -934,6 +934,173 @@ static void patch_change_skater( const unsigned char *qb, const std::vector<Jeto
 	}
 }
 
+// --- a little script compiler for the menus added below -------------------------
+//
+// Enough of the .q syntax for menu scripts: names, "strings", whole numbers,
+// (x,y) pairs, = { } [ ] ( ), <name> arguments, and the keywords used.
+
+static void compile_q( Ecrit &w, const char *t )
+{
+	static const struct { const char *mot; unsigned char jeton; } mots[] = {
+		{ "script", T_SCRIPT }, { "endscript", T_ENDSCRIPT }, { "if", 37 }, { "else", 38 },
+		{ "endif", 40 }, { "return", 41 }, { "NOT", 57 } };
+	while( *t )
+	{
+		const char c = *t;
+		if( c == '\n' ) { w.eol(); ++t; continue; }
+		if( c == ' ' || c == '\t' || c == '\r' ) { ++t; continue; }
+		if( c == '"' )
+		{
+			const char *f = strchr( t + 1, '"' );
+			w.chaine( std::string( t + 1, f ));
+			t = f + 1;
+			continue;
+		}
+		if( c == '(' )
+		{
+			float x, y; int n = 0;
+			if( sscanf( t, "(%f,%f)%n", &x, &y, &n ) == 2 && n > 0 )
+			{
+				w.octet( T_PAIRE );
+				uint32_t a, b; memcpy( &a, &x, 4 ); memcpy( &b, &y, 4 );
+				w.u32( a ); w.u32( b );
+				t += n;
+				continue;
+			}
+			w.octet( 14 ); ++t; continue;
+		}
+		if( c == ')' ) { w.octet( 15 ); ++t; continue; }
+		if( c == '{' ) { w.octet( T_STRUCT ); ++t; continue; }
+		if( c == '}' ) { w.octet( T_FSTRUCT ); ++t; continue; }
+		if( c == '[' ) { w.octet( T_TAB ); ++t; continue; }
+		if( c == ']' ) { w.octet( T_FTAB ); ++t; continue; }
+		if( c == '=' ) { w.octet( T_EGAL ); ++t; continue; }
+		if( c == '<' )
+		{
+			const char *f = strchr( t, '>' );
+			w.octet( T_ARG );
+			w.nom( std::string( t + 1, f ).c_str());
+			t = f + 1;
+			continue;
+		}
+		const char *d = t;
+		while( *t && !strchr( " \t\r\n\"(){}[]=<", *t )) ++t;
+		const std::string m( d, t );
+		if( isdigit((unsigned char)m[0] ) || ( m[0] == '-' && m.size() > 1 ))
+		{
+			if( m.find( '.' ) != std::string::npos )
+			{
+				const float f = (float)atof( m.c_str());
+				uint32_t u; memcpy( &u, &f, 4 );
+				w.octet( T_FLOTTANT ); w.u32( u );
+			}
+			else
+				w.entier( atoi( m.c_str()));
+			continue;
+		}
+		bool fait = false;
+		for( size_t k = 0; k < sizeof( mots ) / sizeof( mots[0] ); ++k )
+			if( m == mots[k].mot ) { w.octet( mots[k].jeton ); fait = true; break; }
+		if( !fait ) w.nom( m.c_str());
+	}
+}
+
+// Story "Change Player Model" (desktop): Pause > Edit Skater/Tricks gets the
+// item, under Edit Appearance (created skater) or on its own (a pro in use);
+// it opens a list like the cheats menu, one line per unlocked skater (built
+// by DesktopAddModelItems, skfuncs.cpp); picking one switches to it and Back
+// returns to Edit Skater.
+static const char *s_menu_modele =
+	"script desktop_model_menu\n"
+	"if ObjectExists id = current_menu_anchor\n"
+	"DestroyScreenElement id = current_menu_anchor\n"
+	"endif\n"
+	"FormatText ChecksumName = title_icon \"%i_edit_skater\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
+	"make_new_themed_scrolling_menu title = \"PLAYER MODEL\" title_icon = <title_icon> dims = (600,237) pos = (229,80) right_bracket_z = 1\n"
+	"SetScreenElementProps { id = sub_menu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = edit_skater_options_menu } } ] }\n"
+	"create_helper_text generic_helper_text\n"
+	"kill_start_key_binding\n"
+	"DesktopAddModelItems\n"
+	"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
+	"if GotParam focus_id\n"
+	"FireEvent type = focus target = sub_vmenu data = { child_id = <focus_id> }\n"
+	"endif\n"
+	"endscript\n"
+	"script desktop_model_item\n"
+	"theme_menu_add_item text = <display_name> id = <item_id> highlight_bar_scale = (2.8,0.8) extra_text = <mark> no_bg pad_choose_script = desktop_pick_model pad_choose_params = { name = <name> focus_id = <item_id> }\n"
+	"endscript\n"
+	"script desktop_pick_model\n"
+	"if DesktopSelectSkater name = <name>\n"
+	"RefreshSkaterModel profile = 0 skater = 0\n"
+	"endif\n"
+	"desktop_model_menu focus_id = <focus_id>\n"
+	"endscript\n";
+
+static const char *s_item_modele =
+	"\nif GameModeEquals is_career\n"
+	"make_theme_menu_item { text = \"Change Player Model\" id = menu_desktop_model pad_choose_script = desktop_model_menu }\n"
+	"endif\n";
+
+static void patch_player_model( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n_script = crc( "edit_skater_options_menu" ), n_apparence = crc( "menu_edit_appearance" ),
+		n_courant = crc( "current_skater" ), n_custom = crc( "custom" );
+	size_t k = 0;
+	for( ; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n_script )) break;
+	if( k + 1 >= j.size()) return;
+	size_t fin = k;
+	while( fin < j.size() && qb[j[fin].pos] != T_ENDSCRIPT ) ++fin;
+	if( fin >= j.size()) return;
+
+	// if ( <current_skater> = custom ) ... endif: its endif.
+	size_t si = 0;
+	for( size_t a = k; a + 4 < fin; ++a )
+		if( qb[j[a].pos] == 37 )
+		{
+			size_t b = a + 1;
+			while( b < a + 6 && b < fin && !( qb[j[b].pos] == T_ARG && est_nom( qb, j[b + 1], n_courant ))) ++b;
+			if( b < a + 6 && b + 3 < fin && qb[j[b + 2].pos] == T_EGAL && est_nom( qb, j[b + 3], n_custom )) { si = a; break; }
+		}
+	if( !si ) { VLOG( "MUS", "edit skater menu: current_skater test not found" ); return; }
+	size_t endif_ = 0;
+	int niveau = 0;
+	bool sinon = false;
+	for( size_t a = si; a < fin; ++a )
+	{
+		const unsigned char t = qb[j[a].pos];
+		if( t == 37 ) ++niveau;
+		else if( t == 38 && niveau == 1 ) sinon = true;
+		else if( t == 40 && --niveau == 0 ) { endif_ = a; break; }
+	}
+	if( !endif_ || sinon ) { VLOG( "MUS", "edit skater menu: layout not as expected" ); return; }
+
+	// After the Edit Appearance item's { ... }.
+	size_t apres = 0;
+	for( size_t a = si; a + 2 < endif_; ++a )
+		if( est_nom( qb, j[a], n_apparence ))
+		{
+			int n = 0;
+			size_t b = a;
+			while( b > si && qb[j[b].pos] != T_STRUCT ) --b;
+			for( ; b < endif_; ++b )
+			{
+				if( qb[j[b].pos] == T_STRUCT ) ++n;
+				else if( qb[j[b].pos] == T_FSTRUCT && --n == 0 ) { apres = b + 1; break; }
+			}
+			break;
+		}
+	if( !apres ) { VLOG( "MUS", "edit skater menu: Edit Appearance not found" ); return; }
+
+	Ecrit w1; compile_q( w1, s_item_modele );
+	m.push_back( Modif{ j[apres].pos, 0, w1.o } );
+	Ecrit w2; w2.octet( 38 ); compile_q( w2, s_item_modele );
+	m.push_back( Modif{ j[endif_].pos, 0, w2.o } );
+	Ecrit w3; w3.eol(); compile_q( w3, s_menu_modele );
+	m.push_back( Modif{ j.back().pos, 0, w3.o } );
+	VLOG( "MUS", "edit skater menu: Change Player Model added" );
+}
+
 extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const unsigned char *qb )
 {
 	if( !qb ) return NULL;
@@ -947,7 +1114,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	std::vector<Modif> m;
 	if( !s_pistes.empty()) patch_liste( qb, j, m );
 	patch_soundtrack( qb, j, m );
-	patch_change_skater( qb, j, m );
+	patch_player_model( qb, j, m );
 	if( m.empty()) return NULL;
 	return applique( qb, j.back().pos + 1, m );
 }

@@ -679,6 +679,10 @@ SCFunction CFunctionLookupTable[]=
 	{"SetPlayerFacePoints",		CFuncs::ScriptSetPlayerFacePoints},
 	{"PlayerFaceIsValid",		CFuncs::ScriptPlayerFaceIsValid},
 	{"SelectCurrentSkater",		CFuncs::ScriptSelectCurrentSkater},
+#ifdef THUG_DESKTOP
+	{"DesktopSelectSkater",		CFuncs::ScriptDesktopSelectSkater},
+	{"DesktopAddModelItems",	CFuncs::ScriptDesktopAddModelItems},
+#endif
 	{"SetParticleSysVisibility",CFuncs::ScriptSetParticleSysVisibility},
 	{"TogglePlayerNames",		CFuncs::ScriptTogglePlayerNames},
 	{"SetCurrentGameType",		CFuncs::ScriptSetCurrentGameType},
