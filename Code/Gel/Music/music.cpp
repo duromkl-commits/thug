@@ -40,6 +40,9 @@
 #include <gel/scripting/checksum.h>
 
 #include <gel/soundfx/soundfx.h>
+#ifdef THUG_DESKTOP
+extern "C" void vita_log_printf( const char *sys, const char *fmt, ... );
+#endif
 #include <gel/music/music.h>
 #include <gel/components/streamcomponent.h>
 
@@ -225,6 +228,14 @@ void StopMusic( void )
 	// so resetting the counter keeps a new song from playing right away.
 	sCounter = 1;
 	gMusicStreamType = MUSIC_STREAM_TYPE_NONE;		// In case we were in this mode
+#ifdef THUG_DESKTOP
+	{
+		// Who stopped the song: a track that ends early shows up here.
+		Script::CScript *p_script = Script::GetCurrentScript();
+		vita_log_printf( "PCM", "music stopped (script %s)",
+		                 p_script ? Script::FindChecksumName( p_script->mScriptChecksum ) : "none" );
+	}
+#endif
 	PCMAudio_StopMusic( true );
 }
 

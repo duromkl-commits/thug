@@ -215,6 +215,12 @@ static const SEntree *trouve( uint32 checksum )
 // Lit l'en-tête RIFF du morceau et positionne la lecture sur ses données.
 // Rend false si l'en-tête n'est pas celui attendu — auquel cas on ne joue
 // rien plutôt que d'interpréter des octets au hasard comme du son.
+// Blocks read from disk but not yet played: a pause (Sound Options pauses
+// the music whenever Skip Track loses focus) used to drop the rest of the
+// ~1.2 s read, so the song jumped ahead on every pause/unpause.
+static int s_bloc = 0, s_blocs = 0;
+static unsigned s_generation = 0;
+
 static bool prepare_morceau( const SEntree *p_e )
 {
 	unsigned char entete[64];
@@ -254,6 +260,8 @@ static bool prepare_morceau( const SEntree *p_e )
 	s_pos_debut  = p_e->offset + 48;
 	s_pos_taille = taille_data;
 	s_pos_lue    = 0;
+	s_bloc = s_blocs = 0;
+	++s_generation;
 	return true;
 }
 
@@ -282,6 +290,7 @@ static int thread_audio( SceSize, void * )
 			const int n = cm_read( s_sortie, GRAIN );
 			if( n <= 0 )
 			{
+				VLOG( "PCM", "custom song ended (%d)", n );
 				cm_close();
 				s_perso = false;
 				s_joue = false;
@@ -297,9 +306,17 @@ static int thread_audio( SceSize, void * )
 		}
 #endif
 
+		if( s_bloc < s_blocs )
+		{
+			// Resume the blocks left over from before the pause.
+			sceKernelUnlockMutex( s_mutex, 1 );
+			goto decode;
+		}
+		{
 		uint32 reste = ( s_pos_taille > s_pos_lue ) ? ( s_pos_taille - s_pos_lue ) : 0;
 		if( reste == 0 )
 		{
+			VLOG( "PCM", "song ended" );
 			s_joue = false;
 			s_fini = true;
 			sceKernelUnlockMutex( s_mutex, 1 );
@@ -321,21 +338,27 @@ static int thread_audio( SceSize, void * )
 		const int lu = sceIoRead( s_wad, s_lecture, a_lire );
 		if( lu <= 0 )
 		{
+			VLOG( "PCM", "song read failed (%d), treated as ended", lu );
 			s_joue = false;
 			s_fini = true;
 			sceKernelUnlockMutex( s_mutex, 1 );
 			continue;
 		}
 		s_pos_lue += lu;
+		s_blocs = lu / ADPCM_BLOC;
+		s_bloc = 0;
+		}
 
 		sceKernelUnlockMutex( s_mutex, 1 );
+decode:
 
 		// Décodage puis sortie, PAR GRAIN. sceAudioOutOutput bloque : le
 		// verrou est relâché avant, sinon le thread principal resterait
 		// bloqué sur Stop pendant toute la durée d'un tampon.
-		const int blocs = lu / ADPCM_BLOC;
-		int bloc = 0;
-		while(( bloc < blocs ) && s_thread_tourne )
+		const unsigned gen = s_generation;
+		const int blocs = s_blocs;
+		int bloc = s_bloc;
+		while(( bloc < blocs ) && s_thread_tourne && ( gen == s_generation ))
 		{
 			const int blocs_grain = GRAIN / ADPCM_ECH_PAR_BLOC;
 			int n = blocs_grain;
@@ -361,6 +384,8 @@ static int thread_audio( SceSize, void * )
 
 			sceAudioOutOutput( s_port, s_sortie );
 			bloc += n;
+			if( gen == s_generation )
+				s_bloc = bloc;
 
 			if( s_pause || !s_joue || s_perso )
 				break;

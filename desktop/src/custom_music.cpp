@@ -1102,6 +1102,56 @@ static void patch_player_model( const unsigned char *qb, const std::vector<Jeton
 	VLOG( "MUS", "edit skater menu: Change Player Model added" );
 }
 
+// Story wardrobe (desktop, Marcus's call): chapters no longer dress the
+// skater (Birdhouse / Peralta team shirts, Russian coat; change_clothes in
+// chapter_info.qb), and a pro picked with Change Player Model keeps their
+// own board rather than getting Muska's deck (change_deck_to_muska).
+static const char *s_debut_habits = "return\n";
+static const char *s_debut_planche =
+	"select_skater_get_current_skater_name\n"
+	"if NOT ( <current_skater> = custom )\n"
+	"return\n"
+	"endif\n";
+
+// Puts text at the start of script 'nom', after its header line.
+static void patch_debut( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
+                         const char *nom, const char *texte )
+{
+	const uint32_t n = crc( nom );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+		{
+			size_t a = k + 2;
+			while( a < j.size() && qb[j[a].pos] != T_EOL && qb[j[a].pos] != T_EOLNUM ) ++a;
+			if( a >= j.size()) return;
+			Ecrit w; compile_q( w, texte );
+			m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
+			VLOG( "MUS", "%s: patched", nom );
+			return;
+		}
+}
+
+// Removes the bare calls to 'appel' (a line holding just that name) from
+// script 'nom'.
+static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
+                          const char *nom, const char *appel )
+{
+	const uint32_t n = crc( nom ), a = crc( appel );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+		{
+			for( size_t b = k + 2; b + 1 < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+				if( est_nom( qb, j[b], a )
+				 && ( qb[j[b - 1].pos] == T_EOL || qb[j[b - 1].pos] == T_EOLNUM )
+				 && ( qb[j[b + 1].pos] == T_EOL || qb[j[b + 1].pos] == T_EOLNUM ))
+				{
+					m.push_back( Modif{ j[b].pos, j[b].taille, std::vector<unsigned char>() } );
+					VLOG( "MUS", "%s: %s removed", nom, appel );
+				}
+			return;
+		}
+}
+
 extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const unsigned char *qb )
 {
 	if( !qb ) return NULL;
@@ -1116,6 +1166,14 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	if( !s_pistes.empty()) patch_liste( qb, j, m );
 	patch_soundtrack( qb, j, m );
 	patch_player_model( qb, j, m );
+	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
+	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
+	// Music keeps going, where it was, through level loads and run starts
+	// (desktop, Marcus's call): no stop and pause before a level loads, no
+	// skip to the next song when a run starts.
+	patch_retire( qb, j, m, "cleanup_before_loading_level", "StopMusic" );
+	patch_retire( qb, j, m, "cleanup_before_loading_level", "PauseMusic" );
+	patch_retire( qb, j, m, "GameFlow_StartRun", "SkipMusicTrack" );
 	if( m.empty()) return NULL;
 	return applique( qb, j.back().pos + 1, m );
 }
