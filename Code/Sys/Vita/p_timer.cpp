@@ -16,6 +16,10 @@
 
 #include <psp2/kernel/processmgr.h>
 
+#ifdef THUG_DESKTOP
+extern "C" double desktop_frame_step( void );	// desktop/src/shim_gl.cpp
+#endif
+
 namespace Tmr
 {
 
@@ -131,6 +135,15 @@ void	OncePerRender()
 	SceUInt64 t	= now_us();
 	SceUInt64 dt = t - s_last_frame_us;
 	s_last_frame_us = t;
+#ifdef THUG_DESKTOP
+	// The desktop knows how long the last frame was actually on screen
+	// (shim_gl.cpp, cadence_mesure): whole refreshes, without the CPU
+	// timing noise. Long frames (loads) keep the measured time.
+	{
+		if( dt < 200000 )
+			dt = (SceUInt64)( desktop_frame_step() * 1000000.0 + 0.5 );
+	}
+#endif
 
 	float diff = (float)dt / 16666.667f;
 	// Issue #17 : toute image longue est tracee (hors chargements, > 1 s).

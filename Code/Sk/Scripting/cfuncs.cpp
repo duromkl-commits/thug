@@ -70,6 +70,9 @@
 #include <gfx/NxModel.h>
 #include <gfx/NxTexMan.h>
 #include <gfx/NxLoadScreen.h>
+#ifdef THUG_DESKTOP
+#include <gfx/2D/ScreenElemMan.h>
+#endif
 #include <gfx/NxLightMan.h>
 #include <gfx/NxViewMan.h>
 #include <gfx/NxMiscFX.h>
@@ -478,6 +481,15 @@ static	void	s_second_controller_check_code( const Tsk::Task< int > &task )
 			Script::RunScript( "enable_system_link_option" );
 		}
 		s_last_link_test = Tmr::GetTime();
+	}
+#endif
+#ifdef THUG_DESKTOP
+	// No network play on desktop: drop the Xbox main menu's System Link item
+	// (its enable/disable scripts already check that it exists).
+	{
+		Front::CScreenElementManager* p_man = Front::CScreenElementManager::Instance();
+		if( p_man && p_man->GetElement( CRCD( 0x0fd408e1, "mm_multi_play" )))
+			p_man->DestroyElement( CRCD( 0x0fd408e1, "mm_multi_play" ));
 	}
 #endif
 }
@@ -3083,6 +3095,11 @@ bool ScriptTrackEnabled(Script::CStruct *pParams, Script::CScript *pScript)
 	
 	Dbg_MsgAssert( track_num>=0 && track_num < Pcm::GetNumTracks(Pcm::TRACKLIST_PERM),( "\n%s\nBad track number of %d sent to TrackEnabled, num tracks = %d", pScript->GetScriptInfo(), track_num, Pcm::GetNumTracks(Pcm::TRACKLIST_PERM) ));
 	
+#ifdef THUG_DESKTOP
+	// Up to 512 tracks on the desktop: the two 64-bit words below only cover
+	// 128 (and shifting by 64 or more reads some other track's bit).
+	return !Pcm::GetTrackForbiddenStatus(track_num, Pcm::TRACKLIST_PERM);
+#endif
 	uint64 list1,list2;
     Pcm::GetPlaylist(&list1, &list2);
     
@@ -12918,6 +12935,13 @@ bool ScriptRotateVector( Script::CStruct* pParams, Script::CScript* pScript )
 // @script | IsPS2 | Returns true if the current hardware is PS2 (proview/devkit/regular).
 bool ScriptIsPS2( Script::CStruct* pParams, Script::CScript* pScript )
 {
+#ifdef THUG_DESKTOP
+	// PS2-only feature the desktop build plays with: R2 during a grind drops
+	// you off the rail (the Grind script only adds its GrindRelease trick when
+	// IsPS2 is true). Everywhere else (memory card, menus...) stays non-PS2.
+	if( pScript && pScript->mScriptChecksum == Script::GenerateCRC( "Grind" ))
+		return true;
+#endif
 	// lwss add
 #ifdef __PLAT_WN32__
 	return false;

@@ -362,6 +362,15 @@ void CWalkCameraComponent::Update()
 	GetObject()->GetMatrix()[Z][W] = 0.0f;
 	GetObject()->GetMatrix()[W].Set(0.0f, 0.0f, 0.0f, 1.0f);
 	
+#ifdef THUG_DESKTOP
+	if( mp_target_walk_component )
+	{
+		DesktopCameraWeight( mp_camera_component ? mp_camera_component->GetCamera() : NULL, mp_target->GetVel(), true,
+							 mp_target_walk_component->GetState() == CWalkComponent::WALKING_GROUND,
+							 false, instantly, camera_pos, GetObject()->GetMatrix());
+	}
+#endif
+
 	// Now do collision detection.
 	ApplyCameraCollisionDetection(
 		camera_pos,

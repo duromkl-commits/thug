@@ -848,6 +848,15 @@ void CSkaterCameraComponent::Update( void )
 	{
 		addShake( cam_pos, frame_matrix );
 	}
+
+#ifdef THUG_DESKTOP
+	if( mpSkater->IsLocalClient() && ( mMode < SKATERCAM_FIRST_REPLAY_MODE ))
+	{
+		DesktopCameraWeight( p_cam_comp->GetCamera(), mpSkater->GetVel(), false, false,
+							 mpSkaterStateComponent && mpSkaterStateComponent->GetFlag( IS_BAILING ),
+							 instantly, cam_pos, frame_matrix );
+	}
+#endif
 		
 	// Now do collision detection.
 	

@@ -2572,7 +2572,10 @@ static void rejouer_poses( void )
 	// nom, cumules sur 5 s. Dit QUI clignote, rejeu actif ou non.
 	if( !pause )
 	{
-		static const char *s_nom[32];
+		// Copies, not pointers: a geom's name dies with its model, and a
+		// model freed within the 5 s left a dangling pointer for snprintf
+		// (crash on the desktop build, front end, 2026-10-09).
+		static char s_nom[32][48];
 		static int s_trous[32];
 		static int s_nn = 0;
 		static SceUInt64 s_tt = 0;
@@ -2582,13 +2585,15 @@ static void rejouer_poses( void )
 			if( !nm )
 				continue;
 			int k = 0;
-			while(( k < s_nn ) && ( s_nom[k] != nm ))
+			while(( k < s_nn ) && strncmp( s_nom[k], nm, sizeof( s_nom[k] ) - 1 ))
 				++k;
 			if( k == s_nn )
 			{
 				if( s_nn == 32 )
 					continue;
-				s_nom[s_nn] = nm; s_trous[s_nn] = 0; ++s_nn;
+				strncpy( s_nom[s_nn], nm, sizeof( s_nom[s_nn] ) - 1 );
+				s_nom[s_nn][sizeof( s_nom[s_nn] ) - 1] = 0;
+				s_trous[s_nn] = 0; ++s_nn;
 			}
 			++s_trous[k];
 		}

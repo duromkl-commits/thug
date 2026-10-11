@@ -20,6 +20,16 @@
 #include <gel/scripting/scriptcache.h>
 #include <core/crc.h>
 
+// Desktop: room for the custom soundtrack's playlist entries (up to ~440
+// songs, one struct + four fields each; desktop/src/custom_music.cpp).
+#ifdef THUG_DESKTOP
+#define DESKTOP_EXTRA_STRUCTS		1000
+#define DESKTOP_EXTRA_COMPONENTS	4000
+#else
+#define DESKTOP_EXTRA_STRUCTS		0
+#define DESKTOP_EXTRA_COMPONENTS	0
+#endif
+
 namespace Script
 {
 
@@ -51,14 +61,14 @@ void AllocatePools()
 	Mem::PushMemProfile("CComponent and Reserve CComponent");
 	
 	// 16 bytes each
-	CComponent::SCreatePool(84000, "CComponent");  // Mick:  increased by 2000 (82000 to 84000) to account for gap lists
+	CComponent::SCreatePool(84000 + DESKTOP_EXTRA_COMPONENTS, "CComponent");  // Mick:  increased by 2000 (82000 to 84000) to account for gap lists
 
 	Mem::PopMemProfile();
 	
 
 	Mem::PushMemProfile("CStruct");
 	// 4 bytes each  (Actually 8, or 12 with asserts)
-	CStruct::SCreatePool(18800, "CStruct");
+	CStruct::SCreatePool(18800 + DESKTOP_EXTRA_STRUCTS, "CStruct");
 	Mem::PopMemProfile();
 	
 	// 12 bytes each  (Actually 16)

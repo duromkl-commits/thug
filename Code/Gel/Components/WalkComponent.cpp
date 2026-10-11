@@ -113,6 +113,10 @@ inline const Mth::Vector& CWalkComponent::GetEffectivePos()
 CWalkComponent::CWalkComponent() : CBaseComponent()
 {
 	SetType( CRC_WALK );
+#ifdef THUG_DESKTOP
+	m_lean_valid = false;
+	m_lean_forward = m_lean_side = m_lean_side_rate = m_lean_forward_rate = 0.0f;
+#endif
 	
 	mp_collision_cache = Nx::CCollCacheManager::sCreateCollCache();
 	
@@ -702,6 +706,9 @@ void CWalkComponent::ReadyWalkState ( bool to_ground_state )
 	m_critical_point_offset.Set();
 	
 	m_display_offset = 0.0f;
+#ifdef THUG_DESKTOP
+	m_lean_valid = false;
+#endif
 }
 
 /******************************************************************/
@@ -2947,6 +2954,87 @@ void CWalkComponent::extract_state_from_object (   )
 /*                                                                */
 /******************************************************************/
 	
+#ifdef THUG_DESKTOP
+extern "C" float desktop_walk_lean( void );
+
+// Procedural lean on foot, like Tony Hawk's American Wasteland. Driven by
+// the stick, not by the resulting velocity, so it answers the thumb at once:
+// pushing tips the body forward (harder while still speeding up), steering
+// banks it toward the stick, letting go while moving rocks it back briefly.
+// Each angle follows its target on a stiff spring (settles in about a
+// quarter second with a slight overshoot), so it snaps in and snaps back
+// instead of drifting. Only the drawn matrix tilts, about the feet; the
+// physics matrix, the camera and collision keep the upright one.
+void CWalkComponent::desktop_lean ( Mth::Matrix& display )
+{
+	const float strength = desktop_walk_lean();
+	float dt = m_frame_length;
+	const bool on_foot = (m_state == WALKING_GROUND || m_state == WALKING_AIR);
+	if (strength <= 0.0f || !on_foot || dt <= 0.0f)
+	{
+		m_lean_valid = false;
+		m_lean_forward = m_lean_side = m_lean_side_rate = m_lean_forward_rate = 0.0f;
+		return;
+	}
+	if (!m_lean_valid)
+	{
+		m_lean_forward = m_lean_side = m_lean_side_rate = m_lean_forward_rate = 0.0f;
+		m_lean_valid = true;
+	}
+
+	const float run = get_run_speed();
+	const float speed_ratio = run > 0.0f ? Mth::Clamp(m_horizontal_vel.Length() / run, 0.0f, 1.2f) : 0.0f;
+	const float stick = Mth::Clamp(m_control_magnitude, 0.0f, 1.0f);
+
+	// Targets, in degrees.
+	float forward = 0.0f, side = 0.0f;
+	if (m_state == WALKING_GROUND)
+	{
+		if (stick > 0.0f)
+		{
+			// Lean with how hard the stick is pushed; extra while the body
+			// hasn't caught up with it yet.
+			forward = 4.0f * stick + 5.0f * Mth::Clamp(stick - speed_ratio, 0.0f, 1.0f);
+			// Bank toward where the stick points, relative to the way the
+			// body faces: full sideways at full run is the most.
+			const float steer = Mth::Clamp(Mth::DotProduct(m_control_direction, display[X]), -1.0f, 1.0f);
+			side = 9.0f * steer * stick * (0.35f + 0.65f * Mth::Clamp(speed_ratio, 0.0f, 1.0f));
+		}
+		else
+		{
+			// Let go while moving: a short rock back as the feet plant.
+			forward = -3.0f * Mth::Clamp(speed_ratio, 0.0f, 1.0f);
+		}
+	}
+	forward = Mth::Clamp(forward * strength, -8.0f, 18.0f);
+	side = Mth::Clamp(side * strength, -18.0f, 18.0f);
+
+	// Springs: angular frequency 16/s, damping 0.65 of critical.
+	const float w = 16.0f, z = 0.65f;
+	if (dt > 0.1f) dt = 0.1f;
+	const int steps = (int)(dt / 0.0084f) + 1;
+	const float h = dt / steps;
+	for (int i = 0; i < steps; ++i)
+	{
+		m_lean_forward_rate += (w * w * (forward - m_lean_forward) - 2.0f * z * w * m_lean_forward_rate) * h;
+		m_lean_forward += m_lean_forward_rate * h;
+		m_lean_side_rate += (w * w * (side - m_lean_side) - 2.0f * z * w * m_lean_side_rate) * h;
+		m_lean_side += m_lean_side_rate * h;
+	}
+
+	if (fabsf(m_lean_forward) < 0.01f && fabsf(m_lean_side) < 0.01f) return;
+	Mth::Vector up = display[Y]
+		+ tanf(Mth::DegToRad(m_lean_forward)) * display[Z]
+		+ tanf(Mth::DegToRad(m_lean_side)) * display[X];
+	up.Normalize();
+	Mth::Vector x = Mth::CrossProduct(up, display[Z]);
+	x.Normalize();
+	display[X] = x;
+	display[Y] = up;
+	display[Z] = Mth::CrossProduct(x, up);
+}
+#endif
+
 void CWalkComponent::copy_state_into_object (   )
 {
 	// build the object's matrix based on our facing
@@ -2965,7 +3053,15 @@ void CWalkComponent::copy_state_into_object (   )
 	DUMP_WPOSITION
 	GetObject()->SetPos(m_pos);
 	GetObject()->SetMatrix(matrix);
+#ifdef THUG_DESKTOP
+	{
+		Mth::Matrix display = matrix;
+		desktop_lean(display);
+		GetObject()->SetDisplayMatrix(display);
+	}
+#else
 	GetObject()->SetDisplayMatrix(matrix);
+#endif
 	
 	// construct the object's velocity
 	switch (m_state)

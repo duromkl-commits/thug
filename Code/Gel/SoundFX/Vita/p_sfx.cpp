@@ -382,6 +382,39 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 			++pos;
 	}
 
+#ifdef THUG_DESKTOP
+	// The loop flag as the Xbox reads it: CRiffChunk::Open (Xbox/p_sfx.cpp:373)
+	// steps chunk to chunk WITHOUT the RIFF word padding. After an odd-sized
+	// chunk it is lost and never finds 'smpl', so on the Xbox those sounds play
+	// once. Reading the padding found their 'smpl' and looped them forever
+	// (FallWater repeating after a fall into water).
+	{
+		bool boucle_xbox = false;
+		int p = 12;
+		while( p + 8 <= taille )
+		{
+			unsigned int t;
+			memcpy( &t, p_brut + p + 4, 4 );
+			if( memcmp( p_brut + p, "smpl", 4 ) == 0 )
+			{
+				if( p + 8 + 32 <= taille )
+				{
+					unsigned int n;
+					memcpy( &n, p_brut + p + 8 + 28, 4 );
+					boucle_xbox = ( n > 0 );
+				}
+				break;
+			}
+			if( t > (unsigned int)taille )
+				break;
+			p += 8 + (int)t;
+		}
+		if( boucle != boucle_xbox )
+			VLOG( "SFX", "%s : loop %d -> %d (Xbox chunk walk)", sfxName, (int)boucle, (int)boucle_xbox );
+		boucle = boucle_xbox;
+	}
+#endif
+
 	if(( off_fmt < 0 ) || ( off_data < 0 ))
 	{
 		VLOG( "SFX", "%s : bloc fmt ou data introuvable", sfxName );

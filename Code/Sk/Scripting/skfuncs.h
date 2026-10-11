@@ -148,6 +148,10 @@ bool ScriptSetPlayerFaceOverlayTexture(Script::CStruct *pParams, Script::CScript
 bool ScriptClearPlayerFaceTexture(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptPlayerFaceIsValid(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScript);
+#ifdef THUG_DESKTOP
+bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScript);
+#endif
 bool ScriptCareerStartLevel(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptCareerLevelIs(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptGetRecordText(Script::CStruct *pParams, Script::CScript *pScript);

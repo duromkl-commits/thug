@@ -89,7 +89,7 @@ namespace Nx
 {
 
 CVitaSprite::CVitaSprite( CWindow2D *p_window )
-	: CSprite( p_window )
+	: CSprite( p_window ), m_seq( 0 ), m_seq_pri( 0.0f ), m_seq_hidden( true )
 {
 	NxVita::SpriteRegister( this );
 }
@@ -97,6 +97,30 @@ CVitaSprite::CVitaSprite( CWindow2D *p_window )
 CVitaSprite::~CVitaSprite()
 {
 	NxVita::SpriteUnregister( this );
+}
+
+// L'ordre d'inscription XBox : sSprite nait cache, priorite 0, et rejoint la
+// liste quand il devient visible ou change de priorite en etant visible.
+static unsigned s_seq_next = 0;
+
+void CVitaSprite::plat_update_hidden()
+{
+	if( m_hidden != m_seq_hidden )
+	{
+		m_seq_hidden = m_hidden;
+		if( !m_hidden )
+			m_seq = ++s_seq_next;
+	}
+}
+
+void CVitaSprite::plat_update_priority()
+{
+	if( m_priority != m_seq_pri )
+	{
+		m_seq_pri = m_priority;
+		if( !m_seq_hidden )
+			m_seq = ++s_seq_next;
+	}
 }
 
 } // namespace Nx
@@ -154,7 +178,13 @@ void RenderSprites2D( float bas, float haut )
 	{
 		Nx::CVitaSprite *p = sp_sprites[i];
 		int j = i - 1;
-		while(( j >= 0 ) && ( sp_sprites[j]->GetPri() > p->GetPri()))
+		// A priorite egale, la liste XBox (NX/sprite.cpp:177) insere un
+		// sprite DEVANT ses egaux : le dernier inscrit est dessine en premier,
+		// donc dessous. Le coche des cases (cree avant la case, meme
+		// z_priority) passait sinon sous la case.
+		while(( j >= 0 ) && (( sp_sprites[j]->GetPri() > p->GetPri())
+		                     || (( sp_sprites[j]->GetPri() == p->GetPri())
+		                         && ( sp_sprites[j]->Seq() < p->Seq()))))
 		{
 			sp_sprites[j + 1] = sp_sprites[j];
 			--j;

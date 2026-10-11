@@ -151,6 +151,10 @@ static int vita_watchdog_thread(SceSize args, void *argp)
 
 void vita_log_start_watchdog(void)
 {
+#ifdef THUG_DESKTOP
+    /* A PC debugger beats a provoked crash dump. */
+    return;
+#endif
     SceUID th = sceKernelCreateThread("thug_watchdog", vita_watchdog_thread,
                                       0x10000100, 0x4000, 0, 0, NULL);
     if (th >= 0)
@@ -166,12 +170,16 @@ void vita_log_shutdown(void)
     }
 }
 
+#ifdef THUG_DESKTOP
+void desktop_io_flush(SceUID fd);
+#endif
+
 #ifdef THUG_RELEASE
 /* Build public : seules les lignes utiles a un rapport de bug (demarrage,
  * erreurs "!!", plantages) ; le reste n'est meme pas formate. */
 static int vita_log_retenu(const char *sys, const char *fmt)
 {
-    static const char *garder[] = { "SYS", "BOOT", "GFX", "WDOG", "ERR", "ASSERT", "CRASH", "LVL", NULL };
+    static const char *garder[] = { "SYS", "BOOT", "GFX", "WDOG", "ERR", "ASSERT", "CRASH", "LVL", "DSK", "PCM", "LOAD", NULL };
     if (fmt && fmt[0] == '!' && fmt[1] == '!')
         return 1;
     for (int i = 0; garder[i]; ++i)
@@ -216,6 +224,16 @@ void vita_log_printf(const char *sys, const char *fmt, ...)
      * vide a la fermeture (vita_log_close) et des qu'il est plein ; en cas de
      * plantage on perd au pire les dernieres lignes, ce qui est le compromis
      * habituel -- et le chien de garde, lui, force un vidage. */
+#ifdef THUG_DESKTOP
+    /* Desktop: straight to the file, so a hung or killed game still leaves
+     * its log (a PC write is cheap; the Vita's SD card was not). */
+    if (s_fd >= 0)
+    {
+        sceIoWrite(s_fd, line, n);
+        desktop_io_flush(s_fd);
+    }
+    else
+#endif
     if (s_fd >= 0)
     {
         if (s_buf_used + n > (int)sizeof(s_buf))
@@ -233,6 +251,11 @@ void vita_log_printf(const char *sys, const char *fmt, ...)
             sceIoWrite(s_fd, line, n);
         }
     }
+
+#ifdef THUG_DESKTOP
+    /* Desktop: the console window shows the log live. */
+    fwrite(line, 1, n, stdout);
+#endif
 
     if (s_ring_mtx >= 0)
     {

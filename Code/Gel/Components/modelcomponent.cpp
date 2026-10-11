@@ -20,6 +20,7 @@
 #include <gel/components/animationcomponent.h>
 #include <gel/components/skeletoncomponent.h>
 #include <gel/components/suspendcomponent.h>
+#include <gel/components/lockobjcomponent.h>
 
 #include <gel/net/server/netserv.h>
 #include <gel/net/client/netclnt.h>
@@ -753,6 +754,15 @@ void CModelComponent::Update()
 #ifdef __PLAT_VITA__
 		// Issue #18 : cout reel de CModel::Render dans la phase logique.
 		const SceUInt64 t0 = sceKernelGetProcessTimeWide();
+#endif
+#ifdef __PLAT_VITA__
+		// A locked object (trick props: guitar, pizza box, broken board) is
+		// drawn again by the locked-object manager once its parent has moved
+		// (lockobjcomponent.cpp, LockToObject). On Xbox the second Render just
+		// replaces the first transform; here each Render draws, so the prop
+		// showed twice. Leave the drawing to the lock.
+		Obj::CLockObjComponent *p_verrou = GetLockObjComponentFromObject( GetObject());
+		if( !( p_verrou && p_verrou->VitaDessineLeModele()))
 #endif
 		mp_model->Render( &theDisplayMatrix, !should_animate, pSkeleton );
 #ifdef __PLAT_VITA__

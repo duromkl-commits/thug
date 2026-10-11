@@ -38,6 +38,22 @@
 
 #include <sk/scripting/cfuncs.h>
 #include <sk/scripting/skfuncs.h>
+#ifdef THUG_DESKTOP
+#include <ctype.h>
+extern "C" float desktop_goal_score_scale( void );
+extern "C" float desktop_goal_time_scale( void );
+
+// Goals built around stops or a route (tours, H.O.R.S.E., per-spot score
+// clusters such as Muska's moving SUV) keep their figures: their limits and
+// targets are set per stop.
+static bool desktop_unscaled_goal( Script::CStruct *p_params )
+{
+	Script::CArray *p_array;
+	return p_params->GetArray( CRCD(0x160b3220,"tour_spots"), &p_array, Script::NO_ASSERT )
+		|| p_params->GetArray( CRCD(0x92c6e839,"horse_spots"), &p_array, Script::NO_ASSERT )
+		|| p_params->GetArray( CRCD(0x191f66e9,"kill_clusters"), &p_array, Script::NO_ASSERT );
+}
+#endif
 
 
 namespace Front
@@ -466,6 +482,15 @@ void CGoal::SetTimer()
 */
 	// convert to milliseconds
 	m_timeLeft *= 1000;
+#ifdef THUG_DESKTOP
+	// Desktop difficulty / prestige: shorter (or longer) limits, never under 10 s.
+	if ( !desktop_unscaled_goal( mp_params ) && !IsMinigame() && !IsCompetition() && !IsNetGoal() )
+	{
+		float scaled = (float)m_timeLeft * desktop_goal_time_scale();
+		if ( scaled < 10000.0f && m_timeLeft > 10000 ) scaled = 10000.0f;
+		m_timeLeft = (Tmr::Time)( ( (int)( scaled / 1000.0f + 0.5f ) ) * 1000 );
+	}
+#endif
     
 	// bump up timer so clock starts with expected amount of time left
 	m_timeLeft += 20;
@@ -511,10 +536,123 @@ void CGoal::AddTime( int time )
 /*                                                                */
 /******************************************************************/
 	
+#ifdef THUG_DESKTOP
+// Desktop difficulty (thug_desktop.ini [difficulty], times the prestige
+// level): score targets go up, time limits down. The goal's "score" and
+// the numbers in its texts ("Get a High Score: 15,000 Points") are rewritten
+// from the originals each time the goal starts, so a changed setting or a
+// new prestige level applies from the next attempt.
+static int desktop_nice_number( float v )
+{
+	// Uncapped prestige: never past what a score counter holds.
+	if ( v > 2000000000.0f )
+		return 2000000000;
+	const int step = ( v >= 10000.0f ) ? 1000 : ( v >= 1000.0f ) ? 100 : 10;
+	return ( (int)( v / step + 0.5f ) ) * step;
+}
+
+static void desktop_format_commas( int v, char *out, int size )
+{
+	char plain[16];
+	snprintf( plain, sizeof( plain ), "%d", v );
+	const int n = (int)strlen( plain );
+	int o = 0;
+	for ( int i = 0; i < n && o < size - 1; i++ )
+	{
+		if ( i > 0 && ( n - i ) % 3 == 0 && o < size - 1 )
+			out[o++] = ',';
+		out[o++] = plain[i];
+	}
+	out[o] = 0;
+}
+
+// Replaces every "15,000" / "15000" in text with the new figure.
+static bool desktop_replace_number( char *out, int size, const char *text, int from, int to )
+{
+	char a[16], b[16], c[16];
+	desktop_format_commas( from, a, sizeof( a ) );
+	snprintf( b, sizeof( b ), "%d", from );
+	desktop_format_commas( to, c, sizeof( c ) );
+	bool changed = false;
+	int o = 0;
+	for ( const char *p = text; *p && o < size - 1; )
+	{
+		const char *hit = NULL; int len = 0;
+		const bool boundary = ( p == text ) || !isdigit( (unsigned char)p[-1] );
+		if ( boundary && !strncmp( p, a, strlen( a ) ) && !isdigit( (unsigned char)p[strlen( a )] ) ) { hit = a; len = strlen( a ); }
+		else if ( boundary && !strncmp( p, b, strlen( b ) ) && !isdigit( (unsigned char)p[strlen( b )] ) && p[strlen( b )] != ',' ) { hit = b; len = strlen( b ); }
+		if ( hit )
+		{
+			for ( const char *q = c; *q && o < size - 1; q++ ) out[o++] = *q;
+			p += len;
+			changed = true;
+		}
+		else
+			out[o++] = *p++;
+	}
+	out[o] = 0;
+	return changed;
+}
+
+static void desktop_scale_goal( Script::CStruct *p_params, bool skip )
+{
+	const uint32 base_score_name = CRCD(0xcd66c8ae,"score") ^ 0x5eed0001;
+	int base_score = 0;
+	if ( !p_params->GetInteger( base_score_name, &base_score, Script::NO_ASSERT ) )
+	{
+		// First time: only real point targets (counters like "score = 25" are left alone).
+		if ( skip || !p_params->GetInteger( CRCD(0xcd66c8ae,"score"), &base_score, Script::NO_ASSERT ) || base_score < 1000 )
+			return;
+		p_params->AddInteger( base_score_name, base_score );
+	}
+	const int score = desktop_nice_number( base_score * desktop_goal_score_scale() );
+	p_params->AddInteger( CRCD(0xcd66c8ae,"score"), score );
+
+	// Texts: rewritten from their originals, kept in a "desktop_texts"
+	// substructure the first time.
+	const uint32 originals_name = 0x5eed0002;
+	Script::CStruct *p_originals = NULL;
+	p_params->GetStructure( originals_name, &p_originals, Script::NO_ASSERT );
+	Script::CStruct *p_new_originals = new Script::CStruct;
+	if ( p_originals )
+		p_new_originals->AppendStructure( p_originals );
+
+	Script::CStruct *p_flat = new Script::CStruct;
+	p_params->ExpandInto( p_flat );
+	Script::CStruct *p_changes = new Script::CStruct;
+	for ( Script::CComponent *p_comp = p_flat->GetNextComponent(); p_comp; p_comp = p_flat->GetNextComponent( p_comp ) )
+	{
+		if ( !p_comp->mNameChecksum ) continue;
+		if ( p_comp->mType != ESYMBOLTYPE_STRING && p_comp->mType != ESYMBOLTYPE_LOCALSTRING ) continue;
+		const char *text = ( p_comp->mType == ESYMBOLTYPE_STRING ) ? p_comp->mpString : p_comp->mpLocalString;
+		if ( !text ) continue;
+		const char *original = NULL;
+		p_new_originals->GetText( p_comp->mNameChecksum, &original );
+		char out[512];
+		if ( !desktop_replace_number( out, sizeof( out ), original ? original : text, base_score, score ) && !original )
+			continue;
+		if ( !original )
+			p_new_originals->AddString( p_comp->mNameChecksum, text );
+		if ( p_comp->mType == ESYMBOLTYPE_LOCALSTRING )
+			p_changes->AddLocalString( p_comp->mNameChecksum, out );
+		else
+			p_changes->AddString( p_comp->mNameChecksum, out );
+	}
+	delete p_flat;
+	p_params->AppendStructure( p_changes );
+	p_params->AddStructure( originals_name, p_new_originals );
+	delete p_changes;
+	delete p_new_originals;
+}
+#endif
+
 bool CGoal::Activate()
 {
     if ( !IsActive() )
 	{
+#ifdef THUG_DESKTOP
+		desktop_scale_goal( mp_params, desktop_unscaled_goal( mp_params ) || IsMinigame() || IsCompetition() || IsNetGoal() );
+#endif
 		Mem::Manager::sHandle().PushContext(Mem::Manager::sHandle().BottomUpHeap());
 		// Warning! Make sure there are no 'return's between the above pushcontext and the 
 		// popcontext below ...

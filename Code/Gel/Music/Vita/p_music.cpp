@@ -41,6 +41,7 @@
 #include <gel/music/Vita/p_music.h>
 #include <core/crc.h>
 #include <core/Vita/adpcm.h>
+#include <gel/soundfx/soundfx.h>
 
 #include <psp2/audioout.h>
 #include <psp2/kernel/threadmgr.h>
@@ -49,8 +50,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+#include "custom_music.h"
+#endif
 
 SVitaStreamInfo	gCurrentStreamInfo[ NUM_STREAMS ];
 
@@ -106,6 +111,9 @@ static SceUID	 s_mutex			= -1;
 static volatile bool	s_joue			= false;
 static volatile bool	s_pause			= false;
 static volatile bool	s_fini			= true;
+// Desktop: the song playing is a file from custom_music (custom_music.cpp),
+// decoded straight to 48 kHz stereo instead of read from music_pcm.wad.
+static volatile bool	s_perso			= false;
 static volatile uint32	s_prechargee	= 0;
 static volatile bool	s_a_precharger	= false;
 
@@ -207,6 +215,12 @@ static const SEntree *trouve( uint32 checksum )
 // Lit l'en-tête RIFF du morceau et positionne la lecture sur ses données.
 // Rend false si l'en-tête n'est pas celui attendu — auquel cas on ne joue
 // rien plutôt que d'interpréter des octets au hasard comme du son.
+// Blocks read from disk but not yet played: a pause (Sound Options pauses
+// the music whenever Skip Track loses focus) used to drop the rest of the
+// ~1.2 s read, so the song jumped ahead on every pause/unpause.
+static int s_bloc = 0, s_blocs = 0;
+static unsigned s_generation = 0;
+
 static bool prepare_morceau( const SEntree *p_e )
 {
 	unsigned char entete[64];
@@ -246,6 +260,8 @@ static bool prepare_morceau( const SEntree *p_e )
 	s_pos_debut  = p_e->offset + 48;
 	s_pos_taille = taille_data;
 	s_pos_lue    = 0;
+	s_bloc = s_blocs = 0;
+	++s_generation;
 	return true;
 }
 
@@ -268,9 +284,39 @@ static int thread_audio( SceSize, void * )
 
 		sceKernelLockMutex( s_mutex, 1, NULL );
 
+#ifdef THUG_DESKTOP
+		if( s_perso )
+		{
+			const int n = cm_read( s_sortie, GRAIN );
+			if( n <= 0 )
+			{
+				VLOG( "PCM", "custom song ended (%d)", n );
+				cm_close();
+				s_perso = false;
+				s_joue = false;
+				s_fini = true;
+				sceKernelUnlockMutex( s_mutex, 1 );
+				continue;
+			}
+			if( n < GRAIN )
+				memset( s_sortie + n * AUDIO_CANAUX, 0, ( GRAIN - n ) * AUDIO_CANAUX * sizeof( short ));
+			sceKernelUnlockMutex( s_mutex, 1 );
+			sceAudioOutOutput( s_port, s_sortie );
+			continue;
+		}
+#endif
+
+		if( s_bloc < s_blocs )
+		{
+			// Resume the blocks left over from before the pause.
+			sceKernelUnlockMutex( s_mutex, 1 );
+			goto decode;
+		}
+		{
 		uint32 reste = ( s_pos_taille > s_pos_lue ) ? ( s_pos_taille - s_pos_lue ) : 0;
 		if( reste == 0 )
 		{
+			VLOG( "PCM", "song ended" );
 			s_joue = false;
 			s_fini = true;
 			sceKernelUnlockMutex( s_mutex, 1 );
@@ -292,21 +338,27 @@ static int thread_audio( SceSize, void * )
 		const int lu = sceIoRead( s_wad, s_lecture, a_lire );
 		if( lu <= 0 )
 		{
+			VLOG( "PCM", "song read failed (%d), treated as ended", lu );
 			s_joue = false;
 			s_fini = true;
 			sceKernelUnlockMutex( s_mutex, 1 );
 			continue;
 		}
 		s_pos_lue += lu;
+		s_blocs = lu / ADPCM_BLOC;
+		s_bloc = 0;
+		}
 
 		sceKernelUnlockMutex( s_mutex, 1 );
+decode:
 
 		// Décodage puis sortie, PAR GRAIN. sceAudioOutOutput bloque : le
 		// verrou est relâché avant, sinon le thread principal resterait
 		// bloqué sur Stop pendant toute la durée d'un tampon.
-		const int blocs = lu / ADPCM_BLOC;
-		int bloc = 0;
-		while(( bloc < blocs ) && s_thread_tourne )
+		const unsigned gen = s_generation;
+		const int blocs = s_blocs;
+		int bloc = s_bloc;
+		while(( bloc < blocs ) && s_thread_tourne && ( gen == s_generation ))
 		{
 			const int blocs_grain = GRAIN / ADPCM_ECH_PAR_BLOC;
 			int n = blocs_grain;
@@ -332,8 +384,10 @@ static int thread_audio( SceSize, void * )
 
 			sceAudioOutOutput( s_port, s_sortie );
 			bloc += n;
+			if( gen == s_generation )
+				s_bloc = bloc;
 
-			if( s_pause || !s_joue )
+			if( s_pause || !s_joue || s_perso )
 				break;
 		}
 	}
@@ -404,6 +458,10 @@ static bool demarre( uint32 checksum )
 	}
 
 	verrouille();
+#ifdef THUG_DESKTOP
+	cm_close();
+	s_perso = false;
+#endif
 	const bool ok = prepare_morceau( p_e );
 	if( ok )
 	{
@@ -416,6 +474,338 @@ static bool demarre( uint32 checksum )
 	return ok;
 }
 
+#ifdef THUG_DESKTOP
+// A custom_music song, by its place in the playlist ("...\\THUGCUSTOM007").
+static bool demarre_perso( int i )
+{
+	if( s_port < 0 || !s_sortie )
+		return false;
+	verrouille();
+	const bool ok = custom_music_open( i ) != 0;
+	s_perso = ok;
+	s_joue  = ok;
+	s_pause = false;
+	s_fini  = !ok;
+	deverrouille();
+	return ok;
+}
+#endif
+
+} // namespace anonyme
+
+// --- voice streams (pcm.wad) ------------------------------------------------
+//
+// Dialogue, cutscene and announcer voices. Same container as the music:
+// pcm.dat is { count, count x { checksum, offset, size } }, pcm.wad is a run
+// of 48-byte RIFF headers + Xbox ADPCM. Unlike the music, a voice can be mono
+// and use any sample rate, so each stream reads its own header and is
+// resampled to the 48 kHz port. One port and one thread per stream slot.
+
+namespace
+{
+
+static const char *CHEMIN_VOIX_DAT = "ux0:data/thug/Data/streams/pcm/pcm.dat";
+static const char *CHEMIN_VOIX_WAD = "ux0:data/thug/Data/streams/pcm/pcm.wad";
+
+#define VOIX_BLOCS_LECTURE	64		/* ADPCM blocks per read */
+#define VOIX_MAX_ECH		( VOIX_BLOCS_LECTURE * 64 + 1 )
+
+struct SFlux
+{
+	SceUID	wad;
+	int		port;
+	SceUID	thread;
+	SceUID	mutex;
+	int		num;
+
+	volatile bool	joue;		// slot busy (playing or preloaded)
+	volatile bool	ok;			// allowed to output (false while preloaded)
+	volatile bool	pause;
+
+	int		canaux, hz, bloc;
+	uint32	debut, taille, lue;
+
+	// Decoded source frames, stereo interleaved; [0] carries the previous
+	// read's last frame so interpolation runs across reads.
+	short	src[VOIX_MAX_ECH * 2];
+	int		src_n;
+	double	src_pos;
+
+	unsigned char lecture[VOIX_BLOCS_LECTURE * 72];
+	short	tmp[64 * 2];
+	short	sortie[GRAIN * 2];
+};
+
+static SEntree	*s_vindex		= NULL;
+static int		 s_vindex_nb	= 0;
+static SFlux	*s_flux			= NULL;
+static volatile bool s_voix_tourne = false;
+
+static const SEntree *vtrouve( uint32 checksum )
+{
+	int lo = 0, hi = s_vindex_nb - 1;
+	while( lo <= hi )
+	{
+		const int mid = ( lo + hi ) / 2;
+		if( s_vindex[mid].checksum == checksum )	return &s_vindex[mid];
+		if( s_vindex[mid].checksum <  checksum )	lo = mid + 1;
+		else										hi = mid - 1;
+	}
+	return NULL;
+}
+
+static bool vcharge_index( void )
+{
+	SceUID f = sceIoOpen( CHEMIN_VOIX_DAT, SCE_O_RDONLY, 0 );
+	if( f < 0 )
+	{
+		VLOG( "PCM", "voice index missing: %s", CHEMIN_VOIX_DAT );
+		return false;
+	}
+	uint32 nb = 0;
+	if( sceIoRead( f, &nb, 4 ) != 4 || nb == 0 || nb > 200000 )
+	{
+		sceIoClose( f );
+		return false;
+	}
+	s_vindex = (SEntree *)malloc( nb * sizeof( SEntree ));
+	const int voulu = (int)( nb * sizeof( SEntree ));
+	const int lu = s_vindex ? sceIoRead( f, s_vindex, voulu ) : 0;
+	sceIoClose( f );
+	if( lu != voulu )
+	{
+		free( s_vindex );
+		s_vindex = NULL;
+		return false;
+	}
+	s_vindex_nb = (int)nb;
+	qsort( s_vindex, s_vindex_nb, sizeof( SEntree ), cmp_entree );
+	return true;
+}
+
+// Called with the stream's mutex held.
+static bool vprepare( SFlux &F, const SEntree *p_e )
+{
+	unsigned char e[48];
+	if( sceIoLseek( F.wad, p_e->offset, SCE_SEEK_SET ) < 0 ||
+	    sceIoRead( F.wad, e, sizeof( e )) != (int)sizeof( e ))
+		return false;
+	if( memcmp( e + 12, "fmt ", 4 ) || memcmp( e + 40, "data", 4 ))
+		return false;
+	const int tag	= e[20] | ( e[21] << 8 );
+	const int can	= e[22] | ( e[23] << 8 );
+	const int hz	= e[24] | ( e[25] << 8 ) | ( e[26] << 16 ) | ( e[27] << 24 );
+	const int bloc	= e[32] | ( e[33] << 8 );
+	if( tag != 0x0069 || ( can != 1 && can != 2 ) || hz < 4000 || hz > 96000 ||
+	    bloc != 36 * can )
+	{
+		VLOG( "PCM", "voice %08x: unsupported format %04x %dch %dHz block %d",
+		      p_e->checksum, tag, can, hz, bloc );
+		return false;
+	}
+	uint32 taille;
+	memcpy( &taille, e + 44, 4 );
+	if( taille > p_e->taille - 48 )
+		taille = p_e->taille - 48;
+
+	F.canaux = can;
+	F.hz	 = hz;
+	F.bloc	 = bloc;
+	F.debut	 = p_e->offset + 48;
+	F.taille = taille;
+	F.lue	 = 0;
+	F.src[0] = F.src[1] = 0;
+	F.src_n	 = 1;
+	F.src_pos = 0.0;
+	return true;
+}
+
+// Decode the next blocks after the carried frame. Mutex held.
+static bool vremplit( SFlux &F )
+{
+	const uint32 reste = F.taille > F.lue ? F.taille - F.lue : 0;
+	int blocs = (int)( reste / F.bloc );
+	if( blocs > VOIX_BLOCS_LECTURE )
+		blocs = VOIX_BLOCS_LECTURE;
+	if( blocs <= 0 )
+		return false;
+	sceIoLseek( F.wad, F.debut + F.lue, SCE_SEEK_SET );
+	const int lu = sceIoRead( F.wad, F.lecture, blocs * F.bloc );
+	if( lu < F.bloc )
+		return false;
+	blocs = lu / F.bloc;
+	F.lue += blocs * F.bloc;
+
+	// Keep the last frame as the new [0].
+	F.src[0] = F.src[( F.src_n - 1 ) * 2];
+	F.src[1] = F.src[( F.src_n - 1 ) * 2 + 1];
+	F.src_pos -= ( F.src_n - 1 );
+	F.src_n = 1;
+	for( int b = 0; b < blocs; ++b )
+	{
+		VitaAdpcm::DecodeBloc( F.lecture + b * F.bloc, F.tmp, F.canaux, F.bloc );
+		for( int i = 0; i < 64; ++i )
+		{
+			short *d = F.src + F.src_n * 2;
+			d[0] = F.tmp[i * F.canaux];
+			d[1] = F.tmp[i * F.canaux + F.canaux - 1];
+			++F.src_n;
+		}
+	}
+	return true;
+}
+
+static int thread_voix( SceSize, void *p_arg )
+{
+	SFlux &F = s_flux[*(int *)p_arg];
+	while( s_voix_tourne )
+	{
+		sceKernelLockMutex( F.mutex, 1, NULL );
+		if( !F.joue || !F.ok || F.pause )
+		{
+			sceKernelUnlockMutex( F.mutex, 1 );
+			sceKernelDelayThread( 5000 );
+			continue;
+		}
+		const double pas = (double)F.hz / AUDIO_HZ;
+		int i = 0;
+		bool fini = false;
+		for( ; i < GRAIN; ++i )
+		{
+			while( F.src_pos + 1.0 >= F.src_n )
+				if( !vremplit( F ))
+				{
+					fini = true;
+					break;
+				}
+			if( fini )
+				break;
+			const int k = (int)F.src_pos;
+			const float t = (float)( F.src_pos - k );
+			const short *a = F.src + k * 2;
+			F.sortie[i * 2]     = (short)( a[0] + ( a[2] - a[0] ) * t );
+			F.sortie[i * 2 + 1] = (short)( a[1] + ( a[3] - a[1] ) * t );
+			F.src_pos += pas;
+		}
+		if( fini )
+		{
+			memset( F.sortie + i * 2, 0, ( GRAIN - i ) * 2 * sizeof( short ));
+			F.joue = false;
+		}
+		sceKernelUnlockMutex( F.mutex, 1 );
+		if( i > 0 )
+			sceAudioOutOutput( F.port, F.sortie );
+	}
+	return 0;
+}
+
+#ifdef THUG_DESKTOP
+extern "C" int desktop_voices( void );
+#endif
+
+static void voix_init( void )
+{
+#ifdef THUG_DESKTOP
+	if( !desktop_voices())
+	{
+		VLOG( "PCM", "voices off (thug_desktop.ini)" );
+		return;
+	}
+#endif
+	if( !vcharge_index() )
+		return;
+	s_flux = (SFlux *)calloc( NUM_STREAMS, sizeof( SFlux ));
+	if( !s_flux )
+		return;
+	s_voix_tourne = true;
+	int prets = 0;
+	for( int s = 0; s < NUM_STREAMS; ++s )
+	{
+		SFlux &F = s_flux[s];
+		F.num	 = s;
+		F.thread = -1;
+		F.wad	 = sceIoOpen( CHEMIN_VOIX_WAD, SCE_O_RDONLY, 0 );
+		F.port	 = sceAudioOutOpenPort( SCE_AUDIO_OUT_PORT_TYPE_VOICE, GRAIN,
+		                                AUDIO_HZ, SCE_AUDIO_OUT_MODE_STEREO );
+		F.mutex	 = sceKernelCreateMutex( "thug_voix", 0, 0, NULL );
+		if( F.wad < 0 || F.port < 0 || F.mutex < 0 )
+		{
+			VLOG( "PCM", "voice stream %d unavailable (wad %d, port 0x%08x)", s, F.wad, F.port );
+			if( F.wad >= 0 ) sceIoClose( F.wad );
+			F.wad = -1;
+			continue;
+		}
+		F.thread = sceKernelCreateThread( "thug_voix", thread_voix, 0x10000100, 0x10000, 0, 0, NULL );
+		if( F.thread >= 0 )
+		{
+			sceKernelStartThread( F.thread, sizeof( int ), &F.num );
+			++prets;
+		}
+	}
+	VLOG( "PCM", "voices: %d streams, %d ready", s_vindex_nb, prets );
+}
+
+static inline bool vflux_ok( int s )
+{
+	return s_flux && s >= 0 && s < NUM_STREAMS && s_flux[s].thread >= 0;
+}
+
+static void vvolume( int s, float l, float r )
+{
+	if( !vflux_ok( s ))
+		return;
+	int v[2];
+	v[0] = (int)( fabsf( l ) * ( 1.0f / 100.0f ) * SCE_AUDIO_VOLUME_0DB );
+	v[1] = (int)( fabsf( r ) * ( 1.0f / 100.0f ) * SCE_AUDIO_VOLUME_0DB );
+	for( int c = 0; c < 2; ++c )
+		if( v[c] > SCE_AUDIO_VOLUME_0DB ) v[c] = SCE_AUDIO_VOLUME_0DB;
+	sceAudioOutSetVolume( s_flux[s].port,
+	                      (SceAudioOutChannelFlag)( SCE_AUDIO_VOLUME_FLAG_L_CH | SCE_AUDIO_VOLUME_FLAG_R_CH ), v );
+}
+
+// Engine volumes are percentages, scaled by the sound effects volume like
+// the Xbox backend does.
+static void vvolume( int s, Sfx::sVolume *p_volume )
+{
+	if( !p_volume )
+		return;
+	Spt::SingletonPtr< Sfx::CSfxManager > sfx_manager;
+	const float main = sfx_manager->GetMainVolume() * ( 1.0f / 100.0f );
+	const float l = p_volume->GetChannelVolume( 0 );
+	const float r = ( p_volume->GetVolumeType() == Sfx::VOLUME_TYPE_BASIC_2_CHANNEL ) ? l : p_volume->GetChannelVolume( 1 );
+	vvolume( s, l * main, r * main );
+}
+
+static bool vdemarre( uint32 checksum, int s, bool ok )
+{
+	if( !vflux_ok( s ))
+		return false;
+	const SEntree *p_e = vtrouve( checksum );
+	if( !p_e )
+	{
+		VLOG( "PCM", "voice %08x not in pcm.dat", checksum );
+		return false;
+	}
+	SFlux &F = s_flux[s];
+	sceKernelLockMutex( F.mutex, 1, NULL );
+	const bool pret = vprepare( F, p_e );
+	F.joue	= pret;
+	F.ok	= ok;
+	F.pause	= false;
+	sceKernelUnlockMutex( F.mutex, 1 );
+	return pret;
+}
+
+static void varrete( int s )
+{
+	if( !vflux_ok( s ))
+		return;
+	SFlux &F = s_flux[s];
+	sceKernelLockMutex( F.mutex, 1, NULL );
+	F.joue = false;
+	sceKernelUnlockMutex( F.mutex, 1 );
+}
+
 } // namespace anonyme
 
 // ---------------------------------------------------------------------------
@@ -424,6 +814,7 @@ static bool demarre( uint32 checksum )
 
 void	PCMAudio_Init( void )
 {
+	voix_init();
 	if( !charge_index() )
 	{
 		VLOG( "PCM", "pas de musique : index indisponible" );
@@ -516,14 +907,24 @@ void	PCMAudio_StopMusic( bool )
 	deverrouille();
 }
 
-void	PCMAudio_Pause( bool pause, int )
+void	PCMAudio_Pause( bool pause, int ch )
 {
-	s_pause = pause;
+	if( ch == MUSIC_CHANNEL )
+	{
+		s_pause = pause;
+		return;
+	}
+	if( s_flux )
+		for( int i = 0; i < NUM_STREAMS; ++i )
+			s_flux[i].pause = pause;
 }
 
 int		PCMAudio_SetMusicVolume( float volume )
 {
-	s_volume = volume;
+	// The engine passes a percentage (MusicVolume, 0-100, music.cpp:1155 ;
+	// the Xbox stream takes it as such). As a 0-1 gain anything above 1%
+	// was clamped to full volume.
+	s_volume = volume * 0.01f;
 	applique_volume();
 	return 0;
 }
@@ -556,34 +957,89 @@ bool	PCMAudio_PlayMusicTrack( const char *p_nom, bool )
 {
 	if( !p_nom )
 		return false;
+#ifdef THUG_DESKTOP
+	const int perso = custom_music_index( p_nom );
+	if( perso >= 0 )
+		return demarre_perso( perso );
+#endif
 	return demarre( checksum_de_piste( p_nom ));
 }
 bool	PCMAudio_PlaySoundtrackMusicTrack( int, int )		{ return true; }
 
-bool	PCMAudio_PlayStream( uint32, int, float, float, float, bool )
-															{ return true; }
-bool	PCMAudio_PlayStream( uint32, int, Sfx::sVolume *, float, bool )
-															{ return true; }
 
-void	PCMAudio_StopStream( int, bool )					{}
-void	PCMAudio_StopStreams( void )						{}
+bool	PCMAudio_PlayStream( uint32 checksum, int s, float l, float r, float, bool preload )
+{
+	if( !vdemarre( checksum, s, !preload ))
+		return false;
+	vvolume( s, l, r );
+	return true;
+}
+bool	PCMAudio_PlayStream( uint32 checksum, int s, Sfx::sVolume *p_volume, float, bool preload )
+{
+	if( !vdemarre( checksum, s, !preload ))
+		return false;
+	vvolume( s, p_volume );
+	return true;
+}
 
-bool	PCMAudio_PreLoadStream( uint32, int )				{ return true; }
+void	PCMAudio_StopStream( int s, bool )
+{
+	varrete( s );
+}
+void	PCMAudio_StopStreams( void )
+{
+	for( int s = 0; s < NUM_STREAMS; ++s )
+		varrete( s );
+}
+
+bool	PCMAudio_PreLoadStream( uint32 checksum, int s )
+{
+	return vdemarre( checksum, s, false );
+}
+// Nothing to load ahead: the stream reads as it plays.
 bool	PCMAudio_PreLoadStreamDone( int )					{ return true; }
-bool	PCMAudio_StartPreLoadedStream( int, float, float, float )
-															{ return true; }
-bool	PCMAudio_StartPreLoadedStream( int, Sfx::sVolume *, float )
-															{ return true; }
+bool	PCMAudio_StartPreLoadedStream( int s, float l, float r, float )
+{
+	if( !vflux_ok( s ) || !s_flux[s].joue )
+		return false;
+	vvolume( s, l, r );
+	s_flux[s].ok = true;
+	return true;
+}
+bool	PCMAudio_StartPreLoadedStream( int s, Sfx::sVolume *p_volume, float )
+{
+	if( !vflux_ok( s ) || !s_flux[s].joue )
+		return false;
+	vvolume( s, p_volume );
+	s_flux[s].ok = true;
+	return true;
+}
 
-bool	PCMAudio_SetStreamVolume( float, float, int )		{ return true; }
-bool	PCMAudio_SetStreamVolume( Sfx::sVolume *, int )		{ return true; }
+bool	PCMAudio_SetStreamVolume( float l, float r, int s )	{ vvolume( s, l, r ); return true; }
+bool	PCMAudio_SetStreamVolume( Sfx::sVolume *p_volume, int s ) { vvolume( s, p_volume ); return true; }
 bool	PCMAudio_SetStreamPitch( float, int )				{ return true; }
 
-int		PCMAudio_GetStreamStatus( int )						{ return PCM_STATUS_FREE; }
+int		PCMAudio_GetStreamStatus( int s )
+{
+	if( s == -1 )
+	{
+		for( int i = 0; i < NUM_STREAMS; ++i )
+			if( PCMAudio_GetStreamStatus( i ) == PCM_STATUS_FREE )
+				return PCM_STATUS_FREE;
+		return PCM_STATUS_RUNNING;
+	}
+	return ( vflux_ok( s ) && s_flux[s].joue ) ? PCM_STATUS_RUNNING : PCM_STATUS_FREE;
+}
 
 bool	PCMAudio_TrackExists( const char *p_nom, int )
 {
-	if( !p_nom || !s_index )
+	if( !p_nom )
+		return false;
+#ifdef THUG_DESKTOP
+	if( custom_music_index( p_nom ) >= 0 )
+		return true;
+#endif
+	if( !s_index )
 		return false;
 
 	const uint32 cs = checksum_de_piste( p_nom );
@@ -602,5 +1058,11 @@ bool	PCMAudio_LoadMusicHeader( const char * )
 {
 	return ( s_index != NULL );
 }
-bool	PCMAudio_LoadStreamHeader( const char * )			{ return false; }
-uint32	PCMAudio_FindNameFromChecksum( uint32, int )		{ return 0; }
+// pcm.dat stands in for the per-level headers: it lists every voice.
+bool	PCMAudio_LoadStreamHeader( const char * )			{ return s_vindex != NULL; }
+uint32	PCMAudio_FindNameFromChecksum( uint32 checksum, int ch )
+{
+	if( ch != EXTRA_CHANNEL )
+		return 0;
+	return vtrouve( checksum ) ? checksum : 0;
+}
