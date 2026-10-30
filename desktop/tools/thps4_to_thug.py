@@ -16,7 +16,7 @@ THPS4 shares THUG's engine, so most of the data carries over as is:
    faces 12 bytes, and its BSP nodes are another format: each object gets a
    single BSP leaf holding all its faces.
  - vertex colours: halved (Aspyr's PC data is 0-255, THUG's 0-128).
- - scripts: same token format. Objects the THUG data has no models for
+ - scripts: same tokens, except Random & co. have no weights (added). Objects the THUG data has no models for
    (peds, cars, game objects) lose CreatedAtStart and their model names.
 Personal use with your own copy of THPS4.
 """
@@ -173,7 +173,7 @@ def convert_col(d):
 
 # ---------------------------------------------------------------- scripts
 
-def skip(d, i):
+def skip(d, i, rnd=6):
     t = d[i]
     if t in (0x16, 0x17, 0x18, 0x1a, 0x02, 0x2e, 0x43, 0x44): return i + 5
     if t == 0x1e: return i + 13
@@ -183,9 +183,54 @@ def skip(d, i):
         j = i + 5
         while d[j]: j += 1
         return j + 1
-    if t in (0x2f, 0x37, 0x40, 0x41):
-        return i + 5 + 6 * struct.unpack_from('<I', d, i + 1)[0]
+    if t in RANDOMS:
+        return i + 5 + rnd * struct.unpack_from('<I', d, i + 1)[0]
     return i + 1
+
+
+RANDOMS = (0x2f, 0x37, 0x40, 0x41)
+
+
+def fix_randoms(d):
+    """THPS4's Random/Random2/RandomNoRepeat/RandomPermute carry a count and
+    one jump offset per item; THUG's put a u16 weight per item between the
+    two. The weights (all 1) go in, and every jump and random offset that
+    spans an insertion is widened to match."""
+    ins = []					# (position, bytes inserted)
+    jumps = []					# (offset field position, end of field)
+    i = 0
+    while i < len(d) and d[i] != 0:
+        t = d[i]
+        if t == 0x2e:
+            jumps.append((i + 1, i + 5))
+        elif t in RANDOMS:
+            n = struct.unpack_from('<I', d, i + 1)[0]
+            ins.append((i + 5, 2 * n))
+            for k in range(n):
+                f = i + 5 + 4 * k
+                jumps.append((f, f + 4))
+        i = skip(d, i, 4)
+    if not ins:
+        return d, 0
+
+    def moved(p):					# new position of old byte p
+        return p + sum(s for q, s in ins if q <= p)
+
+    out = bytearray()
+    last = 0
+    for q, s in ins:
+        out += d[last:q]
+        n = s // 2
+        out += struct.pack(f'<{n}H', *([1] * n))
+        last = q
+    out += d[last:]
+    for f, e in jumps:
+        off = struct.unpack_from('<i', d, f)[0]
+        t = e + off
+        # a random's own weights sit before its offsets: moved() counts them
+        # for the field and its targets alike
+        struct.pack_into('<i', out, moved(f), moved(t) - moved(e))
+    return bytes(out), len(ins)
 
 
 NO_MODELS = {crc(c) for c in ('GameObject', 'Pedestrian', 'Vehicle')}
@@ -212,14 +257,14 @@ def convert_nodes(d):
                 while j < i:
                     if d[j] == 0x16:
                         c = struct.unpack_from('<I', d, j + 1)[0]
-                        nxt = skip(d, j)
+                        nxt = skip(d, j, 4)
                         if c == C_CLASS and d[nxt] == 7 and d[nxt + 1] == 0x16:
                             cls = struct.unpack_from('<I', d, nxt + 2)[0]
                         elif c == C_CREATED:
                             created.append(j)
                         elif c in MODEL_KEYS and d[nxt] == 7:
                             models.append(j)
-                    j = skip(d, j)
+                    j = skip(d, j, 4)
                 if cls in NO_MODELS:
                     for j in created:
                         d[j:j + 5] = b'\x01' * 5
@@ -227,7 +272,7 @@ def convert_nodes(d):
                     for j in models:
                         struct.pack_into('<I', d, j + 1, C_UNUSED)
             depth -= 1
-        i = skip(d, i)
+        i = skip(d, i, 4)
     return bytes(d), removed
 
 
@@ -251,11 +296,15 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
     shutil.copyfile(find(s, f'{L}tex.dat'), os.path.join(o, f'{L}.tex.xbx'))
     if scripts:
         q, n = convert_nodes(rd(f'{L}.qb'))
+        q, r = fix_randoms(q)
         open(os.path.join(o, f'{L}.qb'), 'wb').write(q)
         try:
-            open(os.path.join(o, f'{L}_scripts.qb'), 'wb').write(rd(f'{L}_Scripts.qb'))
+            q, r2 = fix_randoms(rd(f'{L}_Scripts.qb'))
+            r += r2
+            open(os.path.join(o, f'{L}_scripts.qb'), 'wb').write(q)
         except FileNotFoundError:
             pass
+        print(f'{L}: {r} random operators given weights')
         print(f'{L}: {n} objects without models left uncreated')
     print(f'{L}: done -> {o}')
 
