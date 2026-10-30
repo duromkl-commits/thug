@@ -313,6 +313,15 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 	snprintf( chemin, sizeof( chemin ), "sounds\\pcm\\%s.pcm", sfxName );
 
 	void *p_fic = File::Open( chemin, "rb" );
+#ifdef THUG_DESKTOP
+	// Imported THPS4 levels: their sounds are plain 16-bit PCM .wav files the
+	// converter copies loose to sounds/wav (THUG's own .pcm wins if it has one).
+	if( !p_fic )
+	{
+		snprintf( chemin, sizeof( chemin ), "sounds\\wav\\%s.wav", sfxName );
+		p_fic = File::Open( chemin, "rb" );
+	}
+#endif
 	if( !p_fic )
 		return false;
 
@@ -427,6 +436,41 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 	int          hz;
 	memcpy( &hz, p_brut + off_fmt + 4, 4 );
 	const int    block  = (int)( p_brut[off_fmt + 12] | ( p_brut[off_fmt + 13] << 8 ));
+
+#ifdef THUG_DESKTOP
+	// 16-bit PCM (THPS4's .wav): keep the first channel, as below.
+	if(( tag == 0x0001 ) && ( canaux >= 1 ) && ( block == 2 * canaux ))
+	{
+		if( taille_data > ( taille - off_data ))
+			taille_data = taille - off_data;
+		const int n = taille_data / block;
+		short *p_pcm = ( n > 0 ) ? (short *)malloc( n * sizeof( short )) : NULL;
+		SSonVita *p_son = p_pcm ? (SSonVita *)malloc( sizeof( SSonVita )) : NULL;
+		if( !p_son )
+		{
+			free( p_pcm );
+			free( p_brut );
+			return false;
+		}
+		for( int i = 0; i < n; ++i )
+			memcpy( &p_pcm[i], p_brut + off_data + i * block, 2 );
+		free( p_brut );
+		p_son->p_echantillons  = p_pcm;
+		p_son->nb_echantillons = n;
+		p_son->hz              = hz;
+		p_son->boucle          = boucle;
+		const char *b = sfxName;
+		for( const char *q = sfxName; *q; ++q )
+			if(( *q == '\\' ) || ( *q == '/' ))
+				b = q + 1;
+		strncpy( p_son->nom, b, sizeof( p_son->nom ) - 1 );
+		p_son->nom[sizeof( p_son->nom ) - 1] = 0;
+		pInfo->p_sound_data = p_son;
+		pInfo->looping      = boucle;
+		pInfo->permanent    = loadPerm;
+		return true;
+	}
+#endif
 
 	if(( tag != 0x0069 ) || ( canaux < 1 ) || ( block < 8 ))
 	{

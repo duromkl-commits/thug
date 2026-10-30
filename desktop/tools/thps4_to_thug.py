@@ -18,6 +18,8 @@ THPS4 shares THUG's engine, so most of the data carries over as is:
  - vertex colours: halved (Aspyr's PC data is 0-255, THUG's 0-128).
  - scripts: same tokens, except Random & co. have no weights (added). Objects the THUG data has no models for
    (peds, cars, game objects) lose CreatedAtStart and their model names.
+ - sounds: the .wav files the level's LoadSound lines name are copied to
+   sounds/wav/ (16-bit PCM; the port loads them when THUG has no .pcm of that name).
 Personal use with your own copy of THPS4.
 """
 import os, struct, sys, shutil
@@ -299,6 +301,37 @@ def find(folder, name):
     raise FileNotFoundError(os.path.join(folder, name))
 
 
+def copy_sounds(src_data, qb, dst):
+    """Every string in the script that names a THPS4 sound file is copied."""
+    try:
+        wav = find(find(src_data, 'sounds'), 'wav')
+    except FileNotFoundError:
+        print('no THPS4 sounds folder, level sounds skipped')
+        return
+    files = {}
+    for root, _, names in os.walk(wav):
+        for f in names:
+            rel = os.path.relpath(os.path.join(root, f), wav).replace(os.sep, '\\')
+            files[rel.lower()] = os.path.join(root, f)
+    n, i = 0, 0
+    while True:
+        i = qb.find(b'\x1b', i)
+        if i < 0 or i + 5 > len(qb):
+            break
+        ln = struct.unpack_from('<I', qb, i + 1)[0]
+        name = qb[i + 5:i + 4 + ln].decode('latin-1') if 0 < ln < 128 else ''
+        src = files.get(name.replace('/', '\\').lower() + '.wav')
+        if src:
+            out = os.path.join(dst, 'sounds', 'wav', *name.replace('/', '\\').split('\\')) + '.wav'
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            shutil.copyfile(src, out)
+            n += 1
+            i += 5 + ln
+        else:
+            i += 1
+    print(f'{n} sounds copied')
+
+
 def convert_level(src_levels, L, dst_levels, scripts=True):
     s = find(src_levels, L)
     o = os.path.join(dst_levels, L)
@@ -312,7 +345,9 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
         q, r = fix_randoms(q)
         open(os.path.join(o, f'{L}.qb'), 'wb').write(q)
         try:
-            q, r2 = fix_randoms(rd(f'{L}_Scripts.qb'))
+            sq = rd(f'{L}_Scripts.qb')
+            copy_sounds(os.path.dirname(src_levels), sq, os.path.dirname(dst_levels))
+            q, r2 = fix_randoms(sq)
             r += r2
             open(os.path.join(o, f'{L}_scripts.qb'), 'wb').write(q)
         except FileNotFoundError:

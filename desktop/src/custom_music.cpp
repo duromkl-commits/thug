@@ -1157,8 +1157,9 @@ static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, 
 // level struct and load script (level_number 22, past THUG's own; no
 // scene .pre, so the loose .xbx files load; THPS4's lighting; NJ.pre for its
 // terrain sounds, which THUG keeps in each level's .pre); gamemenu.qb lists
-// it in Free Skate's level select. No goals or startup script yet: Sch's own
-// call THPS4 functions and sounds THUG doesn't have.
+// it in Free Skate's level select. Its startup script runs (it only loads the
+// level's sounds, shipped as loose .wav by the converter); its setup script and
+// goals don't yet, they call THPS4 functions.
 static const char *s_niveau_sch =
 	"Level_TH4_Sch = {\n"
 	"structure_name = Level_TH4_Sch\n"
@@ -1173,6 +1174,7 @@ static const char *s_niveau_sch =
 	"level_qb = \"levels\\Sch\\Sch_scripts.qb\"\n"
 	"default_stats = 5\n"
 	"level_number = 22\n"
+	"startup_script = sch_Startup\n"
 	"ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2\n"
 	"heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8\n"
 	"heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1\n"
