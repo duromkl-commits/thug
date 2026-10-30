@@ -5,6 +5,10 @@
 //* CREATION DATE:  10/24/2002
 //****************************************************************************
 
+#ifdef __PLAT_VITA__
+#include "vita_log.h"
+#endif
+
 #include <gel/components/animationcomponent.h>
 
 #include <gel/components/modelcomponent.h>
@@ -818,6 +822,10 @@ float CAnimationComponent::AnimDuration( uint32 checksum )
 							 Script::FindChecksumName(checksum),
 							 Script::FindChecksumName(GetObject()->GetID()) ) );
 
+#ifdef THUG_DESKTOP
+	// Assert compiled out: converted THPS4 peds can ask for anims their set lacks.
+	if ( !p_anim ) return 0.0f;
+#endif
 	return ( p_anim->GetDuration() );
 }
 
@@ -1085,6 +1093,25 @@ void CAnimationComponent::PlayPrimarySequence( uint32 animName, bool propagate, 
 	{
 		animName = CRCD(0x1ca1ff20,"default");
 	}
+
+#ifdef THUG_DESKTOP
+	// A missing anim (THPS4 peds running THUG's ped scripts) read NULL frame
+	// data further down: play the set's default pose, or nothing.
+	if ( !AnimExists( animName ) )
+	{
+		static int s_missing_logged = 0;
+		if ( s_missing_logged < 100 && ++s_missing_logged )
+		{
+			VLOG( "ANIM", "anim %s missing from set %s", Script::FindChecksumName( animName ), Script::FindChecksumName( m_animScriptName ) );
+		}
+		animName = CRCD(0x1ca1ff20,"default");
+		if ( !AnimExists( animName ) )
+		{
+			return;
+		}
+		end_time = AnimDuration( animName );
+	}
+#endif
 
 	if ( propagate )   
 	{

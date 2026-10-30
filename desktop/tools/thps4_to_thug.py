@@ -637,7 +637,7 @@ def human_anims(src_data, dst_data, qbs, cache):
         keep = []
         for f, desc in anims:
             parts = f.replace('/', '\\').split('\\')		# anims\Ped_M\Ped_M_Idle1.ska
-            if len(parts) != 3 or parts[1].lower().startswith('skater'):
+            if len(parts) != 3:
                 missing += 1
                 continue
             out = os.path.join(dst_data, 'anims', 'th4', parts[1].lower(), parts[2].lower()[:-4] + '.ska.xbx')
@@ -653,7 +653,7 @@ def human_anims(src_data, dst_data, qbs, cache):
             total += 1
         code += script_bytes(th4_set(name), th4_set(HUMAN_REFS[ref]), keep)
     renames = {struct.pack('<I', c): struct.pack('<I', crc(th4_set(scripts[c][0]))) for c in used}
-    print(f'  human anim sets: {len(used)}, {total} animations ({missing} skater/missing left out)')
+    print(f'  human anim sets: {len(used)}, {total} animations ({missing} not in THPS4 data or not staged)')
     return renames, bytes(code)
 
 
