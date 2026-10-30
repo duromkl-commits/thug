@@ -22,7 +22,7 @@ THPS4 shares THUG's engine, so most of the data carries over as is:
    sounds/wav/ (16-bit PCM; the port loads them when THUG has no .pcm of that name).
 Personal use with your own copy of THPS4.
 """
-import os, struct, sys, shutil
+import os, re, struct, sys, shutil
 
 # ---------------------------------------------------------------- helpers
 
@@ -46,7 +46,7 @@ class R:
 
 # ---------------------------------------------------------------- scene
 
-def convert_scn(d):
+def convert_scn(d, sectors=None):
     r = R(d)
     vers = r.t('3I')
     out = bytearray(struct.pack('<3I', *vers))
@@ -85,6 +85,7 @@ def convert_scn(d):
     for _ in range(ns):
         cs, bone, flags, nm = r.t('IiiI')
         out += struct.pack('<IiiI', cs, bone, flags, nm)
+        if sectors is not None: sectors.add(cs)
         out += r.b(40)
         if flags & 0x800000:
             out += r.b(40)
@@ -120,7 +121,7 @@ def convert_scn(d):
 
 # ---------------------------------------------------------------- collision
 
-def convert_col(d):
+def convert_col(d, drop=()):
     version, nobj, total_verts, nfl, nfs = struct.unpack_from('<5i', d, 0)
     if version != 8:
         raise ValueError(f'col version {version}, expected 8')
@@ -148,6 +149,8 @@ def convert_col(d):
     fidx = bytearray()
     nidx = 0
     for i, (cs, fla, nv, nf, small, foff, bbox, voff) in enumerate(objs):
+        if cs in drop:
+            nf = 0
         new_foff = len(faces)
         for f in range(nf):
             if small:
@@ -282,12 +285,90 @@ def convert_nodes(d):
                         removed += 1
                 for j in (models if cls in NO_MODELS else []):
                     struct.pack_into('<I', d, j + 1, C_UNUSED)
-                if cls == C_PROXIM:
+                # their Class goes too: THPS4's scripts Create some of them
+                # later (London's buses), and THUG's car code crashed on them
+                if cls == C_PROXIM or cls in NO_MODELS:
                     struct.pack_into('<I', d, cls_at, C_UNUSED)
                     removed += 1
             depth -= 1
         i = skip(d, i, 4)
     return bytes(d), removed
+
+
+def qb_names(d):
+    """The checksum-name table at the end of a qb (0x2b entries)."""
+    names, i = {}, 0
+    while True:
+        i = d.find(b'\x2b', i)
+        if i < 0 or i + 5 > len(d):
+            return names
+        j = i + 5
+        while j < len(d) and 32 <= d[j] < 127:
+            j += 1
+        if j < len(d) and d[j] == 0 and j > i + 5:
+            names[struct.unpack_from('<I', d, i + 1)[0]] = d[i + 5:j].decode()
+        i += 1
+
+
+def model_stems(d):
+    """Short names of the models of the nodes THUG gets no model for
+    (anl_rhino.skin -> 'rhino')."""
+    stems, i, depth, start = set(), 0, 0, None
+    while i < len(d) and d[i] != 0:
+        t = d[i]
+        if t == 3:
+            depth += 1
+            if depth == 1: start = i
+        elif t == 4:
+            if depth == 1 and start is not None:
+                j, cls, models = start, None, []
+                while j < i:
+                    if d[j] == 0x16:
+                        c = struct.unpack_from('<I', d, j + 1)[0]
+                        nxt = skip(d, j, 4)
+                        if c == C_CLASS and d[nxt] == 7 and d[nxt + 1] == 0x16:
+                            cls = struct.unpack_from('<I', d, nxt + 2)[0]
+                        elif c in MODEL_KEYS and d[nxt] == 7 and d[nxt + 1] == 0x1b:
+                            n = struct.unpack_from('<I', d, nxt + 2)[0]
+                            models.append(d[nxt + 6:nxt + 5 + n].decode('latin-1'))
+                    j = skip(d, j, 4)
+                if cls in NO_MODELS:
+                    for m in models:
+                        b = os.path.splitext(m.replace('\\', '/').split('/')[-1])[0].lower()
+                        for p in ('anl_', 'ped_', 'veh_', 'zoo_', 'goal_'):
+                            if b.startswith(p): b = b[len(p):]
+                        b = re.sub(r'(_shadow|_collision|\d+)$', '', b)
+                        if len(b) >= 4 and b != 'none':
+                            stems.add(b)
+            depth -= 1
+        i = skip(d, i, 4)
+    return stems
+
+
+def orphan_collision(col, qb, sectors):
+    """Collision-only objects (no drawn sector) that stand in for a model THUG
+    doesn't get: Zoo's rhinos and giraffes, Carnival's goats. With the model
+    gone they were invisible walls. Named after the model, small, solid."""
+    names, stems = qb_names(qb), model_stems(qb)
+    version, nobj, total_verts = struct.unpack_from('<3i', col, 0)
+    fb = ((32 + nobj * 64 + 15) & ~15) + total_verts * 16
+    drop = set()
+    for i in range(nobj):
+        o = 32 + 64 * i
+        cs, fla, nv, nf, small, fixed, foff = struct.unpack_from('<IHHHBBI', col, o)
+        if not nf or cs in sectors:
+            continue
+        name = names.get(cs, '').lower()
+        if name.startswith('inviso') or not any(st in name for st in stems):	# Inviso*: walls meant to be unseen
+            continue
+        lo, hi = struct.unpack_from('<3f', col, o + 16), struct.unpack_from('<3f', col, o + 32)
+        if max(hi[k] - lo[k] for k in range(3)) >= 800:
+            continue
+        if all(struct.unpack_from('<H', col, fb + foff + (8 if small else 12) * f)[0] & 0x10 for f in range(nf)):
+            continue
+        drop.add(cs)
+        print(f'  collision of {names[cs]} left out (its model is not converted)')
+    return drop
 
 
 # ---------------------------------------------------------------- main
@@ -336,8 +417,11 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
     o = os.path.join(dst_levels, L)
     os.makedirs(o, exist_ok=True)
     rd = lambda n: open(find(s, n), 'rb').read()
-    open(os.path.join(o, f'{L}.scn.xbx'), 'wb').write(convert_scn(rd(f'{L}scn.dat')))
-    open(os.path.join(o, f'{L}.col.xbx'), 'wb').write(convert_col(rd(f'{L}col.dat')))
+    sectors = set()
+    open(os.path.join(o, f'{L}.scn.xbx'), 'wb').write(convert_scn(rd(f'{L}scn.dat'), sectors))
+    col = rd(f'{L}col.dat')
+    drop = orphan_collision(col, rd(f'{L}.qb'), sectors) if scripts else ()
+    open(os.path.join(o, f'{L}.col.xbx'), 'wb').write(convert_col(col, drop))
     shutil.copyfile(find(s, f'{L}tex.dat'), os.path.join(o, f'{L}.tex.xbx'))
     if scripts:
         q, n = convert_nodes(rd(f'{L}.qb'))
