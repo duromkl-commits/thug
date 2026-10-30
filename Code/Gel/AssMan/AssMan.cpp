@@ -741,6 +741,15 @@ void CAssMan::AddRef(uint32 asset_id, uint32 ref_id, uint32 group)
 	// Add a reference to an asset, so we can access it via a new id
 
 	Dbg_MsgAssert(AssetAllocated(asset_id),("Adding ref to unloaded asset\n"));
+#ifdef THUG_DESKTOP
+	// the asset didn't load (a file an imported level names but doesn't
+	// have): no ref, rather than a CRefAsset of nothing
+	if (!mp_asset_table->GetItem(asset_id))
+	{
+		VLOG( "ERR", "!! asset %08x not loaded, ref %08x skipped", asset_id, ref_id );
+		return;
+	}
+#endif
 	CAsset *p_asset = new CRefAsset(mp_asset_table->GetItem(asset_id));
 	Dbg_MsgAssert(!mp_asset_table->GetItem( ref_id ),("ref already in table/n"));	
 	mp_asset_table->PutItem( ref_id,  p_asset);

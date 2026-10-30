@@ -45,6 +45,9 @@ static LONG WINAPI rapport( EXCEPTION_POINTERS *ep )
 	}
 	vita_log_flush();
 	fflush( NULL );
+	// End here: left to Windows, the window could sit frozen until the
+	// process was killed from Task Manager.
+	TerminateProcess( GetCurrentProcess(), er->ExceptionCode );
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
