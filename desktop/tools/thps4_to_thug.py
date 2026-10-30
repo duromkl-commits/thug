@@ -486,7 +486,8 @@ def find_path(root, parts):
 
 def convert_model(src_data, name, dst_data):
     """'animals\\anl_rhino\\anl_rhino.skin' (THPS4 node Model) ->
-    models/animals/anl_rhino/anl_rhino.skin.xbx + .tex.xbx. False when
+    models/animals/anl_rhino/anl_rhino.skin.xbx + .tex.xbx (+ .col.xbx for
+    a .mdl). False when
     THPS4 has no such model."""
     parts = name.replace('/', '\\').lower().split('\\')
     base, ext = os.path.splitext(parts[-1])
@@ -502,6 +503,13 @@ def convert_model(src_data, name, dst_data):
     os.makedirs(out, exist_ok=True)
     open(os.path.join(out, base + ext + '.xbx'), 'wb').write(convert_scn(open(geo, 'rb').read()))
     shutil.copyfile(tex, os.path.join(out, base + '.tex.xbx'))
+    if ext == '.mdl':
+        # THUG loads <base>.col.xbx for every .mdl; without one it crashed.
+        try:
+            col = convert_col(open(find(folder, base + 'col.dat'), 'rb').read())
+        except FileNotFoundError:
+            return False
+        open(os.path.join(out, base + '.col.xbx'), 'wb').write(col)
     return True
 
 
