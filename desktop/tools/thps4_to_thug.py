@@ -235,8 +235,11 @@ def fix_randoms(d):
 
 NO_MODELS = {crc(c) for c in ('GameObject', 'Pedestrian', 'Vehicle')}
 # proximity triggers: THPS4's run its goal scripts (College's keg trigger
-# looped forever on load in THUG), so none are created for now
-NOT_CREATED = NO_MODELS | {crc('ProximNode')}
+# re-ran itself until the stack overflowed). THUG's proximity manager takes
+# every ProximNode in the node array, so their Class is renamed: no
+# proximity node is made at all.
+C_PROXIM = crc('ProximNode')
+NOT_CREATED = NO_MODELS
 C_CLASS, C_CREATED = crc('Class'), crc('CreatedAtStart')
 # model fields of those nodes: renamed, so the level load doesn't preload
 # THPS4 models THUG's data doesn't have (PreloadModels, PreloadPedestrians)
@@ -256,17 +259,19 @@ def convert_nodes(d):
             if depth == 1: start = i
         elif t == 4:
             if depth == 1 and start is not None:
-                j, cls, created, models = start, None, [], []
+                j, cls, cls_at, created, models = start, None, None, [], []
                 while j < i:
                     if d[j] == 0x16:
                         c = struct.unpack_from('<I', d, j + 1)[0]
                         nxt = skip(d, j, 4)
                         if c == C_CLASS and d[nxt] == 7 and d[nxt + 1] == 0x16:
                             cls = struct.unpack_from('<I', d, nxt + 2)[0]
+                            cls_at = nxt + 2
                         elif c == C_CREATED:
                             created.append(j)
                         elif c in MODEL_KEYS and d[nxt] == 7:
                             models.append(j)
+
                     j = skip(d, j, 4)
                 if cls in NOT_CREATED:
                     for j in created:
@@ -274,6 +279,9 @@ def convert_nodes(d):
                         removed += 1
                 for j in (models if cls in NO_MODELS else []):
                     struct.pack_into('<I', d, j + 1, C_UNUSED)
+                if cls == C_PROXIM:
+                    struct.pack_into('<I', d, cls_at, C_UNUSED)
+                    removed += 1
             depth -= 1
         i = skip(d, i, 4)
     return bytes(d), removed
@@ -308,7 +316,7 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
         except FileNotFoundError:
             pass
         print(f'{L}: {r} random operators given weights')
-        print(f'{L}: {n} objects (peds, cars, game objects, proximity triggers) left uncreated')
+        print(f'{L}: {n} objects (peds, cars, game objects, proximity triggers) left out')
     print(f'{L}: done -> {o}')
 
 
