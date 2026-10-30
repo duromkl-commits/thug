@@ -39,6 +39,10 @@ static const char *s_default_ini =
 	"; its borderless window: the desktop switches, and Windows switches it back when the game closes.\n"
 	"; 0 = leave the display alone; or a number, e.g. 120\n"
 	"refresh_rate=auto\n"
+	"; frame rate: 60 = the original game. Higher (120, 144) runs the game at that rate; experimental,\n"
+	"; some timings counted in frames may run faster. With refresh_rate=auto the display is set to a\n"
+	"; multiple of this.\n"
+	"max_fps=60\n"
 	"\n"
 	"[graphics]\n"
 	"; ambient occlusion (darkens corners and contact points): 0 = off, 1 = on, 2 = show only the occlusion (test view)\n"
@@ -154,6 +158,7 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "render_height" )) s_cfg.render_h = iv;
 		else if( !strcmp( k, "msaa" ))          s_cfg.msaa = iv;
 		else if( !strcmp( k, "vsync" ))         s_cfg.vsync = iv;
+		else if( !strcmp( k, "max_fps" ))       s_cfg.max_fps = iv;
 		else if( !strcmp( k, "refresh_rate" ))  s_cfg.refresh_rate = SDL_strncasecmp( v, "auto", 4 ) ? iv : -1;
 		else if( !strcmp( k, "aspect" ))        s_cfg.aspect = !strcmp( v, "4:3" ) ? 43 : !strcmp( v, "16:9" ) ? 169 : 0;
 		else if( !strcmp( k, "ssao" ))          s_cfg.ssao = iv;
@@ -202,6 +207,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.msaa = 4;
 	s_cfg.vsync = 1;
 	s_cfg.refresh_rate = -1;
+	s_cfg.max_fps = 60;
 	s_cfg.ssao = 1;
 	s_cfg.ssao_strength = 0.8f;
 	s_cfg.ssao_radius = 18.0f;
@@ -318,6 +324,12 @@ extern "C" float desktop_shadow_softness( void )
 {
 	const float v = desktop_config().shadow_softness;
 	return v < 0.0f ? 0.0f : v > 8.0f ? 8.0f : v;
+}
+
+extern "C" int desktop_max_fps( void )
+{
+	const int f = desktop_config().max_fps;
+	return f < 30 ? 60 : f > 360 ? 360 : f;
 }
 
 extern "C" float desktop_walk_lean( void )

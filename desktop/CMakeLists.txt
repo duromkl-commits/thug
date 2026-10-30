@@ -64,6 +64,7 @@ set(DESKTOP_SOURCES
   src/crash_handler.cpp
   src/custom_music.cpp
   src/custom_music_decode.c
+  src/movie_player.cpp
   "${THUG_SRC_ROOT}/vita/src/vita_log.c"
 )
 
@@ -146,6 +147,18 @@ if(TARGET SDL2::SDL2)
 else()
   target_include_directories(thug PRIVATE ${SDL2_INCLUDE_DIRS})
   target_link_libraries(thug PRIVATE ${SDL2_LIBRARIES})
+endif()
+
+# Bink movies: FFmpeg's Bink decoders only, prebuilt static (LGPL, see
+# third_party/ffmpeg-bink/README.md). Without them movies are skipped.
+set(THUG_FFMPEG "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg-bink")
+if(WIN32 AND EXISTS "${THUG_FFMPEG}/lib-mingw32/libavcodec.a" AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+  target_compile_definitions(thug PRIVATE THUG_BINK)
+  target_include_directories(thug PRIVATE "${THUG_FFMPEG}/include")
+  target_link_libraries(thug PRIVATE
+    "${THUG_FFMPEG}/lib-mingw32/libavformat.a" "${THUG_FFMPEG}/lib-mingw32/libavcodec.a"
+    "${THUG_FFMPEG}/lib-mingw32/libswresample.a" "${THUG_FFMPEG}/lib-mingw32/libavutil.a"
+    bcrypt ole32 user32 atomic)
 endif()
 
 if(WIN32)

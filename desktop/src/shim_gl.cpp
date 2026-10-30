@@ -138,11 +138,15 @@ static void cadence_vsync( void );
 static bool   s_mode_pair = false;
 static Uint32 s_plein = SDL_WINDOW_FULLSCREEN_DESKTOP;
 
-// 60 fps shows evenly on a multiple of 60 Hz (59/119 count: 59.94 Hz).
+extern "C" int desktop_max_fps( void );
+
+// The frame rate (max_fps, 60 by default) shows evenly on a multiple of it
+// (59/119 count: 59.94 Hz).
 static bool multiple_60( int hz )
 {
-	const int n = ( hz + 30 ) / 60;
-	return n >= 1 && abs( hz - n * 60 ) <= 1;
+	const int b = desktop_max_fps();
+	const int n = ( hz + b / 2 ) / b;
+	return n >= 1 && abs( hz - n * b ) <= 1;
 }
 
 #ifdef _WIN32
@@ -603,6 +607,110 @@ extern "C" void vglSwapBuffers( GLboolean )
 	desktop_pump_events();
 }
 
+// Bink movies (movie_player.cpp): one decoded RGBA frame drawn over the
+// whole render target, aspect kept, then presented like a game frame (same
+// scaling and PS2-look pass).
+static GLuint s_film_prog = 0, s_film_tex = 0;
+static int    s_film_w = 0, s_film_h = 0;
+
+extern "C" void desktop_movie_frame( const unsigned char *rgba, int w, int h )
+{
+	if( !s_window )
+		return;
+	if( !s_film_prog )
+	{
+		static const char *vs =
+			"#version 120\n"
+			"varying vec2 t;\n"
+			"void main() { t = gl_MultiTexCoord0.xy; gl_Position = gl_Vertex; }\n";
+		static const char *fs =
+			"#version 120\n"
+			"uniform sampler2D img;\n"
+			"varying vec2 t;\n"
+			"void main() { gl_FragColor = vec4(texture2D(img, t).rgb, 1.0); }\n";
+		GLuint sh[2] = { dgl_glCreateShader_real( GL_VERTEX_SHADER ), dgl_glCreateShader_real( GL_FRAGMENT_SHADER ) };
+		const char *src[2] = { vs, fs };
+		GLuint p = glCreateProgram();
+		for( int i = 0; i < 2; ++i )
+		{
+			dgl_glShaderSource_real( sh[i], 1, &src[i], NULL );
+			glCompileShader( sh[i] );
+			glAttachShader( p, sh[i] );
+		}
+		dgl_glLinkProgram( p );
+		GLint ok = 0;
+		glGetProgramiv( p, GL_LINK_STATUS, &ok );
+		if( !ok )
+		{
+			DLOG( "!! movie: program refused" );
+			return;
+		}
+		s_film_prog = p;
+	}
+	GLint prog = 0, act = 0, tex = 0, vp[4], buf = 0;
+	glGetIntegerv( GL_CURRENT_PROGRAM, &prog );
+	glGetIntegerv( GL_ACTIVE_TEXTURE, &act );
+	glGetIntegerv( GL_VIEWPORT, vp );
+	glActiveTexture( GL_TEXTURE0 );
+	glGetIntegerv( GL_TEXTURE_BINDING_2D, &tex );
+	glGetIntegerv( GL_ARRAY_BUFFER_BINDING, &buf );
+	glPushAttrib( GL_ENABLE_BIT );
+	glDisable( GL_DEPTH_TEST );
+	glDisable( GL_CULL_FACE );
+	glDisable( GL_BLEND );
+	glDisable( GL_ALPHA_TEST );
+	glDisable( GL_STENCIL_TEST );
+	glDisable( GL_SCISSOR_TEST );
+	glBindBuffer( GL_ARRAY_BUFFER, 0 );
+
+	if( !s_film_tex )
+		glGenTextures( 1, &s_film_tex );
+	glBindTexture( GL_TEXTURE_2D, s_film_tex );
+	glPixelStorei( GL_UNPACK_ALIGNMENT, 4 );
+	glPixelStorei( GL_UNPACK_ROW_LENGTH, 0 );
+	if( w != s_film_w || h != s_film_h )
+	{
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba );
+		s_film_w = w; s_film_h = h;
+	}
+	else
+		glTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba );
+
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+	glViewport( 0, 0, s_rt_w, s_rt_h );
+	glClearColor( 0, 0, 0, 1 );
+	glClear( GL_COLOR_BUFFER_BIT );
+	// Fit inside the render target, which the present scales to 4:3 or 16:9.
+	const float cible = desktop_ecran_43() ? 4.0f / 3.0f : 16.0f / 9.0f;
+	const float film = (float)w / (float)h;
+	float sx = 1.0f, sy = 1.0f;
+	if( film > cible ) sy = cible / film; else sx = film / cible;
+	glUseProgram( s_film_prog );
+	glUniform1i( glGetUniformLocation( s_film_prog, "img" ), 0 );
+	glBegin( GL_TRIANGLE_STRIP );
+	glTexCoord2f( 0, 1 ); glVertex2f( -sx, -sy );
+	glTexCoord2f( 1, 1 ); glVertex2f(  sx, -sy );
+	glTexCoord2f( 0, 0 ); glVertex2f( -sx,  sy );
+	glTexCoord2f( 1, 0 ); glVertex2f(  sx,  sy );
+	glEnd();
+
+	glBindBuffer( GL_ARRAY_BUFFER, buf );
+	glPopAttrib();
+	glBindTexture( GL_TEXTURE_2D, tex );
+	glActiveTexture( act );
+	glUseProgram( prog );
+	glViewport( vp[0], vp[1], vp[2], vp[3] );
+	const bool lb = s_letterbox;
+	s_letterbox = false;
+	vglSwapBuffers( GL_FALSE );
+	s_letterbox = lb;
+}
+
+
 // Frame pacing. The game's logic advances one step per displayed frame and
 // expects the Vita's 60 Hz (or 30 with swap interval 2). On a 144 Hz monitor
 // vsync alone would run it 2.4x too fast, so frames are paced by the clock;
@@ -631,7 +739,7 @@ static void cadence_mesure( void )
 	if( s_vsync_rythme && s_hz > 0 )
 		unite = 1.0 / s_hz;
 	else
-		unite = s_intervalle / 60.0;
+		unite = s_intervalle / (double)desktop_max_fps();
 	// Snapped only when the time is near a whole number of them: a frame
 	// that genuinely ran late (no vsync to wait for) keeps its real length,
 	// or the game would fall behind the clock.
@@ -656,7 +764,7 @@ static void cadence_vsync( void )
 	SDL_DisplayMode m;
 	if( s_window && SDL_GetCurrentDisplayMode( SDL_GetWindowDisplayIndex( s_window ), &m ) == 0 )
 		hz = m.refresh_rate;
-	const int fps = 60 / s_intervalle;
+	const int fps = desktop_max_fps() / s_intervalle;
 	// 59 Hz is how Windows reports 59.94 Hz (and 119 for 119.88): close
 	// enough to vsync at, since the game steps by elapsed time.
 	const int n = ( hz + fps / 2 ) / fps;
@@ -675,7 +783,7 @@ static void cadence_attendre( void )
 	if( s_vsync_rythme )
 		return;
 	const Uint64 f = SDL_GetPerformanceFrequency();
-	const Uint64 periode = f * s_intervalle / 60;
+	const Uint64 periode = f * s_intervalle / desktop_max_fps();
 	Uint64 t = SDL_GetPerformanceCounter();
 	if( s_prochaine == 0 || t > s_prochaine + periode * 4 )
 		s_prochaine = t;			// first frame, or far behind (loading): restart

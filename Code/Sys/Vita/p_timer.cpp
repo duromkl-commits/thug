@@ -18,6 +18,7 @@
 
 #ifdef THUG_DESKTOP
 extern "C" double desktop_frame_step( void );	// desktop/src/shim_gl.cpp
+extern "C" int desktop_max_fps( void );		// desktop/src/desktop_runtime.cpp
 #endif
 
 namespace Tmr
@@ -165,8 +166,16 @@ void	OncePerRender()
 		total += d;
 	}
 	float render_length = total / (float)vSMOOTH_N;
+#ifdef THUG_DESKTOP
+	// Above 60 fps (max_fps) a frame is shorter than a 60th: the step
+	// follows it down to that rate instead of stopping at 1/60.
+	const float plus_court = 60.0f / (float)desktop_max_fps();
+	if( render_length < plus_court )
+		render_length = plus_court;
+#else
 	if( render_length < 1.0f )
 		render_length = 1.0f;
+#endif
 
 	s_frame_length    = render_length / 60.0f;
 	s_uncapped_length = ((double)uncapped_total / (double)vSMOOTH_N ) / 60.0;

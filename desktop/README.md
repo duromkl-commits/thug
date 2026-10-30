@@ -93,6 +93,18 @@ takes the screen in exclusive fullscreen at that rate instead. Nothing
 changes in a window (`fullscreen=0`). A brief black flash goes with each
 switch.
 
+`max_fps` (in `[display]`, 60 by default) runs the game faster than the
+original 60: 120 or 144 for a 120/144 Hz display. The game steps by the real
+frame time, so movement speed stays the same, but this is experimental:
+anything the game counts in frames rather than seconds can run faster.
+With `refresh_rate=auto` the display is set to a multiple of `max_fps`.
+
+## Movies
+
+The Bink movies (intro logos, pro videos, sponsor videos) play from
+`Data\movies\bik\*.bik` of the Xbox data. Start, X, Enter, Space or Esc
+skips one. thug.log's `MOV` lines say what was found and played.
+
 ## Difficulty and prestige
 
 `score_scale` and `time_scale` change story goals' point targets and
