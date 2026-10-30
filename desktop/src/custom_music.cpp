@@ -42,6 +42,8 @@
 #include "custom_music.h"
 #include "vita_log.h"
 
+extern "C" void desktop_host_path( const char *vita_path, char *out, size_t out_size );
+
 namespace
 {
 
@@ -1152,40 +1154,84 @@ static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, 
 		}
 }
 
-// Imported levels (desktop): THPS4's College, converted to THUG files by
-// desktop/tools/thps4_to_thug.py into Data\levels\Sch. levels.qb gets its
-// level struct and load script (level_number 22, past THUG's own; no
+// Imported levels (desktop): THPS4's levels, converted to THUG files by
+// desktop/tools/thps4_to_thug.py into Data\\levels\\<L>. levels.qb gets a
+// level struct and load script for each (level numbers past THUG's own; no
 // scene .pre, so the loose .xbx files load; THPS4's lighting; NJ.pre for its
 // terrain sounds, which THUG keeps in each level's .pre); gamemenu.qb lists
-// it in Free Skate's level select. Its startup script runs (it only loads the
-// level's sounds, shipped as loose .wav by the converter); its setup script and
-// goals don't yet, they call THPS4 functions.
-static const char *s_niveau_sch =
-	"Level_TH4_Sch = {\n"
-	"structure_name = Level_TH4_Sch\n"
-	"load_script = Load_TH4_Sch\n"
-	"name = \"College (THPS4)\"\n"
-	"loading_screen = \"loadscrn_generic\"\n"
-	"loading_time = 9\n"
-	"pre = \"NJ.pre\"\n"
-	"level = \"Sch\"\n"
-	"sky = \"Sch_Sky\"\n"
-	"qb = \"levels\\Sch\\Sch.qb\"\n"
-	"level_qb = \"levels\\Sch\\Sch_scripts.qb\"\n"
-	"default_stats = 5\n"
-	"level_number = 22\n"
-	"startup_script = sch_Startup\n"
-	"ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2\n"
-	"heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8\n"
-	"heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1\n"
-	"fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0\n"
-	"}\n"
-	"script Load_TH4_Sch\n"
-	"load_level Level_TH4_Sch\n"
-	"endscript\n";
+// them in the level select with THUG's own levels, ahead of Created Park
+// (Marcus's call: real names, not with the secret levels). Their startup
+// scripts run (they load the level's sounds, shipped as loose .wav by the
+// converter); setup scripts and goals don't yet, they call THPS4 functions.
+// A level whose files aren't installed is left out of the list.
+struct NiveauTH4 { const char *dossier, *nom; int numero; const char *startup, *lumieres; };
+static const NiveauTH4 s_niveaux_th4[] = {
+	{ "Sch", "College", 22, "sch_Startup",
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "SF2", "San Francisco", 23, "sf2_Startup",
+	  "ambient_red = 69 ambient_green = 72 ambient_blue = 79 ambient_mod_factor = 0.3 heading_0 = -50 pitch_0 = -127 red_0 = 130 green_0 = 120 blue_0 = 97 mod_factor_0 = 1.4 heading_1 = 50 pitch_1 = -117 red_1 = 55 green_1 = 58 blue_1 = 61 mod_factor_1 = 0.2 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "Alc", "Alcatraz", 24, "ALC_Startup",
+	  "ambient_red = 69 ambient_green = 72 ambient_blue = 79 ambient_mod_factor = 0.3 heading_0 = 120 pitch_0 = -127 red_0 = 130 green_0 = 120 blue_0 = 97 mod_factor_0 = 1.4 heading_1 = -45 pitch_1 = -110 red_1 = 58 green_1 = 62 blue_1 = 66 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "Kon", "Kona", 25, "KON_Startup",
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "Jnk", "Shipyard", 26, "JNK_Startup",
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.5 heading_0 = 90 pitch_0 = -60 red_0 = 75 green_0 = 75 blue_0 = 75 mod_factor_0 = 0.7 heading_1 = 0 pitch_1 = -90 red_1 = 0 green_1 = 0 blue_1 = 0 mod_factor_1 = 1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "Lon", "London", 27, "Lon_Startup",
+	  "ambient_red = 73 ambient_green = 73 ambient_blue = 73 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 22 green_1 = 23 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "Zoo", "Zoo", 28, "zoo_Startup",
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 24 green_1 = 25 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "Cnv", "Carnival", 29, "Cnv_Startup",
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.5 heading_0 = 90 pitch_0 = -60 red_0 = 75 green_0 = 75 blue_0 = 75 mod_factor_0 = 0.7 heading_1 = 0 pitch_1 = -90 red_1 = 0 green_1 = 0 blue_1 = 0 mod_factor_1 = 1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "Hof", "Chicago", 31, "hof_Startup",
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.5 heading_0 = 90 pitch_0 = -60 red_0 = 75 green_0 = 75 blue_0 = 75 mod_factor_0 = 0.7 heading_1 = 0 pitch_1 = -90 red_1 = 0 green_1 = 0 blue_1 = 0 mod_factor_1 = 1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+};
 
-static const char *s_choix_sch =
-	"{ text = \"College (THPS4)\" level_num = 22 points_to_unlock = 0 num_am_goals = 0 num_goals = 0 flag = LEVEL_UNLOCKED_NJ level = load_TH4_Sch }\n";
+static bool niveau_installe( const char *dossier )
+{
+	char vita[256], chemin[1024];
+	snprintf( vita, sizeof( vita ), "ux0:data/thug/Data/levels/%s/%s.scn.xbx", dossier, dossier );
+	desktop_host_path( vita, chemin, sizeof( chemin ));
+	FILE *f = fopen( chemin, "rb" );
+	if( f ) fclose( f );
+	return f != NULL;
+}
+
+static std::string struct_niveau( const NiveauTH4 &n )
+{
+	char t[2048];
+	snprintf( t, sizeof( t ),
+		"Level_TH4_%s = {\n"
+		"structure_name = Level_TH4_%s\n"
+		"load_script = Load_TH4_%s\n"
+		"name = \"%s\"\n"
+		"loading_screen = \"loadscrn_generic\"\n"
+		"loading_time = 9\n"
+		"pre = \"NJ.pre\"\n"
+		"level = \"%s\"\n"
+		"sky = \"%s_Sky\"\n"
+		"qb = \"levels\\%s\\%s.qb\"\n"
+		"level_qb = \"levels\\%s\\%s_scripts.qb\"\n"
+		"default_stats = 5\n"
+		"level_number = %d\n"
+		"startup_script = %s\n"
+		"%s\n"
+		"}\n"
+		"script Load_TH4_%s\n"
+		"load_level Level_TH4_%s\n"
+		"endscript\n",
+		n.dossier, n.dossier, n.dossier, n.nom, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier,
+		n.numero, n.startup, n.lumieres, n.dossier, n.dossier );
+	return t;
+}
+
+static std::string choix_niveau( const NiveauTH4 &n )
+{
+	char t[512];
+	snprintf( t, sizeof( t ),
+		"{ text = \"%s\" level_num = %d points_to_unlock = 0 num_am_goals = 0 num_goals = 0 flag = LEVEL_UNLOCKED_NJ level = load_TH4_%s }\n",
+		n.nom, n.numero, n.dossier );
+	return t;
+}
 
 static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
 {
@@ -1194,9 +1240,14 @@ static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j,
 	for( size_t k = 0; k + 1 < j.size(); ++k )
 		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n_load ))
 		{
-			Ecrit w; w.eol(); compile_q( w, s_niveau_sch );
+			Ecrit w; w.eol();
+			for( const NiveauTH4 &n : s_niveaux_th4 )
+				if( niveau_installe( n.dossier ))
+				{
+					compile_q( w, struct_niveau( n ).c_str());
+					VLOG( "MUS", "levels: THPS4 %s added", n.nom );
+				}
 			m.push_back( Modif{ j.back().pos, 0, w.o } );
-			VLOG( "MUS", "levels: THPS4 College added" );
 			break;
 		}
 	// gamemenu.qb: level_select_menu_level_info = [ ... ]
@@ -1205,16 +1256,31 @@ static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j,
 		if( !est_nom( qb, j[k], n_info ) || qb[j[k + 1].pos] != T_EGAL ) continue;
 		size_t a = sans_eol( qb, j, k + 2 );
 		if( a >= j.size() || qb[j[a].pos] != T_TAB ) continue;
+		// Before the Created Park entry (the struct holding level = load_sk5ed_gameplay),
+		// else at the end.
+		const uint32_t n_level = crc( "level" ), n_parc = crc( "load_sk5ed_gameplay" );
 		int n = 0;
+		size_t entree = 0, ou = 0;
 		for( ; a < j.size(); ++a )
 		{
-			if( qb[j[a].pos] == T_TAB ) ++n;
-			else if( qb[j[a].pos] == T_FTAB && --n == 0 ) break;
+			const unsigned char c = qb[j[a].pos];
+			if( c == T_TAB || c == T_STRUCT )
+			{
+				if( n == 1 && c == T_STRUCT ) entree = a;
+				++n;
+			}
+			else if(( c == T_FTAB || c == T_FSTRUCT ) && --n == 0 ) break;
+			else if( !ou && n == 2 && a + 2 < j.size() && est_nom( qb, j[a], n_level ) && qb[j[a + 1].pos] == T_EGAL && est_nom( qb, j[a + 2], n_parc ))
+				ou = entree;
 		}
 		if( a >= j.size()) return;
-		Ecrit w; compile_q( w, s_choix_sch );
-		m.push_back( Modif{ j[a].pos, 0, w.o } );
-		VLOG( "MUS", "level select: THPS4 College added" );
+		if( !ou ) ou = a;
+		Ecrit w;
+		for( const NiveauTH4 &l : s_niveaux_th4 )
+			if( niveau_installe( l.dossier ))
+				compile_q( w, choix_niveau( l ).c_str());
+		m.push_back( Modif{ j[ou].pos, 0, w.o } );
+		VLOG( "MUS", "level select: THPS4 levels added" );
 		return;
 	}
 }

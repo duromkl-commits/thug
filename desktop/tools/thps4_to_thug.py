@@ -64,14 +64,13 @@ def convert_scn(d):
             color = r.t('3f')
             reg_alpha = r.one('Q')
             ua, va = r.t('II')
+            filt = r.one('I')
+            r.b(36)
+            uvw = r.b(32) if fl & 0x1 else b''
             if p == 0 and fl & 0x2:			# vertex colour wibble: not carried over
                 nseq = r.one('I')
                 for _ in range(nseq):
                     nk, _ph = r.t('Ii'); r.b(8 * nk)
-                r.b(4)
-            filt = r.one('I')
-            r.b(36)
-            uvw = r.b(32) if fl & 0x1 else b''
             anim = b''
             if fl & 0x800:
                 hdr = r.b(16)
