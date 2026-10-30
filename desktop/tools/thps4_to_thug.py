@@ -234,6 +234,9 @@ def fix_randoms(d):
 
 
 NO_MODELS = {crc(c) for c in ('GameObject', 'Pedestrian', 'Vehicle')}
+# proximity triggers: THPS4's run its goal scripts (College's keg trigger
+# looped forever on load in THUG), so none are created for now
+NOT_CREATED = NO_MODELS | {crc('ProximNode')}
 C_CLASS, C_CREATED = crc('Class'), crc('CreatedAtStart')
 # model fields of those nodes: renamed, so the level load doesn't preload
 # THPS4 models THUG's data doesn't have (PreloadModels, PreloadPedestrians)
@@ -265,12 +268,12 @@ def convert_nodes(d):
                         elif c in MODEL_KEYS and d[nxt] == 7:
                             models.append(j)
                     j = skip(d, j, 4)
-                if cls in NO_MODELS:
+                if cls in NOT_CREATED:
                     for j in created:
                         d[j:j + 5] = b'\x01' * 5
                         removed += 1
-                    for j in models:
-                        struct.pack_into('<I', d, j + 1, C_UNUSED)
+                for j in (models if cls in NO_MODELS else []):
+                    struct.pack_into('<I', d, j + 1, C_UNUSED)
             depth -= 1
         i = skip(d, i, 4)
     return bytes(d), removed
@@ -305,7 +308,7 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
         except FileNotFoundError:
             pass
         print(f'{L}: {r} random operators given weights')
-        print(f'{L}: {n} objects without models left uncreated')
+        print(f'{L}: {n} objects (peds, cars, game objects, proximity triggers) left uncreated')
     print(f'{L}: done -> {o}')
 
 
