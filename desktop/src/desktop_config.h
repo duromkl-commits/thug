@@ -12,6 +12,7 @@ struct DesktopConfig
 	int  refresh_rate;		// fullscreen refresh: -1 auto (a multiple of max_fps), 0 the desktop's, else Hz
 	int  max_fps;			// frame rate cap; 60 = the original's
 	int  dump_shaders;
+	int  full_log;			// 1 = every log line (slower), for bug reports
 	int  aspect;			// 0 = auto (from the desktop), 43 = 4:3, 169 = 16:9
 	int  ssao;			// ambient occlusion on the 3D image
 	float ssao_strength;		// 0..1, how dark creases get

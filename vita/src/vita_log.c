@@ -174,6 +174,9 @@ void vita_log_shutdown(void)
 void desktop_io_flush(SceUID fd);
 #endif
 
+#if defined(THUG_RELEASE) && defined(THUG_DESKTOP)
+int desktop_full_log(void);
+#endif
 #ifdef THUG_RELEASE
 /* Build public : seules les lignes utiles a un rapport de bug (demarrage,
  * erreurs "!!", plantages) ; le reste n'est meme pas formate. */
@@ -192,6 +195,9 @@ static int vita_log_retenu(const char *sys, const char *fmt)
 void vita_log_printf(const char *sys, const char *fmt, ...)
 {
 #ifdef THUG_RELEASE
+#ifdef THUG_DESKTOP
+    if (!desktop_full_log())
+#endif
     if (!vita_log_retenu(sys, fmt))
         return;
 #endif

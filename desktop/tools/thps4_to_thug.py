@@ -17,7 +17,7 @@ THPS4 shares THUG's engine, so most of the data carries over as is:
    single BSP leaf holding all its faces.
  - vertex colours: halved (Aspyr's PC data is 0-255, THUG's 0-128).
  - scripts: same token format. Objects the THUG data has no models for
-   (peds, cars, game objects) lose CreatedAtStart.
+   (peds, cars, game objects) lose CreatedAtStart and their model names.
 Personal use with your own copy of THPS4.
 """
 import os, struct, sys, shutil
@@ -190,6 +190,10 @@ def skip(d, i):
 
 NO_MODELS = {crc(c) for c in ('GameObject', 'Pedestrian', 'Vehicle')}
 C_CLASS, C_CREATED = crc('Class'), crc('CreatedAtStart')
+# model fields of those nodes: renamed, so the level load doesn't preload
+# THPS4 models THUG's data doesn't have (PreloadModels, PreloadPedestrians)
+MODEL_KEYS = {crc(k) for k in ('Model', 'ShadowModel', 'profile')}
+C_UNUSED = crc('th4_unused')
 
 
 def convert_nodes(d):
@@ -204,7 +208,7 @@ def convert_nodes(d):
             if depth == 1: start = i
         elif t == 4:
             if depth == 1 and start is not None:
-                j, cls, created = start, None, []
+                j, cls, created, models = start, None, [], []
                 while j < i:
                     if d[j] == 0x16:
                         c = struct.unpack_from('<I', d, j + 1)[0]
@@ -213,11 +217,15 @@ def convert_nodes(d):
                             cls = struct.unpack_from('<I', d, nxt + 2)[0]
                         elif c == C_CREATED:
                             created.append(j)
+                        elif c in MODEL_KEYS and d[nxt] == 7:
+                            models.append(j)
                     j = skip(d, j)
                 if cls in NO_MODELS:
                     for j in created:
                         d[j:j + 5] = b'\x01' * 5
                         removed += 1
+                    for j in models:
+                        struct.pack_into('<I', d, j + 1, C_UNUSED)
             depth -= 1
         i = skip(d, i)
     return bytes(d), removed

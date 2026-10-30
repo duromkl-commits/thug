@@ -115,7 +115,9 @@ static const char *s_default_ini =
 	"data=\n"
 	"\n"
 	"[debug]\n"
-	"dump_shaders=0\n";
+	"dump_shaders=0\n"
+	"; 1 = write every log line to thug.log (slower; for bug reports)\n"
+	"full_log=0\n";
 
 static DesktopConfig s_cfg;
 static bool s_loaded = false;
@@ -193,9 +195,12 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "shadow_softness" )) s_cfg.shadow_softness = (float)atof( v );
 		else if( !strcmp( k, "voices" ))        s_cfg.voices = iv;
 		else if( !strcmp( k, "dump_shaders" ))  s_cfg.dump_shaders = iv;
+		else if( !strcmp( k, "full_log" ))      s_cfg.full_log = iv;
 		else if( !strcmp( k, "data" ))          snprintf( s_cfg.data_root, sizeof( s_cfg.data_root ), "%s", v );
 	}
 }
+
+extern "C" int desktop_full_log( void ) { return desktop_config().full_log; }
 
 const DesktopConfig &desktop_config( void )
 {
