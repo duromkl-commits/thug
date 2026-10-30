@@ -1154,8 +1154,9 @@ static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, 
 
 // Imported levels (desktop): THPS4's College, converted to THUG files by
 // desktop/tools/thps4_to_thug.py into Data\levels\Sch. levels.qb gets its
-// level struct and load script (level_number 22, past THUG's own; no .pre
-// files, so the loose .xbx files load; THPS4's lighting); gamemenu.qb lists
+// level struct and load script (level_number 22, past THUG's own; no
+// scene .pre, so the loose .xbx files load; THPS4's lighting; NJ.pre for its
+// terrain sounds, which THUG keeps in each level's .pre); gamemenu.qb lists
 // it in Free Skate's level select. No goals or startup script yet: Sch's own
 // call THPS4 functions and sounds THUG doesn't have.
 static const char *s_niveau_sch =
@@ -1165,6 +1166,7 @@ static const char *s_niveau_sch =
 	"name = \"College (THPS4)\"\n"
 	"loading_screen = \"loadscrn_generic\"\n"
 	"loading_time = 9\n"
+	"pre = \"NJ.pre\"\n"
 	"level = \"Sch\"\n"
 	"sky = \"Sch_Sky\"\n"
 	"qb = \"levels\\Sch\\Sch.qb\"\n"

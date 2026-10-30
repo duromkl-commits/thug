@@ -10,7 +10,7 @@ writes levels/<L>/<L>.scn.xbx, .col.xbx, .tex.xbx, <L>.qb, <L>_scripts.qb
 THPS4 shares THUG's engine, so most of the data carries over as is:
  - textures: same format, copied.
  - scene: sectors and vertices are THUG's layout; materials lack the name,
-   z-bias, grass and specular fields, pass layout differs (no envmap tiling,
+   z-bias, back-face and specular fields (grass sits where no_bfc is), pass layout differs (no envmap tiling,
    36 extra bytes), and meshes have no bounding box or LOD list.
  - collision: version 8 -> 9. v8 vertices are 16 bytes (xyz + rgba), large
    faces 12 bytes, and its BSP nodes are another format: each object gets a
@@ -52,9 +52,11 @@ def convert_scn(d):
     out += struct.pack('<I', n)
     for _ in range(n):
         cs, passes, alpha_cutoff = r.t('3I')
-        srt, draw_order, single_sided, no_bfc = r.t('BfBB')
+        srt, draw_order, single_sided, grassify = r.t('BfBB')
+        if grassify:				# grass height, layers (THUG's port draws no grass shells)
+            r.t('fi')
         out += struct.pack('<4I', cs, cs, passes, alpha_cutoff)
-        out += struct.pack('<BfBBiBf', srt, draw_order, single_sided, no_bfc, 0, 0, 0.0)
+        out += struct.pack('<BfBBiBf', srt, draw_order, single_sided, 0, 0, 0, 0.0)
         for p in range(passes):
             tex, fl, has_color = r.t('IIB')
             color = r.t('3f')
