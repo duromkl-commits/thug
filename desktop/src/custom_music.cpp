@@ -1171,6 +1171,33 @@ static void patch_quitter( const unsigned char *qb, const std::vector<Jeton> &j,
 	}
 }
 
+// Story Mode menu (create_career_options_menu, skateshop.qb): the Pro Skater
+// 1-4 careers listed greyed out (not ported yet) above an Underground label,
+// ahead of THUG's own Level Select / Continue / Start New / Load items.
+static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "create_career_options_menu" ), item = crc( "make_main_menu_item" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		size_t b = k + 2;
+		while( b < j.size() && qb[j[b].pos] != T_ENDSCRIPT && !est_nom( qb, j[b], item )) ++b;
+		if( b >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) return;
+		while( b > k && qb[j[b].pos] != 37 ) --b;	// the 'if NOT cd' around Level Select
+		if( b == k ) return;
+		Ecrit w;
+		compile_q( w,
+			"make_main_menu_item { text = \"PRO SKATER 1\" pad_choose_script = null_script not_focusable = not_focusable }\n"
+			"make_main_menu_item { text = \"PRO SKATER 2\" pad_choose_script = null_script not_focusable = not_focusable }\n"
+			"make_main_menu_item { text = \"PRO SKATER 3\" pad_choose_script = null_script not_focusable = not_focusable }\n"
+			"make_main_menu_item { text = \"PRO SKATER 4\" pad_choose_script = null_script not_focusable = not_focusable }\n"
+			"make_main_menu_item { text = \"- UNDERGROUND -\" pad_choose_script = null_script not_focusable = not_focusable }\n" );
+		m.push_back( Modif{ j[b].pos, 0, w.o } );
+		VLOG( "MUS", "story menu: Pro Skater 1-4 added" );
+		return;
+	}
+}
+
 // Every secret skater in the select screen's head strip (it shows the ones
 // whose unlock flag is set). Pedestrian stays locked: its ped list isn't in
 // the game's files.
@@ -1366,6 +1393,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_niveaux( qb, j, m );
 	patch_air_shuffle( qb, j, m );
 	patch_quitter( qb, j, m );
+	patch_histoire( qb, j, m );
 	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );
 	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
 	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
