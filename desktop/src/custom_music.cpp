@@ -1152,6 +1152,69 @@ static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, 
 		}
 }
 
+// Imported levels (desktop): THPS4's College, converted to THUG files by
+// desktop/tools/thps4_to_thug.py into Data\levels\Sch. levels.qb gets its
+// level struct and load script (level_number 22, past THUG's own; no .pre
+// files, so the loose .xbx files load; THPS4's lighting); gamemenu.qb lists
+// it in Free Skate's level select. No goals or startup script yet: Sch's own
+// call THPS4 functions and sounds THUG doesn't have.
+static const char *s_niveau_sch =
+	"Level_TH4_Sch = {\n"
+	"structure_name = Level_TH4_Sch\n"
+	"load_script = Load_TH4_Sch\n"
+	"name = \"College (THPS4)\"\n"
+	"loading_screen = \"loadscrn_generic\"\n"
+	"loading_time = 9\n"
+	"level = \"Sch\"\n"
+	"sky = \"Sch_Sky\"\n"
+	"qb = \"levels\\Sch\\Sch.qb\"\n"
+	"level_qb = \"levels\\Sch\\Sch_scripts.qb\"\n"
+	"default_stats = 5\n"
+	"level_number = 22\n"
+	"ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2\n"
+	"heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8\n"
+	"heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1\n"
+	"fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0\n"
+	"}\n"
+	"script Load_TH4_Sch\n"
+	"load_level Level_TH4_Sch\n"
+	"endscript\n";
+
+static const char *s_choix_sch =
+	"{ text = \"College (THPS4)\" level_num = 22 points_to_unlock = 0 num_am_goals = 0 num_goals = 0 flag = LEVEL_UNLOCKED_NJ level = load_TH4_Sch }\n";
+
+static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	// levels.qb: the one with 'script load_level'
+	const uint32_t n_load = crc( "load_level" ), n_info = crc( "level_select_menu_level_info" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n_load ))
+		{
+			Ecrit w; w.eol(); compile_q( w, s_niveau_sch );
+			m.push_back( Modif{ j.back().pos, 0, w.o } );
+			VLOG( "MUS", "levels: THPS4 College added" );
+			break;
+		}
+	// gamemenu.qb: level_select_menu_level_info = [ ... ]
+	for( size_t k = 0; k + 2 < j.size(); ++k )
+	{
+		if( !est_nom( qb, j[k], n_info ) || qb[j[k + 1].pos] != T_EGAL ) continue;
+		size_t a = sans_eol( qb, j, k + 2 );
+		if( a >= j.size() || qb[j[a].pos] != T_TAB ) continue;
+		int n = 0;
+		for( ; a < j.size(); ++a )
+		{
+			if( qb[j[a].pos] == T_TAB ) ++n;
+			else if( qb[j[a].pos] == T_FTAB && --n == 0 ) break;
+		}
+		if( a >= j.size()) return;
+		Ecrit w; compile_q( w, s_choix_sch );
+		m.push_back( Modif{ j[a].pos, 0, w.o } );
+		VLOG( "MUS", "level select: THPS4 College added" );
+		return;
+	}
+}
+
 extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const unsigned char *qb )
 {
 	if( !qb ) return NULL;
@@ -1166,6 +1229,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	if( !s_pistes.empty()) patch_liste( qb, j, m );
 	patch_soundtrack( qb, j, m );
 	patch_player_model( qb, j, m );
+	patch_niveaux( qb, j, m );
 	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
 	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
 	// Music keeps going, where it was, through level loads and run starts

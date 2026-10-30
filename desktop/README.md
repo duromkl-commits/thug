@@ -144,6 +144,19 @@ own songs and shuffle in with them.
   shuffle your choices. Delete it to switch everything back on.
 - M4A/AAC and WMA aren't supported.
 
+## THPS4 levels (test)
+
+College from Tony Hawk's Pro Skater 4 (Aspyr PC) can be played in Free Skate,
+listed as "College (THPS4)". Convert it from your own THPS4 install with
+Python 3:
+
+```
+python desktop/tools/thps4_to_thug.py "C:\Program Files (x86)\Aspyr\Tony Hawks Pro Skater 4\Game\data" Sch "<THUG folder>\Data"
+```
+
+That writes `Data\levels\Sch` and `Data\levels\Sch_Sky`. No goals, peds or
+cars yet, and THPS4's level sounds aren't loaded.
+
 ## Controls
 
 The game runs with PS2 controls and PS2 button icons: triangle backs out of
