@@ -5,7 +5,8 @@
 
 reads  levels/<L>/<L>scn.dat, <L>col.dat, <L>tex.dat, <L>.qb, <L>_Scripts.qb
        (and levels/<L>_Sky/ the same way)
-writes levels/<L>/<L>.scn.xbx, .col.xbx, .tex.xbx, <L>.qb, <L>_scripts.qb
+writes levels/<L>/<L>.scn.xbx, .col.xbx, .tex.xbx, <L>.qb, <L>_scripts.qb,
+       models/animals/..., anims/anl_.../
 
 THPS4 shares THUG's engine, so most of the data carries over as is:
  - textures: same format, copied.
@@ -18,6 +19,10 @@ THPS4 shares THUG's engine, so most of the data carries over as is:
  - vertex colours: halved (Aspyr's PC data is 0-255, THUG's 0-128).
  - scripts: same tokens, except Random & co. have no weights (added). Objects the THUG data has no models for
    (peds, cars, game objects) lose CreatedAtStart and their model names.
+ - animals (Pedestrian nodes with a Model and an animload_anl_ set): skins
+   and shadow models converted like the scene (float bone weights -> THUG's
+   packed ones) to models/, their animations re-keyed for THUG's key tables
+   to anims/<set>/. THUG ships their skeletons and animload_ scripts.
  - sounds: the .wav files the level's LoadSound lines name are copied to
    sounds/wav/ (16-bit PCM; the port loads them when THUG has no .pcm of that name).
 Personal use with your own copy of THPS4.
@@ -95,14 +100,29 @@ def convert_scn(d, sectors=None):
         pos = [struct.unpack_from('<3f', pos_raw, 12 * i) for i in range(nv)]
         out += pos_raw
         if flags & 0x04: out += r.b(12 * nv)
-        if flags & 0x10: out += r.b(12 * nv)
+        if flags & 0x10:			# skinned: THPS4 has 4 float weights, THUG 3 packed 11:11:10
+            ws = r.t(f'{4 * nv}f')
+            bs = r.t(f'{4 * nv}H')
+            pw, pb = [], []
+            for v in range(nv):
+                top = sorted(range(4), key=lambda k: -ws[4 * v + k])[:3]
+                w = [max(ws[4 * v + k], 0.0) for k in top]
+                tot = sum(w) or 1.0
+                q = [int(w[0] / tot * 1023), int(w[1] / tot * 1023), int(w[2] / tot * 511)]
+                pw.append(q[0] | q[1] << 11 | q[2] << 22)
+                pb += [bs[4 * v + k] if w[n] > 0 else 0 for n, k in enumerate(top)] + [0]
+            out += struct.pack(f'<{nv}I', *pw) + struct.pack(f'<{4 * nv}H', *pb)
         if flags & 0x01:
             sets = r.one('i')
             out += struct.pack('<i', sets) + r.b(8 * sets * nv)
         if flags & 0x02:
             # Aspyr's PC colours run 0-255; THUG's (Xbox) 0-128, doubled when drawn.
+            # Skins: THUG's own (its THPS4 dog, Elissa's head) are flat 0x80 grey.
             cols = struct.unpack_from(f'<{nv}I', r.b(4 * nv))
-            out += struct.pack(f'<{nv}I', *[(c & 0xFF000000) | ((c >> 1) & 0x007F7F7F) for c in cols])
+            if flags & 0x10:
+                out += struct.pack(f'<{nv}I', *[(c & 0xFF000000) | 0x808080 for c in cols])
+            else:
+                out += struct.pack(f'<{nv}I', *[(c & 0xFF000000) | ((c >> 1) & 0x007F7F7F) for c in cols])
         if flags & 0x800: out += r.b(nv)
         for _ in range(nm):
             mflags, mat, count = r.t('IIi')
@@ -253,9 +273,20 @@ MODEL_KEYS = {crc(k) for k in ('Model', 'ShadowModel', 'profile')}
 C_UNUSED = crc('th4_unused')
 
 
-def convert_nodes(d):
+def node_string(d, at):
+    """The string value after a 'key =' at d[at] (0x1b token), or None."""
+    if d[at] == 7 and d[at + 1] == 0x1b:
+        n = struct.unpack_from('<I', d, at + 2)[0]
+        return d[at + 6:at + 5 + n].decode('latin-1')
+    return None
+
+
+def convert_nodes(d, keep=None):
     """Node structs whose Class has no model in THUG: CreatedAtStart removed
-    (the token is blanked to an end-of-line, so offsets stay put)."""
+    (the token is blanked to an end-of-line, so offsets stay put).
+    keep(cls, fields) spares a node whose models were converted, by returning
+    the model keys still to blank (None: not spared); fields maps key
+    checksums to their string or checksum values."""
     d = bytearray(d)
     i, depth, start, removed = 0, 0, None, 0
     while i < len(d) and d[i] != 0:
@@ -265,7 +296,7 @@ def convert_nodes(d):
             if depth == 1: start = i
         elif t == 4:
             if depth == 1 and start is not None:
-                j, cls, cls_at, created, models = start, None, None, [], []
+                j, cls, cls_at, created, models, fields = start, None, None, [], [], {}
                 while j < i:
                     if d[j] == 0x16:
                         c = struct.unpack_from('<I', d, j + 1)[0]
@@ -275,21 +306,31 @@ def convert_nodes(d):
                             cls_at = nxt + 2
                         elif c == C_CREATED:
                             created.append(j)
-                        elif c in MODEL_KEYS and d[nxt] == 7:
-                            models.append(j)
-
+                        elif d[nxt] == 7:
+                            if c in MODEL_KEYS:
+                                models.append(j)
+                            if d[nxt + 1] == 0x16:
+                                fields[c] = struct.unpack_from('<I', d, nxt + 2)[0]
+                            else:
+                                fields[c] = node_string(d, nxt)
                     j = skip(d, j, 4)
-                if cls in NOT_CREATED:
-                    for j in created:
-                        d[j:j + 5] = b'\x01' * 5
+                blank = keep(cls, fields) if cls in NO_MODELS and keep else None
+                if blank is not None:
+                    for j in models:
+                        if struct.unpack_from('<I', d, j + 1)[0] in blank:
+                            struct.pack_into('<I', d, j + 1, C_UNUSED)
+                else:
+                    if cls in NOT_CREATED:
+                        for j in created:
+                            d[j:j + 5] = b'\x01' * 5
+                            removed += 1
+                    for j in (models if cls in NO_MODELS else []):
+                        struct.pack_into('<I', d, j + 1, C_UNUSED)
+                    # their Class goes too: THPS4's scripts Create some of them
+                    # later (London's buses), and THUG's car code crashed on them
+                    if cls == C_PROXIM or cls in NO_MODELS:
+                        struct.pack_into('<I', d, cls_at, C_UNUSED)
                         removed += 1
-                for j in (models if cls in NO_MODELS else []):
-                    struct.pack_into('<I', d, j + 1, C_UNUSED)
-                # their Class goes too: THPS4's scripts Create some of them
-                # later (London's buses), and THUG's car code crashed on them
-                if cls == C_PROXIM or cls in NO_MODELS:
-                    struct.pack_into('<I', d, cls_at, C_UNUSED)
-                    removed += 1
             depth -= 1
         i = skip(d, i, 4)
     return bytes(d), removed
@@ -371,6 +412,152 @@ def orphan_collision(col, qb, sectors):
     return drop
 
 
+# ---------------------------------------------------------------- animations
+
+# THPS4's .ska is THUG's compressed format, but the two games' key tables
+# (anims/standardkeyQ.bin, standardkeyT.bin) differ: keys that point into
+# THPS4's table are written out in full, which THUG reads without a table.
+
+def key_table(path):
+    d = open(path, 'rb').read()
+    return [struct.unpack_from('<3h', d, 8 * i) for i in range(256)]
+
+
+def convert_ska(d, qt, tt):
+    ver, fl, dur, nb, nq, nt, nc, qa, ta = struct.unpack_from('<IIf6I', d, 0)
+    if not fl & (1 << 23):
+        return d					# not table-compressed: nothing to translate
+    o = 36
+    qs = struct.unpack_from(f'<{nb}H', d, o); o += 2 * nb
+    ts = struct.unpack_from(f'<{nb}H', d, o); o += 2 * nb
+    o = (o + 3) & ~3
+    partial = b''
+    if fl & (1 << 19):
+        n = struct.unpack_from('<i', d, o)[0]
+        partial = d[o:o + 4 + 4 * ((n - 1) // 32 + 1)]
+        o += len(partial)
+    o = (o + 3) & ~3
+    u = lambda a: d[a] | d[a + 1] << 8
+    qo, to = o, o + qa
+    qout, tout, qsz, tsz = bytearray(), bytearray(), [], []
+    for b in range(nb):
+        start, end = len(qout), qo + qs[b]
+        while qo < end:
+            data = u(qo); stamp, sign = data & 0x3FFF, data & 0x8000; qo += 2
+            if data & 0x4000:
+                stamp &= 0x7FF
+                if not data & 0x3800:
+                    q = qt[d[qo]]; qo += 1
+                else:
+                    q = []
+                    for bit in (0x2000, 0x1000, 0x0800):
+                        if data & bit: q.append(d[qo]); qo += 1
+                        else: q.append(u(qo)); qo += 2
+            else:
+                q = [u(qo), u(qo + 2), u(qo + 4)]; qo += 6
+            qout += struct.pack('<H3H', stamp | sign, *[v & 0xFFFF for v in q])
+        qsz.append(len(qout) - start)
+        start, end = len(tout), to + ts[b]
+        while to < end:
+            f = d[to]; to += 1
+            if f & 0x40: stamp = f & 0x3F
+            else: stamp = u(to); to += 2
+            if f & 0x80: t = tt[d[to]]; to += 1
+            else: t = [u(to), u(to + 2), u(to + 4)]; to += 6
+            tout += struct.pack('<BH3H', 0, stamp, *[v & 0xFFFF for v in t])
+        tsz.append(len(tout) - start)
+    if max(qsz + tsz + [0]) > 0xFFFF:
+        raise ValueError('bone track too long once expanded')
+    out = bytearray(struct.pack('<IIf6I', ver, fl, dur, nb, nq, nt, nc, len(qout), len(tout)))
+    out += struct.pack(f'<{nb}H', *qsz) + struct.pack(f'<{nb}H', *tsz)
+    out += bytes(-len(out) % 4) + partial
+    out += bytes(-len(out) % 4) + qout + tout
+    out += bytes(-len(out) % 4) + d[(to + 3) & ~3:]	# custom keys, as they were
+    return bytes(out)
+
+
+# ---------------------------------------------------------------- models
+
+def find_path(root, parts):
+    for p in parts:
+        root = find(root, p)
+    return root
+
+
+def convert_model(src_data, name, dst_data):
+    """'animals\\anl_rhino\\anl_rhino.skin' (THPS4 node Model) ->
+    models/animals/anl_rhino/anl_rhino.skin.xbx + .tex.xbx. False when
+    THPS4 has no such model."""
+    parts = name.replace('/', '\\').lower().split('\\')
+    base, ext = os.path.splitext(parts[-1])
+    if ext not in ('.skin', '.mdl'):
+        return False
+    try:
+        folder = find_path(find(src_data, 'models'), parts[:-1])
+        geo = find(folder, base + ext[1:] + '.dat')
+        tex = find(folder, base + 'tex.dat')
+    except FileNotFoundError:
+        return False
+    out = os.path.join(dst_data, 'models', *parts[:-1])
+    os.makedirs(out, exist_ok=True)
+    open(os.path.join(out, base + ext + '.xbx'), 'wb').write(convert_scn(open(geo, 'rb').read()))
+    shutil.copyfile(tex, os.path.join(out, base + '.tex.xbx'))
+    return True
+
+
+def convert_anims(src_data, anim_set, dst_data):
+    """Every animation of THPS4's anims/<set> (animload_anl_rhino -> anl_rhino),
+    where THUG's own animload_ scripts look for them."""
+    try:
+        folder = find(find(src_data, 'anims'), anim_set)
+        a = find(src_data, 'anims')
+        qt, tt = key_table(find(a, 'standardkeyQ.bin')), key_table(find(a, 'standardkeyT.bin'))
+    except FileNotFoundError:
+        return 0
+    out = os.path.join(dst_data, 'anims', anim_set.lower())
+    os.makedirs(out, exist_ok=True)
+    n = 0
+    for f in os.listdir(folder):
+        if f.lower().endswith('ska.dat'):
+            d = convert_ska(open(os.path.join(folder, f), 'rb').read(), qt, tt)
+            open(os.path.join(out, f[:-7].lower() + '.ska.xbx'), 'wb').write(d)
+            n += 1
+    return n
+
+
+C_MODEL, C_SHADOW, C_PROFILE = crc('Model'), crc('ShadowModel'), crc('profile')
+C_PED, C_ANIM, C_EXTRA = crc('Pedestrian'), crc('animName'), crc('Extra_Anims')
+
+
+def animal_keeper(src_data, dst_data, names):
+    """Pedestrian nodes with a THPS4 animal (Model + animload_anl_ set): its
+    skin and animations are converted and the node stays. THUG still ships
+    THPS4's animal skeletons and animload_anl_ scripts, only not the files."""
+    done = {}
+    def keep(cls, f):
+        model, anim = f.get(C_MODEL), names.get(f.get(C_ANIM), '')
+        if cls != C_PED or not isinstance(model, str) or C_PROFILE in f \
+                or not anim.lower().startswith('animload_anl_'):
+            return None
+        if model not in done:
+            done[model] = convert_model(src_data, model, dst_data)
+        if not done[model]:
+            return None
+        for a in {anim, names.get(f.get(C_EXTRA), '')}:
+            if a.lower().startswith('animload_') and a not in done:
+                done[a] = convert_anims(src_data, a[len('animload_'):], dst_data)
+                print(f'  {a}: {done[a]} animations')
+        shadow = f.get(C_SHADOW)
+        if isinstance(shadow, str):
+            if shadow not in done:
+                done[shadow] = convert_model(src_data, shadow, dst_data)
+            if not done[shadow]:
+                return {C_SHADOW}
+        return set()
+    keep.done = done
+    return keep
+
+
 # ---------------------------------------------------------------- main
 
 def find(folder, name):
@@ -424,7 +611,11 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
     open(os.path.join(o, f'{L}.col.xbx'), 'wb').write(convert_col(col, drop))
     shutil.copyfile(find(s, f'{L}tex.dat'), os.path.join(o, f'{L}.tex.xbx'))
     if scripts:
-        q, n = convert_nodes(rd(f'{L}.qb'))
+        src_data, dst_data = os.path.dirname(src_levels), os.path.dirname(dst_levels)
+        keep = animal_keeper(src_data, dst_data, qb_names(rd(f'{L}.qb')))
+        q, n = convert_nodes(rd(f'{L}.qb'), keep)
+        kept = sorted(m for m, ok in keep.done.items() if ok and '.' in m)
+        if kept: print(f'{L}: models converted: {", ".join(kept)}')
         q, r = fix_randoms(q)
         open(os.path.join(o, f'{L}.qb'), 'wb').write(q)
         try:
