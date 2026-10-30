@@ -580,7 +580,7 @@ def animal_keeper(src_data, dst_data, names):
 
 C_SETREF, C_LOADANIM = crc('SetReferenceChecksum'), crc('LoadAnim')
 C_NAME, C_DESC, C_DESC_ID, C_MESH = crc('name'), crc('descChecksum'), crc('desc_id'), crc('mesh')
-C_PED_BODY = crc('ped_body')
+C_PED_BODY, C_SCALE, C_TRIGGER = crc('ped_body'), crc('scale'), crc('TriggerScript')
 HUMAN_REFS = {crc('animload_human'): 'animload_human', crc('animload_Ped_F'): 'animload_Ped_F'}
 PROFILE_EXTRAS = {crc(k) for k in ('ped_body', 'ped_board', 'scale', 'body_shape')}
 
@@ -695,7 +695,7 @@ def ped_profiles(src_data, cache):
                     mesh.setdefault(last, m[len('models\\'):] if m.lower().startswith('models\\') else m)
             i = skip(d, i, 4)
     d = open(find(sc, 'profile_ped.qb'), 'rb').read()
-    out, i, depth, cur, keys, body, key = {}, 0, 0, None, set(), None, None
+    out, i, depth, cur, keys, body, key, scale = {}, 0, 0, None, set(), None, None, None
     while i < len(d) and d[i]:
         t = d[i]
         if t == 3:
@@ -704,15 +704,17 @@ def ped_profiles(src_data, cache):
             depth -= 1
             if depth == 0 and cur is not None:
                 if keys <= PROFILE_EXTRAS and body in mesh:
-                    out[cur] = mesh[body]
+                    out[cur] = (mesh[body], scale)
                 cur = None
         elif t == 0x16 and d[i + 5] == 7:
             c = struct.unpack_from('<I', d, i + 1)[0]
             if depth == 0 and d[i + 6] == 3:
-                cur, keys, body = c, set(), None
+                cur, keys, body, scale = c, set(), None, None
             elif depth == 1:
                 keys.add(c)
                 key = c
+                if c == C_SCALE and d[i + 6] == 0x1e:	# kids: scale = (x,y,z)
+                    scale = bytes(d[i + 7:i + 19])
             elif depth == 2 and key == C_PED_BODY and c == C_DESC_ID and d[i + 6] == 0x16:
                 body = struct.unpack_from('<I', d, i + 7)[0]
         i = skip(d, i, 4)
@@ -721,33 +723,72 @@ def ped_profiles(src_data, cache):
 
 
 def profiles_to_models(d, profiles):
-    """'profile = pedpro_Hawk_profile' -> 'Model = "th4\\peds\\...skin"' in the
-    node array (before the first script, so no jump spans the change)."""
+    """'profile = pedpro_Hawk_profile' -> 'Model = "th4\\peds\\...skin"' (and
+    the profile's scale, which makes kids kid-sized) in the node array
+    (before the first script, so no jump spans the change)."""
     out, i, last, n = bytearray(), 0, 0, 0
     while i < len(d) and d[i] and d[i] != 0x23:
         if d[i] == 0x16 and d[i + 5] == 7 and d[i + 6] == 0x16 \
                 and struct.unpack_from('<I', d, i + 1)[0] == C_PROFILE:
-            m = profiles.get(struct.unpack_from('<I', d, i + 7)[0])
+            m, scale = profiles.get(struct.unpack_from('<I', d, i + 7)[0], (None, None))
             if m:
                 m = m.encode('latin-1') + b'\0'
                 out += d[last:i] + struct.pack('<BIBBI', 0x16, C_MODEL, 7, 0x1b, len(m)) + m
+                if scale:
+                    out += struct.pack('<BIBB', 0x16, C_SCALE, 7, 0x1e) + scale
                 last = i + 11
                 n += 1
         i = skip(d, i, 4)
     return bytes(out + d[last:]), n
 
 
-def human_keeper(src_data, dst_data, names, animals):
+def vehicle_scripts(qbs):
+    """Scripts that use a car, tram or game object node (all left out), or
+    call a script that does: Zoo's tram driver sat in mid-air on his route."""
+    gone, bodies = set(), {}
+    for d in qbs:
+        i, depth, start = 0, 0, None
+        while i < len(d) and d[i]:
+            t = d[i]
+            if t == 3:
+                depth += 1
+                if depth == 1: start = i
+            elif t == 4:
+                if depth == 1 and start is not None:
+                    body = d[start:i]
+                    cls = re.search(re.escape(struct.pack('<BIBB', 0x16, C_CLASS, 7, 0x16)) + b'(....)', body, re.S)
+                    name = re.search(re.escape(struct.pack('<BIBB', 0x16, crc('name'), 7, 0x16)) + b'(....)', body, re.S)
+                    if cls and name and struct.unpack('<I', cls.group(1))[0] in (crc('Vehicle'), crc('GameObject')):
+                        gone.add(name.group(1))
+                depth -= 1
+            elif t == 0x23 and d[i + 1] == 0x16:
+                j = i
+                while j < len(d) and d[j] and d[j] != 0x24:
+                    j = skip(d, j, 4)
+                bodies[d[i + 2:i + 6]] = d[i + 6:j]
+            i = skip(d, i, 4)
+    used = set()
+    while True:
+        new = {c for c, b in bodies.items() if c not in used
+               and any(b'\x16' + x in b for x in gone | used)}
+        if not new:
+            return {struct.unpack('<I', c)[0] for c in used}
+        used |= new
+
+
+def human_keeper(src_data, dst_data, names, animals, riders=()):
     """Pedestrian nodes with a THPS4 human model (after profiles_to_models):
     the model goes to models/th4/ and the node's Model is renamed to match
-    by the caller; the node stays. Animals are left to animal_keeper."""
+    by the caller; the node stays. Animals are left to animal_keeper, and
+    peds whose TriggerScript rides a left-out vehicle are left out."""
     done = {}
     def keep(cls, f):
         r = animals(cls, f)
         if r is not None:
             return r
         model, anim = f.get(C_MODEL), f.get(C_ANIM)
-        if cls != C_PED or not isinstance(model, str) or C_PROFILE in f or anim not in HUMAN_REFS:
+        if cls != C_PED or not isinstance(model, str) or C_PROFILE in f or anim not in HUMAN_REFS \
+                or f.get(C_TRIGGER) in riders:
             return None
         if model not in done:
             done[model] = convert_model(src_data, model, dst_data, ('th4',))
@@ -834,7 +875,12 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
         src_data, dst_data = os.path.dirname(src_levels), os.path.dirname(dst_levels)
         q, np = profiles_to_models(rd(f'{L}.qb'), ped_profiles(src_data, CACHE))
         animals = animal_keeper(src_data, dst_data, qb_names(q))
-        keep = human_keeper(src_data, dst_data, qb_names(q), animals)
+        try:
+            sq = rd(f'{L}_Scripts.qb')
+        except FileNotFoundError:
+            sq = None
+        riders = vehicle_scripts([q] + ([sq] if sq else []))
+        keep = human_keeper(src_data, dst_data, qb_names(q), animals, riders)
         q, n = convert_nodes(q, keep)
         kept = sorted(m for m, ok in animals.done.items() if ok and '.' in m)
         if kept: print(f'{L}: models converted: {", ".join(kept)}')
@@ -843,10 +889,6 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
         print(f'{L}: {np} ped profiles made single models; human peds: {", ".join(humans)}')
         if lost: print(f'{L}: human ped models THPS4 data lacks: {", ".join(lost)}')
         q = prefix_models(q, humans)
-        try:
-            sq = rd(f'{L}_Scripts.qb')
-        except FileNotFoundError:
-            sq = None
         renames, code = human_anims(src_data, dst_data, [q] + ([sq] if sq else []), CACHE)
         q = append_scripts(rename_checksums(q, renames), code)
         q, r = fix_randoms(q)
