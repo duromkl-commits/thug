@@ -938,8 +938,8 @@ static void patch_change_skater( const unsigned char *qb, const std::vector<Jeto
 
 // --- a little script compiler for the menus added below -------------------------
 //
-// Enough of the .q syntax for menu scripts: names, "strings", whole numbers,
-// (x,y) pairs, = { } [ ] ( ), <name> arguments, and the keywords used.
+// Enough of the .q syntax for menu scripts: names, "strings", numbers,
+// (x,y) pairs, = { } [ ] ( ) ,, <name> arguments, and the keywords used.
 
 static void compile_q( Ecrit &w, const char *t )
 {
@@ -977,6 +977,7 @@ static void compile_q( Ecrit &w, const char *t )
 		if( c == '[' ) { w.octet( T_TAB ); ++t; continue; }
 		if( c == ']' ) { w.octet( T_FTAB ); ++t; continue; }
 		if( c == '=' ) { w.octet( T_EGAL ); ++t; continue; }
+		if( c == ',' ) { w.octet( 9 ); ++t; continue; }
 		if( c == '<' )
 		{
 			const char *f = strchr( t, '>' );
@@ -986,7 +987,7 @@ static void compile_q( Ecrit &w, const char *t )
 			continue;
 		}
 		const char *d = t;
-		while( *t && !strchr( " \t\r\n\"(){}[]=<", *t )) ++t;
+		while( *t && !strchr( " \t\r\n\"(){}[]=<,", *t )) ++t;
 		const std::string m( d, t );
 		if( isdigit((unsigned char)m[0] ) || ( m[0] == '-' && m.size() > 1 ))
 		{
@@ -1114,6 +1115,39 @@ static const char *s_debut_planche =
 	"if NOT ( <current_skater> = custom )\n"
 	"return\n"
 	"endif\n";
+
+// Air shuffle (as in THUG Pro / Re-THAWed): off the board in the air (a
+// caveman), the boneless input (Up + X X) puts you back on the board with a
+// small pop. It leaves walking, so it's once per caveman; it ends in plain
+// Airborne, so you can go off the board again and shuffle again.
+static const char *s_air_shuffle =
+	"script WalkingAirShuffle\n"
+	"SkaterLoopingSound_TurnOff\n"
+	"Walk_ScaleAnimSpeed Off\n"
+	"CleanUp_WalkingtoSkating\n"
+	"PerhapsAwardCaveman\n"
+	"Jump speed = 200.0\n"
+	"Vibrate Actuator = 1 Percent = 80 duration = 0.1\n"
+	"PlayAnim Anim = Boneless BlendPeriod = 0.2\n"
+	"WaitAnimWhilstChecking\n"
+	"Goto Airborne\n"
+	"endscript\n";
+
+static void patch_air_shuffle( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "WalkAirTricks" );
+	for( size_t k = 0; k + 2 < j.size(); ++k )
+	{
+		if( !est_nom( qb, j[k], n ) || qb[j[k + 1].pos] != T_EGAL || qb[j[k + 2].pos] != T_TAB ) continue;
+		if( k > 0 && qb[j[k - 1].pos] != T_EOL && qb[j[k - 1].pos] != T_EOLNUM ) continue;	// the definition
+		Ecrit w1; compile_q( w1, s_air_shuffle );
+		m.push_back( Modif{ j[k].pos, 0, w1.o } );
+		Ecrit w2; w2.eol(); compile_q( w2, "{ Trigger = { TapTwiceRelease , Up , X , 500 } Scr = WalkingAirShuffle }" );
+		m.push_back( Modif{ j[k + 2].pos + j[k + 2].taille, 0, w2.o } );
+		VLOG( "MUS", "air shuffle added" );
+		return;
+	}
+}
 
 // Puts text at the start of script 'nom', after its header line.
 static void patch_debut( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
@@ -1300,6 +1334,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_soundtrack( qb, j, m );
 	patch_player_model( qb, j, m );
 	patch_niveaux( qb, j, m );
+	patch_air_shuffle( qb, j, m );
 	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
 	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
 	// Music keeps going, where it was, through level loads and run starts
