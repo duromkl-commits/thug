@@ -64,7 +64,8 @@ namespace
 struct SVoix
 {
 	const SSonVita	*p_son;
-	unsigned int	 position;		// virgule fixe 16.16 dans le son
+	unsigned long long position;	// virgule fixe 16.16 dans le son ; 64 bits : en 32, un son de plus
+								// de 65536 echantillons (1,5 s) revenait a 0 et ne finissait jamais
 	unsigned int	 pas;			// increment 16.16 par echantillon de sortie
 	int				 vol_g;			// 0..256
 	int				 vol_d;
@@ -150,8 +151,8 @@ static int thread_mixeur( SceSize, void * )
 
 			for( int i = 0; i < GRAIN; ++i )
 			{
-				const unsigned int idx = p_v->position >> 16;
-				if( (int)idx >= p_s->nb_echantillons )
+				const unsigned long long idx = p_v->position >> 16;
+				if( idx >= (unsigned long long)p_s->nb_echantillons )
 				{
 					if( p_v->boucle )
 					{
