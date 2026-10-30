@@ -155,6 +155,10 @@ def convert_col(d, drop=()):
         voff, = struct.unpack_from('<I', d, o + 48)
         objs.append((cs, fla, nv, nf, small, foff, bbox, voff))
 
+    # Dropped objects keep no faces: the header counts must match what is
+    # written, or THUG looks for the BSP nodes past the real faces.
+    nfl -= sum(nf for cs, fla, nv, nf, small, *_ in objs if cs in drop and not small)
+    nfs -= sum(nf for cs, fla, nv, nf, small, *_ in objs if cs in drop and small)
     hdr = struct.pack('<8i', 9, nobj, total_verts, nfl, nfs, total_verts, 0, 0)
     obj_out = bytearray()
     verts = bytearray()
