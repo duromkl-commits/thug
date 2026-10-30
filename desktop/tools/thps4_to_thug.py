@@ -488,10 +488,10 @@ def find_path(root, parts):
     return root
 
 
-def convert_model(src_data, name, dst_data):
+def convert_model(src_data, name, dst_data, prefix=()):
     """'animals\\anl_rhino\\anl_rhino.skin' (THPS4 node Model) ->
     models/animals/anl_rhino/anl_rhino.skin.xbx + .tex.xbx (+ .col.xbx for
-    a .mdl). False when
+    a .mdl), under models/<prefix>/ when given. False when
     THPS4 has no such model."""
     parts = name.replace('/', '\\').lower().split('\\')
     base, ext = os.path.splitext(parts[-1])
@@ -503,7 +503,7 @@ def convert_model(src_data, name, dst_data):
         tex = find(folder, base + 'tex.dat')
     except FileNotFoundError:
         return False
-    out = os.path.join(dst_data, 'models', *parts[:-1])
+    out = os.path.join(dst_data, 'models', *prefix, *parts[:-1])
     os.makedirs(out, exist_ok=True)
     open(os.path.join(out, base + ext + '.xbx'), 'wb').write(convert_scn(open(geo, 'rb').read()))
     shutil.copyfile(tex, os.path.join(out, base + '.tex.xbx'))
@@ -570,6 +570,211 @@ def animal_keeper(src_data, dst_data, names):
     return keep
 
 
+# ---------------------------------------------------------------- human peds
+
+# THUG keeps THPS4's 50-bone human skeleton but not its ped animations: its
+# animload_human is a stub and its animload_Ped_ scripts load THUG's own
+# (thps5_human) files from the same paths. So THPS4's human sets get their
+# own names (animload_th4_...), their files go to anims/th4/, and the scripts
+# loading them are appended to the level qb. Models go to models/th4/.
+
+C_SETREF, C_LOADANIM = crc('SetReferenceChecksum'), crc('LoadAnim')
+C_NAME, C_DESC, C_DESC_ID, C_MESH = crc('name'), crc('descChecksum'), crc('desc_id'), crc('mesh')
+C_PED_BODY = crc('ped_body')
+HUMAN_REFS = {crc('animload_human'): 'animload_human', crc('animload_Ped_F'): 'animload_Ped_F'}
+PROFILE_EXTRAS = {crc(k) for k in ('ped_body', 'ped_board', 'scale', 'body_shape')}
+
+
+def th4_set(name):
+    return 'animload_th4_' + name[len('animload_'):]
+
+
+def anim_scripts(src_data):
+    """THPS4's human animload_ scripts: checksum -> (name, reference set,
+    [(file, descChecksum)])."""
+    d = open(find(find(src_data, 'scripts'), 'allanims.qb'), 'rb').read()
+    names = qb_names(d)
+    out, cur, i = {}, None, 0
+    while i < len(d) and d[i]:
+        if d[i] == 0x23 and d[i + 1] == 0x16:
+            c = struct.unpack_from('<I', d, i + 2)[0]
+            cur = out[c] = [names.get(c, ''), None, []]
+        elif d[i] == 0x16 and cur is not None and d[i + 5] == 7:
+            c = struct.unpack_from('<I', d, i + 1)[0]
+            if c == C_NAME and d[i + 6] == 0x1b:
+                cur[2].append([node_string(d, i + 5), None])
+            elif c == C_DESC and d[i + 6] == 0x16 and cur[2]:
+                cur[2][-1][1] = struct.unpack_from('<I', d, i + 7)[0]
+        elif d[i] == 0x16 and cur is not None and d[i + 5] == 0x16 \
+                and struct.unpack_from('<I', d, i + 1)[0] == C_SETREF:
+            cur[1] = struct.unpack_from('<I', d, i + 6)[0]
+        i = skip(d, i, 4)
+    return {c: (n, ref, a) for c, (n, ref, a) in out.items() if ref in HUMAN_REFS}
+
+
+def script_bytes(name, ref, anims):
+    """script <name> SetReferenceChecksum <ref> LoadAnim ... SetReferenceChecksum 0 endscript"""
+    b = bytearray(struct.pack('<BBI', 0x23, 0x16, crc(name)) + b'\x01')
+    b += struct.pack('<BIBI', 0x16, C_SETREF, 0x16, crc(ref)) + b'\x01'
+    for f, desc in anims:
+        f = f.encode('latin-1') + b'\0'
+        b += struct.pack('<BIBIBBI', 0x16, C_LOADANIM, 0x16, C_NAME, 7, 0x1b, len(f)) + f
+        b += struct.pack('<BIBBI', 0x16, C_DESC, 7, 0x16, desc) + b'\x01'
+    b += struct.pack('<BIBi', 0x16, C_SETREF, 0x17, 0) + b'\x01\x24\x01'
+    return bytes(b)
+
+
+def human_anims(src_data, dst_data, qbs, cache):
+    """The THPS4 human sets the level's scripts call (and animload_human):
+    renamed in the qbs, their files converted, their scripts returned."""
+    scripts = cache.setdefault('scripts', anim_scripts(src_data))
+    a = find(src_data, 'anims')
+    qt, tt = key_table(find(a, 'standardkeyQ.bin')), key_table(find(a, 'standardkeyT.bin'))
+    used = [c for c in scripts if c in HUMAN_REFS or any(b'\x16' + struct.pack('<I', c) in q for q in qbs)]
+    code, total, missing = bytearray(), 0, 0
+    for c in used:
+        name, ref, anims = scripts[c]
+        keep = []
+        for f, desc in anims:
+            parts = f.replace('/', '\\').split('\\')		# anims\Ped_M\Ped_M_Idle1.ska
+            if len(parts) != 3 or parts[1].lower().startswith('skater'):
+                missing += 1
+                continue
+            out = os.path.join(dst_data, 'anims', 'th4', parts[1].lower(), parts[2].lower()[:-4] + '.ska.xbx')
+            if not os.path.exists(out):
+                try:
+                    src = find(find(a, parts[1]), parts[2][:-4] + 'ska.dat')
+                except FileNotFoundError:
+                    missing += 1
+                    continue
+                os.makedirs(os.path.dirname(out), exist_ok=True)
+                open(out, 'wb').write(convert_ska(open(src, 'rb').read(), qt, tt))
+            keep.append(('anims\\th4\\' + parts[1].lower() + '\\' + parts[2].lower(), desc))
+            total += 1
+        code += script_bytes(th4_set(name), th4_set(HUMAN_REFS[ref]), keep)
+    renames = {struct.pack('<I', c): struct.pack('<I', crc(th4_set(scripts[c][0]))) for c in used}
+    print(f'  human anim sets: {len(used)}, {total} animations ({missing} skater/missing left out)')
+    return renames, bytes(code)
+
+
+def rename_checksums(d, renames):
+    d = bytearray(d)
+    i = 0
+    while i < len(d) and d[i]:
+        if d[i] == 0x16 and bytes(d[i + 1:i + 5]) in renames:
+            d[i + 1:i + 5] = renames[bytes(d[i + 1:i + 5])]
+        i = skip(d, i, 4)
+    return bytes(d)
+
+
+def append_scripts(d, code):
+    """Scripts go before the checksum-name table at the end of the qb."""
+    i = 0
+    while i < len(d) and d[i] and d[i] != 0x2b:
+        i = skip(d, i, 4)
+    return d[:i] + code + d[i:]
+
+
+def ped_profiles(src_data, cache):
+    """THPS4 ped profiles made of one ped_body (pros, kids, cops...): profile
+    checksum -> that body's mesh, as a node Model ('peds\\pedpros\\...skin')."""
+    if 'profiles' in cache:
+        return cache['profiles']
+    sc = find(src_data, 'scripts')
+    mesh, last = {}, None
+    for f in ('cas_ped_m.qb', 'cas_ped_f.qb'):
+        d = open(find(sc, f), 'rb').read()
+        i = 0
+        while i < len(d) and d[i]:
+            if d[i] == 0x16 and d[i + 5] == 7:
+                c = struct.unpack_from('<I', d, i + 1)[0]
+                if c == C_DESC_ID and d[i + 6] == 0x16:
+                    last = struct.unpack_from('<I', d, i + 7)[0]
+                elif c == C_MESH and d[i + 6] == 0x1b and last is not None:
+                    m = node_string(d, i + 5).replace('/', '\\')
+                    mesh.setdefault(last, m[len('models\\'):] if m.lower().startswith('models\\') else m)
+            i = skip(d, i, 4)
+    d = open(find(sc, 'profile_ped.qb'), 'rb').read()
+    out, i, depth, cur, keys, body, key = {}, 0, 0, None, set(), None, None
+    while i < len(d) and d[i]:
+        t = d[i]
+        if t == 3:
+            depth += 1
+        elif t == 4:
+            depth -= 1
+            if depth == 0 and cur is not None:
+                if keys <= PROFILE_EXTRAS and body in mesh:
+                    out[cur] = mesh[body]
+                cur = None
+        elif t == 0x16 and d[i + 5] == 7:
+            c = struct.unpack_from('<I', d, i + 1)[0]
+            if depth == 0 and d[i + 6] == 3:
+                cur, keys, body = c, set(), None
+            elif depth == 1:
+                keys.add(c)
+                key = c
+            elif depth == 2 and key == C_PED_BODY and c == C_DESC_ID and d[i + 6] == 0x16:
+                body = struct.unpack_from('<I', d, i + 7)[0]
+        i = skip(d, i, 4)
+    cache['profiles'] = out
+    return out
+
+
+def profiles_to_models(d, profiles):
+    """'profile = pedpro_Hawk_profile' -> 'Model = "th4\\peds\\...skin"' in the
+    node array (before the first script, so no jump spans the change)."""
+    out, i, last, n = bytearray(), 0, 0, 0
+    while i < len(d) and d[i] and d[i] != 0x23:
+        if d[i] == 0x16 and d[i + 5] == 7 and d[i + 6] == 0x16 \
+                and struct.unpack_from('<I', d, i + 1)[0] == C_PROFILE:
+            m = profiles.get(struct.unpack_from('<I', d, i + 7)[0])
+            if m:
+                m = m.encode('latin-1') + b'\0'
+                out += d[last:i] + struct.pack('<BIBBI', 0x16, C_MODEL, 7, 0x1b, len(m)) + m
+                last = i + 11
+                n += 1
+        i = skip(d, i, 4)
+    return bytes(out + d[last:]), n
+
+
+def human_keeper(src_data, dst_data, names, animals):
+    """Pedestrian nodes with a THPS4 human model (after profiles_to_models):
+    the model goes to models/th4/ and the node's Model is renamed to match
+    by the caller; the node stays. Animals are left to animal_keeper."""
+    done = {}
+    def keep(cls, f):
+        r = animals(cls, f)
+        if r is not None:
+            return r
+        model, anim = f.get(C_MODEL), f.get(C_ANIM)
+        if cls != C_PED or not isinstance(model, str) or C_PROFILE in f or anim not in HUMAN_REFS:
+            return None
+        if model not in done:
+            done[model] = convert_model(src_data, model, dst_data, ('th4',))
+        return set() if done[model] else None
+    keep.done = done
+    keep.animals = animals
+    return keep
+
+
+def prefix_models(d, models):
+    """Node Model strings of the converted human peds get the th4\\ prefix;
+    strings change length, so only before the first script."""
+    out, i, last = bytearray(), 0, 0
+    want = {m.lower() for m in models}
+    while i < len(d) and d[i] and d[i] != 0x23:
+        if d[i] == 0x16 and d[i + 5] == 7 and d[i + 6] == 0x1b \
+                and struct.unpack_from('<I', d, i + 1)[0] == C_MODEL:
+            m = node_string(d, i + 5)
+            if m.lower() in want:
+                m = ('th4\\' + m).encode('latin-1') + b'\0'
+                n = struct.unpack_from('<I', d, i + 7)[0]
+                out += d[last:i] + struct.pack('<BIBBI', 0x16, C_MODEL, 7, 0x1b, len(m)) + m
+                last = i + 11 + n
+        i = skip(d, i, 4)
+    return bytes(out + d[last:])
+
+
 # ---------------------------------------------------------------- main
 
 def find(folder, name):
@@ -611,6 +816,9 @@ def copy_sounds(src_data, qb, dst):
     print(f'{n} sounds copied')
 
 
+CACHE = {}
+
+
 def convert_level(src_levels, L, dst_levels, scripts=True):
     s = find(src_levels, L)
     o = os.path.join(dst_levels, L)
@@ -624,20 +832,30 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
     shutil.copyfile(find(s, f'{L}tex.dat'), os.path.join(o, f'{L}.tex.xbx'))
     if scripts:
         src_data, dst_data = os.path.dirname(src_levels), os.path.dirname(dst_levels)
-        keep = animal_keeper(src_data, dst_data, qb_names(rd(f'{L}.qb')))
-        q, n = convert_nodes(rd(f'{L}.qb'), keep)
-        kept = sorted(m for m, ok in keep.done.items() if ok and '.' in m)
+        q, np = profiles_to_models(rd(f'{L}.qb'), ped_profiles(src_data, CACHE))
+        animals = animal_keeper(src_data, dst_data, qb_names(q))
+        keep = human_keeper(src_data, dst_data, qb_names(q), animals)
+        q, n = convert_nodes(q, keep)
+        kept = sorted(m for m, ok in animals.done.items() if ok and '.' in m)
         if kept: print(f'{L}: models converted: {", ".join(kept)}')
-        q, r = fix_randoms(q)
-        open(os.path.join(o, f'{L}.qb'), 'wb').write(q)
+        humans = sorted(m for m, ok in keep.done.items() if ok)
+        lost = sorted(m for m, ok in keep.done.items() if not ok)
+        print(f'{L}: {np} ped profiles made single models; human peds: {", ".join(humans)}')
+        if lost: print(f'{L}: human ped models THPS4 data lacks: {", ".join(lost)}')
+        q = prefix_models(q, humans)
         try:
             sq = rd(f'{L}_Scripts.qb')
+        except FileNotFoundError:
+            sq = None
+        renames, code = human_anims(src_data, dst_data, [q] + ([sq] if sq else []), CACHE)
+        q = append_scripts(rename_checksums(q, renames), code)
+        q, r = fix_randoms(q)
+        open(os.path.join(o, f'{L}.qb'), 'wb').write(q)
+        if sq:
             copy_sounds(os.path.dirname(src_levels), sq, os.path.dirname(dst_levels))
-            q, r2 = fix_randoms(sq)
+            q, r2 = fix_randoms(rename_checksums(sq, renames))
             r += r2
             open(os.path.join(o, f'{L}_scripts.qb'), 'wb').write(q)
-        except FileNotFoundError:
-            pass
         print(f'{L}: {r} random operators given weights')
         print(f'{L}: {n} objects (peds, cars, game objects, proximity triggers) left out')
     print(f'{L}: done -> {o}')
