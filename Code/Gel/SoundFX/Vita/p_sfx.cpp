@@ -297,6 +297,10 @@ void ArreteThreadSfx( void )
 }
 
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_full_log( void );
+#endif
+
 bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
                       bool loadPerm )
 {
@@ -573,6 +577,17 @@ int PlaySoundPlease( PlatformWaveInfo *pInfo, sVolume *p_vol, float pitch )
 	p_v->boucle   = pInfo->looping;
 	p_v->t_debut  = sceKernelGetProcessTimeWide();
 	p_v->signalee = false;
+#ifdef THUG_DESKTOP
+	// Every voice start, with full_log: tells a sound replayed by the engine
+	// from one looping in the mixer (College's repeating break sound).
+	if( desktop_full_log())
+	{
+		static int s_n = 0;
+		if( s_n++ < 3000 )
+			VLOG( "SND", "voix %d : '%s'%s, %d echantillons a %d Hz", v, p_v->p_son->nom,
+			      p_v->boucle ? " EN BOUCLE" : "", p_v->p_son->nb_echantillons, p_v->p_son->hz );
+	}
+#endif
 
 	// Un seul pas porte le reechantillonnage ET le pitch : le son est a
 	// 44100 Hz, la sortie a 48000, et le jeu exprime le pitch en pourcentage.
