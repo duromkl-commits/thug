@@ -1126,7 +1126,7 @@ static const char *s_air_shuffle =
 	"Walk_ScaleAnimSpeed Off\n"
 	"CleanUp_WalkingtoSkating\n"
 	"PerhapsAwardCaveman\n"
-	"Jump speed = 200.0\n"
+	"Jump desktop_air_shuffle\n"
 	"Vibrate Actuator = 1 Percent = 80 duration = 0.1\n"
 	"PlayAnim Anim = Boneless BlendPeriod = 0.2\n"
 	"WaitAnimWhilstChecking\n"
@@ -1148,6 +1148,36 @@ static void patch_air_shuffle( const unsigned char *qb, const std::vector<Jeton>
 		return;
 	}
 }
+
+// Main menu (levels\\mainmenu\\mainmenu_scripts.qb): "Quit Game" under
+// Options, closing the game through DesktopQuitGame.
+static void patch_quitter( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "create_main_menu" ), cible = crc( "attract_container" ), cree = crc( "CreateScreenElement" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		size_t b = k + 2;
+		while( b < j.size() && qb[j[b].pos] != T_ENDSCRIPT && !est_nom( qb, j[b], cible )) ++b;
+		if( b >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) return;
+		while( b > k && !est_nom( qb, j[b], cree )) --b;
+		if( b == k ) return;
+		Ecrit w1; compile_q( w1, "script desktop_quit_game\nDesktopQuitGame\nendscript\n" );
+		m.push_back( Modif{ j[k].pos, 0, w1.o } );
+		Ecrit w2; compile_q( w2, "make_main_menu_item { text = \"Quit Game\" id = menu_desktop_quit pad_choose_script = desktop_quit_game focus_params = { attract_timer } }\n" );
+		m.push_back( Modif{ j[b].pos, 0, w2.o } );
+		VLOG( "MUS", "main menu: Quit Game added" );
+		return;
+	}
+}
+
+// Every secret skater in the select screen's head strip (it shows the ones
+// whose unlock flag is set). Pedestrian stays locked: its ped list isn't in
+// the game's files.
+static const char *s_debut_secrets =
+	"SetGlobalFlag flag = SKATER_UNLOCKED_IRONMAN\n"
+	"SetGlobalFlag flag = SKATER_UNLOCKED_KISSDUDE\n"
+	"SetGlobalFlag flag = SKATER_UNLOCKED_CREATURE\n";
 
 // Puts text at the start of script 'nom', after its header line.
 static void patch_debut( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
@@ -1335,6 +1365,8 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_player_model( qb, j, m );
 	patch_niveaux( qb, j, m );
 	patch_air_shuffle( qb, j, m );
+	patch_quitter( qb, j, m );
+	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );
 	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
 	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
 	// Music keeps going, where it was, through level loads and run starts

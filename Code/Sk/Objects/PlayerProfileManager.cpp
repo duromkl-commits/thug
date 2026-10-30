@@ -381,7 +381,7 @@ uint32 CPlayerProfileManager::DesktopNextSkater( uint32 current )
 					current_index = index;
 				continue;
 			}
-			if ( hidden )
+			if ( hidden && name == CRCD(0x061a741e,"ped") )	// every skater but the empty Ped slot
 				continue;
 			if ( index < first_index ) { first_index = index; first = name; }
 			if ( index > current_index && index < next_index ) { next_index = index; next = name; }

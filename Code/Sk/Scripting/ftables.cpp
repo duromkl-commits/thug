@@ -682,6 +682,7 @@ SCFunction CFunctionLookupTable[]=
 #ifdef THUG_DESKTOP
 	{"DesktopSelectSkater",		CFuncs::ScriptDesktopSelectSkater},
 	{"DesktopAddModelItems",	CFuncs::ScriptDesktopAddModelItems},
+	{"DesktopQuitGame",			CFuncs::ScriptDesktopQuitGame},
 #endif
 	{"SetParticleSysVisibility",CFuncs::ScriptSetParticleSysVisibility},
 	{"TogglePlayerNames",		CFuncs::ScriptTogglePlayerNames},

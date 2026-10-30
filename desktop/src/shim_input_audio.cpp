@@ -34,6 +34,13 @@ static SDL_GameController *s_pad = NULL;
 static bool s_quit_requested = false;
 
 extern "C" bool desktop_quit_requested( void ) { return s_quit_requested; }
+extern "C" void desktop_request_quit( void )
+{
+	SDL_Event e;
+	SDL_zero( e );
+	e.type = SDL_QUIT;
+	SDL_PushEvent( &e );
+}
 
 static void open_pad( void )
 {

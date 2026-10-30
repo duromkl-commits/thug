@@ -3565,6 +3565,14 @@ bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScrip
 	return desktop_switch_skater( profileName );
 }
 
+// @script | DesktopQuitGame | desktop: closes the game, as the window's close button does
+extern "C" void desktop_request_quit( void );
+bool ScriptDesktopQuitGame(Script::CStruct *pParams, Script::CScript *pScript)
+{
+	desktop_request_quit();
+	return true;
+}
+
 // @script | DesktopAddModelItems | desktop: runs desktop_model_item once per
 // unlocked skater, in the select screen's order, with name, display_name
 // and item_id
@@ -3593,9 +3601,10 @@ bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScri
 		int hidden = 0;
 		pBest->GetInfo()->GetInteger( CRCD(0x27eb9b9d,"is_hidden"), &hidden, Script::NO_ASSERT );
 		const char *p_display = NULL;
-		if ( hidden || !pBest->GetInfo()->GetString( CRCD(0x2ab66cb8,"display_name"), &p_display, Script::NO_ASSERT ) || !p_display )
-			continue;
 		const uint32 name = pBest->GetSkaterNameChecksum();
+		// All skaters, secret ones included; Ped only picks from a ped list the game doesn't ship
+		if ( ( hidden && name == CRCD(0x061a741e,"ped") ) || !pBest->GetInfo()->GetString( CRCD(0x2ab66cb8,"display_name"), &p_display, Script::NO_ASSERT ) || !p_display )
+			continue;
 		Script::CStruct* pItem = new Script::CStruct;
 		pItem->AddChecksum( CRCD(0xa1dc81f9,"name"), name );
 		pItem->AddString( CRCD(0x2ab66cb8,"display_name"), p_display );
