@@ -1142,6 +1142,10 @@ static const char *s_air_shuffle =
 	"PerhapsAwardCaveman\n"
 	"Jump desktop_air_shuffle\n"
 	"Vibrate Actuator = 1 Percent = 80 duration = 0.1\n"
+	"PlaySound boneless09 pitch = 85\n"				// the boneless pop
+	"SetTrickName \"Air Shuffle\"\n"
+	"SetTrickScore 100\n"
+	"Display\n"
 	"PlayAnim Anim = Boneless BlendPeriod = 0.2\n"
 	"WaitAnimWhilstChecking\n"
 	"Goto Airborne\n"

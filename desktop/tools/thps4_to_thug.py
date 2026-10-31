@@ -646,6 +646,7 @@ def human_anims(src_data, dst_data, qbs, cache):
                     src = find(find(a, parts[1]), parts[2][:-4] + 'ska.dat')
                 except FileNotFoundError:
                     missing += 1
+                    cache.setdefault('missing_anims', set()).add(parts[1] + '\\' + parts[2])
                     continue
                 os.makedirs(os.path.dirname(out), exist_ok=True)
                 open(out, 'wb').write(convert_ska(open(src, 'rb').read(), qt, tt))

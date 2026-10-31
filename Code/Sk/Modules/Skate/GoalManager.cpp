@@ -11,6 +11,9 @@
 // @subindex Scripting Database
 // @index script | goalmanager
 							   
+#ifdef THUG_DESKTOP
+#include "vita_log.h"
+#endif
 #include <sk/modules/skate/goalmanager.h>
 
 #include <sk/modules/skate/Minigame.h>
@@ -851,6 +854,10 @@ void CGoalManager::InitializeAllGoals()
 					 || pGoalParams->ContainsFlag( CRCD( 0x4e863e93, "always_initialize_goal" ) )
 					 || pGoalParams->ContainsFlag( CRCD( 0x981d3ad0, "edited_goal" ) ) )
 				{
+#ifdef THUG_DESKTOP
+					if ( pGoalParams->ContainsFlag( CRCD( 0x4e863e93, "always_initialize_goal" ) ) )
+						VLOG( "GOAL", "Init %s", Script::FindChecksumName( pGoal->GetGoalId() ) );
+#endif
 					pGoal->Init();
 				}
 			}
@@ -3838,7 +3845,15 @@ bool ScriptAddGoal(Script::CStruct *pParams, Script::CScript *pScript)
 	Script::CStruct* pSubParams;
 	pParams->GetStructure( CRCD(0x7031f10c,"params"), &pSubParams, Script::ASSERT );
 
+#ifdef THUG_DESKTOP
+	{
+		const bool ok = pGoalManager->AddGoal( goalId, pSubParams );
+		VLOG( "GOAL", "AddGoal %s (%08x) -> %d", Script::FindChecksumName( goalId ), goalId, ok ? 1 : 0 );
+		return ok;
+	}
+#else
 	return pGoalManager->AddGoal( goalId, pSubParams );
+#endif
 }
 
 /******************************************************************/
