@@ -310,8 +310,93 @@ extern "C" int desktop_play_movie( const char *p_name, float volume )
 	return 1;
 }
 
+// THPS4 keeps its voices as audio-only Bink files (streams\SndX\Snd<crc>.dee).
+// Decodes one whole file to 48 kHz stereo; the caller frees the buffer.
+extern "C" short *desktop_decode_bink_audio( const char *p_vita_path, int *p_frames )
+{
+	*p_frames = 0;
+	char hote[1024];
+	desktop_host_path( p_vita_path, hote, sizeof( hote ));
+	AVFormatContext *fmt = NULL;
+	if( avformat_open_input( &fmt, hote, NULL, NULL ) != 0 )
+		return NULL;
+	short *res = NULL;
+	AVCodecContext *ca = NULL;
+	SwrContext *swr = NULL;
+	AVPacket *pkt = av_packet_alloc();
+	AVFrame *fr = av_frame_alloc();
+	std::vector<short> pcm;
+	int ia = -1;
+	if( avformat_find_stream_info( fmt, NULL ) >= 0 )
+		ia = av_find_best_stream( fmt, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0 );
+	if( ia >= 0 )
+	{
+		const AVCodecParameters *par = fmt->streams[ia]->codecpar;
+		const AVCodec *c = avcodec_find_decoder( par->codec_id );
+		ca = c ? avcodec_alloc_context3( c ) : NULL;
+		if( !ca || avcodec_parameters_to_context( ca, par ) < 0 || avcodec_open2( ca, c, NULL ) < 0 )
+			avcodec_free_context( &ca );
+	}
+	if( ca )
+	{
+		AVChannelLayout stereo = AV_CHANNEL_LAYOUT_STEREO;
+		if( swr_alloc_set_opts2( &swr, &stereo, AV_SAMPLE_FMT_S16, 48000,
+		                         &ca->ch_layout, ca->sample_fmt, ca->sample_rate, 0, NULL ) < 0
+		    || swr_init( swr ) < 0 )
+			swr_free( &swr );
+	}
+	auto son = [&]( AVFrame *a )
+	{
+		const int max = swr_get_out_samples( swr, a ? a->nb_samples : 0 );
+		if( max <= 0 ) return;
+		const size_t at = pcm.size();
+		pcm.resize( at + (size_t)max * 2 );
+		uint8_t *out = (uint8_t *)&pcm[at];
+		const int n = swr_convert( swr, &out, max, a ? (const uint8_t **)a->extended_data : NULL, a ? a->nb_samples : 0 );
+		pcm.resize( at + (size_t)( n > 0 ? n : 0 ) * 2 );
+	};
+	if( swr )
+	{
+		bool fin = false;
+		while( !fin )
+		{
+			const int r = av_read_frame( fmt, pkt );
+			if( r < 0 )
+			{
+				fin = true;
+				avcodec_send_packet( ca, NULL );
+			}
+			else
+			{
+				if( pkt->stream_index == ia )
+					avcodec_send_packet( ca, pkt );
+				av_packet_unref( pkt );
+			}
+			while( avcodec_receive_frame( ca, fr ) == 0 )
+			{
+				son( fr );
+				av_frame_unref( fr );
+			}
+		}
+		son( NULL );
+		if( !pcm.empty() && ( res = (short *)malloc( pcm.size() * sizeof( short ))))
+		{
+			memcpy( res, &pcm[0], pcm.size() * sizeof( short ));
+			*p_frames = (int)( pcm.size() / 2 );
+		}
+	}
+	av_frame_free( &fr );
+	av_packet_free( &pkt );
+	swr_free( &swr );
+	avcodec_free_context( &ca );
+	avformat_close_input( &fmt );
+	return res;
+}
+
 #else
 
 extern "C" int desktop_play_movie( const char *, float ) { return 0; }
+
+extern "C" short *desktop_decode_bink_audio( const char *, int *p_frames ) { *p_frames = 0; return 0; }
 
 #endif

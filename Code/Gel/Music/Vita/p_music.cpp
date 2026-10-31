@@ -534,6 +534,12 @@ struct SFlux
 	unsigned char lecture[VOIX_BLOCS_LECTURE * 72];
 	short	tmp[64 * 2];
 	short	sortie[GRAIN * 2];
+
+#ifdef THUG_DESKTOP
+	// A THPS4 voice, decoded whole (48 kHz stereo) instead of read from pcm.wad.
+	short	*mem;
+	int		mem_n, mem_pos;
+#endif
 };
 
 static SEntree	*s_vindex		= NULL;
@@ -620,9 +626,65 @@ static bool vprepare( SFlux &F, const SEntree *p_e )
 	return true;
 }
 
+#ifdef THUG_DESKTOP
+// THPS4's voices: Data\thps4\data\streams\Snd<X>\Snd<crc>.dee, audio-only
+// Bink files named by the stream checksum (X = its first hex digit).
+extern "C" short *desktop_decode_bink_audio( const char *p_vita_path, int *p_frames );
+
+static void th4_chemin( uint32 checksum, char *p_out, size_t n )
+{
+	snprintf( p_out, n, "ux0:data/thug/Data/thps4/data/streams/Snd%X/Snd%08x.dee",
+	          (unsigned)( checksum >> 28 ), (unsigned)checksum );
+}
+
+static bool th4_existe( uint32 checksum )
+{
+	static uint32 s_vu[512];
+	static unsigned char s_ok[512];
+	static int s_n = 0;
+	for( int i = 0; i < s_n; ++i )
+		if( s_vu[i] == checksum )
+			return s_ok[i] != 0;
+	char chemin[256];
+	th4_chemin( checksum, chemin, sizeof( chemin ));
+	SceUID f = sceIoOpen( chemin, SCE_O_RDONLY, 0 );
+	const bool ok = f >= 0;
+	if( ok )
+		sceIoClose( f );
+	const int k = s_n < 512 ? s_n++ : (int)( checksum % 512 );
+	s_vu[k] = checksum;
+	s_ok[k] = ok ? 1 : 0;
+	return ok;
+}
+
+static void vlibere( SFlux &F )
+{
+	free( F.mem );
+	F.mem = NULL;
+	F.mem_n = F.mem_pos = 0;
+}
+#endif
+
 // Decode the next blocks after the carried frame. Mutex held.
 static bool vremplit( SFlux &F )
 {
+#ifdef THUG_DESKTOP
+	if( F.mem )
+	{
+		int n = F.mem_n - F.mem_pos;
+		if( n > VOIX_BLOCS_LECTURE * 64 )
+			n = VOIX_BLOCS_LECTURE * 64;
+		if( n <= 0 )
+			return false;
+		F.src[0] = F.src[( F.src_n - 1 ) * 2];
+		F.src[1] = F.src[( F.src_n - 1 ) * 2 + 1];
+		F.src_pos -= ( F.src_n - 1 );
+		memcpy( F.src + 2, F.mem + F.mem_pos * 2, n * 2 * sizeof( short ));
+		F.src_n = 1 + n;
+		F.mem_pos += n;
+		return true;
+	}
+#endif
 	const uint32 reste = F.taille > F.lue ? F.taille - F.lue : 0;
 	int blocs = (int)( reste / F.bloc );
 	if( blocs > VOIX_BLOCS_LECTURE )
@@ -781,6 +843,33 @@ static bool vdemarre( uint32 checksum, int s, bool ok )
 	if( !vflux_ok( s ))
 		return false;
 	const SEntree *p_e = vtrouve( checksum );
+#ifdef THUG_DESKTOP
+	if( !p_e && th4_existe( checksum ))
+	{
+		char chemin[256];
+		th4_chemin( checksum, chemin, sizeof( chemin ));
+		int n = 0;
+		short *mem = desktop_decode_bink_audio( chemin, &n );
+		VLOG( "PCM", "voice %08x from THPS4 streams: %d frames", checksum, n );
+		if( !mem )
+			return false;
+		SFlux &F = s_flux[s];
+		sceKernelLockMutex( F.mutex, 1, NULL );
+		vlibere( F );
+		F.mem	 = mem;
+		F.mem_n	 = n;
+		F.canaux = 2;
+		F.hz	 = AUDIO_HZ;
+		F.src[0] = F.src[1] = 0;
+		F.src_n	 = 1;
+		F.src_pos = 0.0;
+		F.joue	= true;
+		F.ok	= ok;
+		F.pause	= false;
+		sceKernelUnlockMutex( F.mutex, 1 );
+		return true;
+	}
+#endif
 	if( !p_e )
 	{
 		VLOG( "PCM", "voice %08x not in pcm.dat", checksum );
@@ -788,6 +877,9 @@ static bool vdemarre( uint32 checksum, int s, bool ok )
 	}
 	SFlux &F = s_flux[s];
 	sceKernelLockMutex( F.mutex, 1, NULL );
+#ifdef THUG_DESKTOP
+	vlibere( F );
+#endif
 	const bool pret = vprepare( F, p_e );
 	F.joue	= pret;
 	F.ok	= ok;
@@ -803,6 +895,9 @@ static void varrete( int s )
 	SFlux &F = s_flux[s];
 	sceKernelLockMutex( F.mutex, 1, NULL );
 	F.joue = false;
+#ifdef THUG_DESKTOP
+	vlibere( F );
+#endif
 	sceKernelUnlockMutex( F.mutex, 1 );
 }
 
@@ -1064,5 +1159,9 @@ uint32	PCMAudio_FindNameFromChecksum( uint32 checksum, int ch )
 {
 	if( ch != EXTRA_CHANNEL )
 		return 0;
+#ifdef THUG_DESKTOP
+	if( !vtrouve( checksum ) && s_flux && th4_existe( checksum ))
+		return checksum;
+#endif
 	return vtrouve( checksum ) ? checksum : 0;
 }

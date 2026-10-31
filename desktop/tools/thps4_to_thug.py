@@ -537,6 +537,74 @@ def convert_anims(src_data, anim_set, dst_data):
     return n
 
 
+# ---------------------------------------------------------------- cameras
+
+# A level's LoadCameras script loads levels\<L>\<name>.ska: the goal start /
+# success cameras and the intro. THPS4 PC keeps them as <name>ska.dat (Aspyr
+# cut long names to 29 characters, so G_HS_CameraSuccessska.da happens).
+# They are THUG's uncompressed camera format, except that THPS4 doesn't
+# long-align the keys after the per-bone key counts; THUG's reader does.
+
+def cam_files(qb, L):
+    out, i, low = [], 0, f'levels\\{L.lower()}\\'
+    while True:
+        i = qb.find(b'\x1b', i)
+        if i < 0 or i + 5 > len(qb):
+            return out
+        n = struct.unpack_from('<I', qb, i + 1)[0]
+        if 0 < n < 200:
+            t = qb[i + 5:i + 5 + n].rstrip(b'\0').decode('latin-1')
+            if t.lower().startswith(low) and t.lower().endswith('.ska'):
+                out.append(t.split('\\')[-1][:-4])
+        i += 1
+
+
+def custom_keys_end(d, o, n):
+    for _ in range(n):
+        if o + 12 > len(d):
+            return -1
+        size = struct.unpack_from('<I', d, o + 8)[0]
+        if size < 12:
+            return -1
+        o += size
+    return o
+
+
+def convert_cam(d):
+    ver, fl, dur, nb, nq, nt, nc = struct.unpack_from('<IIf4I', d, 0)
+    if fl & ((1 << 23) | (1 << 24) | (1 << 19)):
+        return d					# compressed / object / partial: not cameras
+    o = 28 + (4 if fl & (1 << 22) else 2) * nb
+    end = o + 16 * (nq + nt)
+    if o % 4 == 0 or custom_keys_end(d, end, nc) != len(d):
+        return d					# already laid out the way THUG reads it
+    out = d[:o] + bytes(-o % 4) + d[o:end]
+    return out + bytes(-len(out) % 4) + d[end:]
+
+
+def convert_cameras(src_level, L, qb, dst):
+    names = cam_files(qb, L)
+    files = os.listdir(src_level)
+    n, lost = 0, []
+    for name in names:
+        want = name.lower()
+        src = None
+        for f in files:
+            fl = f.lower()
+            if fl.startswith(want) and ('ska.dat'.startswith(fl[len(want):]) or
+                                        '.ska'.startswith(fl[len(want):])) and len(fl) > len(want):
+                src = f
+                break
+        if not src:
+            lost.append(name)
+            continue
+        d = convert_cam(open(os.path.join(src_level, src), 'rb').read())
+        open(os.path.join(dst, want + '.ska.xbx'), 'wb').write(d)
+        n += 1
+    print(f'{L}: {n}/{len(names)} cameras converted' + (f'; missing: {", ".join(lost)}' if lost else ''))
+    return n
+
+
 C_MODEL, C_SHADOW, C_PROFILE = crc('Model'), crc('ShadowModel'), crc('profile')
 C_PED, C_ANIM, C_EXTRA = crc('Pedestrian'), crc('animName'), crc('Extra_Anims')
 
@@ -961,6 +1029,7 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
         q = append_scripts(rename_checksums(q, renames), code)
         q, r = fix_randoms(q)
         open(os.path.join(o, f'{L}.qb'), 'wb').write(q)
+        convert_cameras(s, L, q, o)
         if sq:
             copy_sounds(os.path.dirname(src_levels), sq, os.path.dirname(dst_levels))
             sq = append_scripts(sq, goal_code(src_data, L, CACHE))
