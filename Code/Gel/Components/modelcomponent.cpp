@@ -249,12 +249,17 @@ void CModelComponent::InitModel( Script::CStruct* pParams )
 			{
 				Nx::CGeom *p_orig_geom = p_src_model_comp->mp_model->GetGeom(geomName);
 				Dbg_MsgAssert(p_orig_geom, ("Couldn't find CGeom %s", Script::FindChecksumName(geomName)));
-
+#ifdef THUG_DESKTOP
+				// Playable peds have no "board" geom (their board is a ped part): nothing to clone
+				if (p_orig_geom)
+#endif
+				{
 				Nx::CGeom *p_new_geom = p_orig_geom->Clone(true, mp_model);
 				Dbg_MsgAssert(p_new_geom, ("Couldn't clone CGeom %s", Script::FindChecksumName(geomName)));
 
 				p_new_geom->SetActive(true);
 				mp_model->AddGeom(p_new_geom, geomName);
+				}
 			}
 			else if (pParams->GetArray(CRCD(0x44e31dff,"geoms"), &p_geom_array))
 			{
@@ -266,6 +271,10 @@ void CModelComponent::InitModel( Script::CStruct* pParams )
 					{
 						Nx::CGeom *p_orig_geom = p_src_model_comp->GetModel()->GetGeom(geomName);
 						Dbg_MsgAssert(p_orig_geom, ("Couldn't find CGeom %s", Script::FindChecksumName(geomName)));
+#ifdef THUG_DESKTOP
+						if (!p_orig_geom)
+							continue;
+#endif
 
 						Nx::CGeom *p_new_geom = p_orig_geom->Clone(true, mp_model);
 						Dbg_MsgAssert(p_new_geom, ("Couldn't clone CGeom %s", Script::FindChecksumName(geomName)));
