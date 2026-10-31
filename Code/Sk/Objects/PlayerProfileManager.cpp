@@ -562,6 +562,13 @@ void CPlayerProfileManager::AddAllProProfileInfo(Script::CStruct *pStuff)
 		// Only add the pro's, not the create-a-skater.
 		if (pProfile->IsPro())
 		{
+#ifdef THUG_DESKTOP
+			// Playable peds (skater_index 100 up) aren't saved: nothing of theirs changes
+			int index = 0;
+			pProfile->GetInfo()->GetInteger( CRCD(0x6f14c39c,"skater_index"), &index, Script::NO_ASSERT );
+			if ( index >= 100 )
+				continue;
+#endif
 			pProfile->WriteIntoStructure(pStuff);
 		}
 	}

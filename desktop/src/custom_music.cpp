@@ -960,7 +960,16 @@ static void compile_q( Ecrit &w, const char *t )
 		}
 		if( c == '(' )
 		{
-			float x, y; int n = 0;
+			float x, y, z; int n = 0;
+			if( sscanf( t, "(%f,%f,%f)%n", &x, &y, &z, &n ) == 3 && n > 0 )
+			{
+				w.octet( T_VECTEUR );
+				const float v[3] = { x, y, z };
+				for( int i = 0; i < 3; ++i ) { uint32_t u; memcpy( &u, &v[i], 4 ); w.u32( u ); }
+				t += n;
+				continue;
+			}
+			n = 0;
 			if( sscanf( t, "(%f,%f)%n", &x, &y, &n ) == 2 && n > 0 )
 			{
 				w.octet( T_PAIRE );
@@ -989,6 +998,11 @@ static void compile_q( Ecrit &w, const char *t )
 		const char *d = t;
 		while( *t && !strchr( " \t\r\n\"(){}[]=<,", *t )) ++t;
 		const std::string m( d, t );
+		if( m[0] == '#' )	// a checksum given as #hex (names with spaces)
+		{
+			w.octet( T_NOM ); w.u32((uint32_t)strtoul( m.c_str() + 1, NULL, 16 ));
+			continue;
+		}
 		if( isdigit((unsigned char)m[0] ) || ( m[0] == '-' && m.size() > 1 ))
 		{
 			if( m.find( '.' ) != std::string::npos )
@@ -1198,6 +1212,181 @@ static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j
 	}
 }
 
+// Playable peds (desktop): THUG's named peds from profile_ped.qb, as pro
+// skaters after the secret ones (skater_index 100 up, so they stay out of
+// saves). Each gets its own appearance (the ped's parts plus the ped
+// skateboard) and SS_ped as its picture. Peds whose parts aren't in THUG's
+// files (THPS4 leftovers in profile_ped.qb) are left out by the generator.
+// Generated from scripts\\profile_ped.qb (named peds whose models ship with THUG)
+struct PietonJouable { const char *nom, *affiche; int femme; const char *apparence; };
+static const PietonJouable s_pietons[] = {
+	{ "Ped_Skeezo", "Skeezo", 0, "ped_m_head = { desc_id = Ped_Skeezo_Head } ped_m_torso = { desc_id = Torso_Wht_Tshirt_01 } ped_m_legs = { desc_id = Legs_Cargos_02 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Ralphie", "Ralphie", 0, "ped_m_head = { desc_id = Ped_Ralph_Head } ped_m_torso = { desc_id = Torso_Wht_Tshirt_03 } ped_m_legs = { desc_id = Legs_Jeans_03 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Bender", "Bender", 0, "ped_m_head = { desc_id = Ped_Bender_Head } ped_m_torso = { desc_id = Torso_Brn_Tshirt_02 } ped_m_legs = { desc_id = Legs_Jeans_05 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Jordan", "Jordan", 0, "ped_body = { desc_id = Ped_Jordan } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Eric", "Eric", 0, "ped_body = { desc_id = Eric } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Bum_01", "Bum 1", 0, "ped_body = { desc_id = #45aac045 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Crackhead_01", "Crackhead 1", 0, "ped_body = { desc_id = #7baacce9 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Drugdealer_01", "Drugdealer 1", 0, "ped_body = { desc_id = #06842f4e } Stocky_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Drugdealer_02", "Drugdealer 2", 0, "ped_body = { desc_id = #9f8d7ef4 } scale = (0.9,1.13,0.9) ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Drugdealer_03", "Drugdealer 3", 0, "ped_body = { desc_id = #e88a4e62 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_FactoryWorker_01", "FactoryWorker 1", 0, "ped_body = { desc_id = #5c545ca3 } body_shape = Fatman_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_FactoryWorker_02", "FactoryWorker 2", 0, "ped_body = { desc_id = #c55d0d19 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Security_Train", "Security Train", 0, "ped_body = { desc_id = #b55147e2 } body_shape = Fatman_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Street_Warrior_01", "Street Warrior 1", 0, "ped_body = { desc_id = #97b4489a } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Street_Warrior_02", "Street Warrior 2", 0, "ped_body = { desc_id = #0ebd1920 } ped_m_legs = { randomized_desc_id } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Street_Warrior_03", "Street Warrior 3", 0, "ped_body = { desc_id = #79ba29b6 } ped_m_legs = { randomized_desc_id } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Tombstone", "Tombstone", 0, "ped_body = { desc_id = Tombstone } scale = (1.1,0.9,0.9) ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Businesswoman_01", "Businesswoman 1", 1, "ped_body = { desc_id = #15d96c43 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_M_NYPD_01", "M NYPD 1", 0, "ped_body = { desc_id = #343bf7cb } Stocky_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_NYPD_01", "F NYPD 1", 1, "ped_body = { desc_id = #b66e6916 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Construction_Jhammer", "Construction Jhammer", 0, "ped_m_head = { desc_id = Ped_Worker_Head01 } ped_m_torso = { desc_id = Ped_Worker_Torso } ped_m_legs = { desc_id = Ped_Worker_Legs } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Construction_Manhole", "Construction Manhole", 0, "ped_m_head = { desc_id = Ped_Worker_Head02 } ped_m_torso = { desc_id = Ped_Worker_Torso } ped_m_legs = { desc_id = Ped_Worker_Legs } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Skater_NY1", "Skater NY1", 0, "ped_body = { desc_id = Skater_NY1 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Skater_NY2", "Skater NY2", 0, "ped_body = { desc_id = Skater_NY2 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Peralta", "Peralta", 0, "ped_body = { desc_id = Ped_Peralta } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Chef", "Chef", 0, "ped_body = { desc_id = Ped_Chef } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_BusinessMan_01", "BusinessMan 1", 0, "ped_body = { desc_id = #c7f0e71f } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_BusinessMan_02", "BusinessMan 2", 0, "ped_body = { desc_id = #5ef9b6a5 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_BusinessMan_03", "BusinessMan 3", 0, "ped_body = { desc_id = #29fe8633 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_BlkKid_01", "BlkKid 1", 0, "ped_body = { desc_id = #91161540 } body_shape = kid1_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_BlkKid_02", "BlkKid 2", 0, "ped_body = { desc_id = #081f44fa } body_shape = kid1_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_BlkKid_03", "BlkKid 3", 0, "ped_body = { desc_id = #7f18746c } body_shape = kid3_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Trooper", "Trooper", 0, "ped_body = { desc_id = Ped_Trooper } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Todd", "Todd", 0, "ped_body = { desc_id = Ped_Todd } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_Dancer_01", "F Dancer 1", 1, "ped_body = { desc_id = #77e03193 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_Dancer_02", "F Dancer 2", 1, "ped_body = { desc_id = #eee96029 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Clemens", "Clemens", 0, "ped_m_head = { desc_id = Ped_Clemens_head } ped_m_torso = { desc_id = Torso_Wht_Tshirt_03 } ped_m_legs = { randomized_desc_id } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_AfroJim", "AfroJim", 0, "ped_m_head = { desc_id = Ped_AfroJim_head } ped_m_torso = { desc_id = Torso_Wht_Tshirt_04 } ped_m_legs = { randomized_desc_id } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Doorman_01", "Doorman 1", 0, "ped_body = { desc_id = #488bbc83 } Stocky_scale_info ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Deskclerk_01", "Deskclerk 1", 0, "ped_body = { desc_id = #de1ed9db } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_Deskclerk_01", "F Deskclerk 1", 1, "ped_body = { desc_id = #2e9540a8 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Leafblower", "Leafblower", 0, "ped_body = { desc_id = Ped_Leafblower } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Security_01", "Security 1", 0, "ped_m_head = { desc_id = Ped_Security_Head01 } ped_body = { desc_id = Ped_Security_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Security_02", "Security 2", 0, "ped_m_head = { desc_id = Ped_Security_Head02 } ped_body = { desc_id = Ped_Security_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Security_03", "Security 3", 0, "ped_m_head = { desc_id = Ped_Security_Head03 } ped_body = { desc_id = Ped_Security_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_Security", "F Security", 1, "ped_body = { desc_id = Ped_F_Security } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Gardener_01", "Gardener 1", 0, "ped_m_head = { desc_id = Ped_Gardener_Head01 } ped_body = { desc_id = Ped_Gardener_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Gardener_02", "Gardener 2", 0, "ped_m_head = { desc_id = Ped_Gardener_Head02 } ped_body = { desc_id = Ped_Gardener_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_Gardener", "F Gardener", 1, "ped_body = { desc_id = Ped_F_Gardener } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_MCeleb", "F MCeleb", 1, "ped_body = { desc_id = Ped_F_MCeleb } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_KGB", "F KGB", 1, "ped_body = { desc_id = Ped_F_KGB } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_KGB_01", "KGB 1", 0, "ped_m_head = { desc_id = Ped_KGB_Head01 } ped_body = { desc_id = Ped_KGB_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_KGB_02", "KGB 2", 0, "ped_m_head = { desc_id = Ped_KGB_Head02 } ped_body = { desc_id = Ped_KGB_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_RGuard_01", "RGuard 1", 0, "ped_m_head = { desc_id = Ped_RGuard_Head01 } ped_body = { desc_id = Ped_RGuard_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_RGuard_02", "RGuard 2", 0, "ped_m_head = { desc_id = Ped_RGuard_Head02 } ped_body = { desc_id = Ped_RGuard_Body } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_F_Babushka", "F Babushka", 1, "ped_f_head = { desc_id = Head_f_Bab_head } ped_f_torso = { desc_id = Torso_f_bab_coat } ped_f_legs = { desc_id = Legs_f_jeans01 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Cameraman", "Cameraman", 0, "ped_body = { desc_id = Ped_Cameraman } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Official_SC_01", "Official SC 1", 0, "ped_m_head = { desc_id = Head_OfficialA } ped_body = { desc_id = #0a3260e4 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Official_SC_02", "Official SC 2", 0, "ped_m_head = { desc_id = Head_OfficialB } ped_body = { desc_id = #0a3260e4 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_A_01", "Monsterped A 1", 0, "ped_body = { desc_id = #113610cb } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_A_01B", "Monsterped A 01B", 0, "ped_body = { desc_id = #af1b2d5c } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_B_01", "Monsterped B 1", 0, "ped_body = { desc_id = #0383bf25 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_C_01", "Monsterped C 1", 0, "ped_body = { desc_id = #bb3fd840 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_A_02", "Monsterped A 2", 0, "ped_body = { desc_id = #883f4171 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_B_02", "Monsterped B 2", 0, "ped_body = { desc_id = #9a8aee9f } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_C_02", "Monsterped C 2", 0, "ped_body = { desc_id = #223689fa } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_A_03", "Monsterped A 3", 0, "ped_body = { desc_id = #ff3871e7 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_B_03", "Monsterped B 3", 0, "ped_body = { desc_id = #ed8dde09 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_C_03", "Monsterped C 3", 0, "ped_body = { desc_id = #5531b96c } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_A_04", "Monsterped A 4", 0, "ped_body = { desc_id = #615ce444 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_B_04", "Monsterped B 4", 0, "ped_body = { desc_id = #73e94baa } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Monsterped_C_04", "Monsterped C 4", 0, "ped_body = { desc_id = #cb552ccf } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_QBert", "QBert", 0, "ped_body = { desc_id = Ped_QBert } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Video", "Video", 0, "ped_body = { desc_id = Ped_Video } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Photo", "Photo", 0, "ped_body = { desc_id = Ped_Photo } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_SCJ_Worker", "SCJ Worker", 0, "ped_m_head = { desc_id = Ped_Worker_Head01 } ped_m_torso = { desc_id = Ped_Worker_Torso } ped_m_legs = { desc_id = Ped_Worker_Legs } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_SCJ_Judge_01", "SCJ Judge 1", 0, "ped_m_head = { desc_id = Head_Wht_01 } ped_m_torso = { desc_id = Torso_Wht_Judge } ped_m_legs = { desc_id = Legs_Jeans_01 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_SCJ_Judge_02", "SCJ Judge 2", 0, "ped_m_head = { desc_id = Head_Wht_02 } ped_m_torso = { desc_id = Torso_Wht_Judge } ped_m_legs = { desc_id = Legs_Jeans_01 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_SCJ_Judge_03", "SCJ Judge 3", 0, "ped_m_head = { desc_id = Head_Wht_03 } ped_m_torso = { desc_id = Torso_Wht_Judge } ped_m_legs = { desc_id = Legs_Cargos_04 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_SCJ_Judge_04", "SCJ Judge 4", 0, "ped_m_head = { desc_id = Head_JJagger } ped_m_torso = { desc_id = Torso_Wht_Judge } ped_m_legs = { desc_id = Legs_Jeans_01 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_SCJ_Judge_05", "SCJ Judge 5", 0, "ped_m_head = { desc_id = KGutierez } ped_m_torso = { desc_id = Torso_Wht_Judge } ped_m_legs = { desc_id = Legs_Jeans_02 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_SCJ_Judge_06", "SCJ Judge 6", 0, "ped_m_head = { desc_id = Head_CRausch } ped_m_torso = { desc_id = Torso_Wht_Judge } ped_m_legs = { desc_id = Legs_Cargos_01 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Hula", "Hula", 1, "ped_body = { desc_id = Ped_Hula } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Hula2", "Hula2", 1, "ped_body = { desc_id = Ped_Hula2 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Bartender", "Bartender", 0, "ped_m_head = { desc_id = Head_TBarber } ped_m_torso = { desc_id = Torso_wht_hawaii } ped_m_legs = { desc_id = Legs_Cargos_02 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Film", "Film", 0, "ped_body = { desc_id = Ped_Film } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Bikini_1", "Bikini 1", 1, "ped_body = { desc_id = Ped_Bikini_1 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Bikini_2", "Bikini 2", 1, "ped_body = { desc_id = Ped_Bikini_2 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Bikini_3", "Bikini 3", 1, "ped_body = { desc_id = Ped_Bikini_3 } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Bride", "Bride", 1, "ped_body = { desc_id = Ped_Bride } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_Surfer", "Surfer", 0, "ped_body = { desc_id = Ped_Surfer } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_KISS_Paul", "KISS Paul", 0, "ped_body = { desc_id = Ped_KISS_Paul } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_KISS_Peter", "KISS Peter", 0, "ped_body = { desc_id = Ped_KISS_Peter } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_KISS_Ace", "KISS Ace", 0, "ped_body = { desc_id = Ped_KISS_Ace } ped_board = { desc_id = Skateboard }" },
+	{ "Ped_KISS_Gene", "KISS Gene", 0, "ped_body = { desc_id = Ped_KISS_Gene } ped_board = { desc_id = Skateboard }" },
+	{ "Skate_KISS_Paul", "KISS Paul (Skating)", 0, "ped_body = { desc_id = Skate_KISS_Paul } ped_board = { desc_id = Skateboard }" },
+	{ "Skate_KISS_Peter", "KISS Peter (Skating)", 0, "ped_body = { desc_id = Skate_KISS_Peter } ped_board = { desc_id = Skateboard }" },
+	{ "Skate_KISS_Ace", "KISS Ace (Skating)", 0, "ped_body = { desc_id = Skate_KISS_Ace } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Hawk", "Ped Hawk", 0, "ped_body = { desc_id = PedPro_Hawk } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Koston", "Ped Koston", 0, "ped_body = { desc_id = PedPro_Koston } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Burnquist", "Ped Burnquist", 0, "ped_body = { desc_id = PedPro_Burnquist } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Lasek", "Ped Lasek", 0, "ped_body = { desc_id = PedPro_Lasek } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Mullen", "Ped Mullen", 0, "ped_body = { desc_id = PedPro_Mullen } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Muska", "Ped Muska", 0, "ped_body = { desc_id = PedPro_Muska } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Margera", "Ped Margera", 0, "ped_body = { desc_id = PedPro_Margera } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Rodrigez", "Ped Rodrigez", 0, "ped_body = { desc_id = PedPro_Rodrigez } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Reynolds", "Ped Reynolds", 0, "ped_body = { desc_id = PedPro_Reynolds } ped_board = { desc_id = Skateboard }" },
+	{ "PedPro_Vallely", "Ped Vallely", 0, "ped_body = { desc_id = PedPro_Vallely } ped_board = { desc_id = Skateboard }" },
+};
+
+static std::string profil_pieton( int i, const PietonJouable &p )
+{
+	char t[2048];
+	snprintf( t, sizeof( t ),
+		"{ display_name = \"%s\" first_name = \"Ped\" file_name = \"Unimplemented\" skater_index = %d\n"
+		"default_appearance = desktop_ped_%d name = desktop_ped_%d stance = regular pushstyle = mongo_when_switch trickstyle = street\n"
+		"is_pro = 1 is_head_locked = 1 is_locked = 1 is_male = %d age = -1 hometown = \"\" points_available = 0\n"
+		"air = 6 run = 6 ollie = 6 speed = 6 spin = 6 switch = 6 flip_speed = 6 rail_balance = 6 lip_balance = 6 manual_balance = 6\n"
+		"sponsors = [ ] trick_mapping = { } default_trick_mapping = WolverineTricks no_edit no_edit_groups = [ secret_options ]\n"
+		"max_specials = 11 specials = { [\n"
+		"{ trickslot = SpAir_L_D_Circle trickname = Trick_1234 }\n"
+		"{ trickslot = SpAir_R_U_Circle trickname = Trick_The900 }\n"
+		"{ trickslot = SpGrind_U_D_Triangle trickname = Trick_FlipKickDad }\n"
+		"{ trickslot = SpMan_L_R_Triangle trickname = Trick_OneFootOneWheel }\n"
+		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
+		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
+		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
+		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
+		"] } }\n",
+		p.affiche, 100 + i, i, i, p.femme ? 0 : 1 );
+	return t;
+}
+
+static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "master_skater_list" );
+	for( size_t k = 0; k + 2 < j.size(); ++k )
+	{
+		if( !est_nom( qb, j[k], n ) || qb[j[k + 1].pos] != T_EGAL ) continue;
+		size_t a = sans_eol( qb, j, k + 2 );
+		if( a >= j.size() || qb[j[a].pos] != T_TAB ) continue;
+		int niveau = 0;
+		for( ; a < j.size(); ++a )
+		{
+			const unsigned char c = qb[j[a].pos];
+			if( c == T_TAB || c == T_STRUCT ) ++niveau;
+			else if(( c == T_FTAB || c == T_FSTRUCT ) && --niveau == 0 ) break;
+		}
+		if( a >= j.size() || qb[j[a].pos] != T_FTAB ) return;
+		const int nb = (int)( sizeof( s_pietons ) / sizeof( s_pietons[0] ));
+		Ecrit w1;
+		for( int i = 0; i < nb; ++i )
+			compile_q( w1, profil_pieton( i, s_pietons[i] ).c_str());
+		m.push_back( Modif{ j[a].pos, 0, w1.o } );
+		Ecrit w2; w2.eol();
+		for( int i = 0; i < nb; ++i )
+		{
+			char t[1536];
+			snprintf( t, sizeof( t ), "desktop_ped_%d = { %s }\n", i, s_pietons[i].apparence );
+			compile_q( w2, t );
+		}
+		m.push_back( Modif{ j.back().pos, 0, w2.o } );
+		VLOG( "MUS", "skaters: %d peds added", nb );
+		return;
+	}
+}
+
 // Every secret skater in the select screen's head strip (it shows the ones
 // whose unlock flag is set). Pedestrian stays locked: its ped list isn't in
 // the game's files.
@@ -1394,6 +1583,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_air_shuffle( qb, j, m );
 	patch_quitter( qb, j, m );
 	patch_histoire( qb, j, m );
+	patch_pietons( qb, j, m );
 	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );
 	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
 	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
