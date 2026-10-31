@@ -56,6 +56,8 @@ static const char *s_default_ini =
 	"bloom_threshold=0.8\n"
 	"; distance haze, coloured like the level's sky: 0 = off, 1 = on; how thick far away (0.0 - 1.0);\n"
 	"; distance in inches where it reaches half of that (THUG levels: 8000 = about 200 m)\n"
+	"; how far away peds, cars and other moving objects still show up and move: 1 = PS2/Xbox, 4 = four times as far\n"
+	"object_distance=4\n"
 	"fog=1\n"
 	"fog_strength=0.25\n"
 	"fog_distance=8000\n"
@@ -170,6 +172,7 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "bloom_strength" )) s_cfg.bloom_strength = (float)atof( v );
 		else if( !strcmp( k, "bloom_threshold" )) s_cfg.bloom_threshold = (float)atof( v );
 		else if( !strcmp( k, "fog" ))           s_cfg.fog = iv;
+		else if( !strcmp( k, "object_distance" )) s_cfg.object_distance = (float)atof( v );
 		else if( !strcmp( k, "fog_strength" ))  s_cfg.fog_strength = (float)atof( v );
 		else if( !strcmp( k, "fog_distance" ))  s_cfg.fog_distance = (float)atof( v );
 		else if( !strcmp( k, "dof" ))           s_cfg.dof = iv;
@@ -220,6 +223,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.bloom_strength = 0.15f;
 	s_cfg.bloom_threshold = 0.8f;
 	s_cfg.fog = 1;
+	s_cfg.object_distance = 4.0f;
 	s_cfg.fog_strength = 0.25f;
 	s_cfg.fog_distance = 8000.0f;
 	s_cfg.dof = 1;
@@ -329,6 +333,12 @@ extern "C" float desktop_shadow_softness( void )
 {
 	const float v = desktop_config().shadow_softness;
 	return v < 0.0f ? 0.0f : v > 8.0f ? 8.0f : v;
+}
+
+extern "C" float desktop_object_distance( void )
+{
+	const float v = desktop_config().object_distance;
+	return v < 1.0f ? 1.0f : v > 20.0f ? 20.0f : v;
 }
 
 extern "C" int desktop_max_fps( void )
