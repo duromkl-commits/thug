@@ -1213,6 +1213,9 @@ static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j
 			compile_q( w0,
 				"script desktop_th4_career\n"
 				"change_gamemode_career\n"
+				// no THUG story startup menu: it parks the skater (physics
+				// paused, out of the world, start key off) and never showed
+				"change show_career_startup_menu = 0\n"
 				"story_options_change_level level = load_TH4_Sch\n"
 				"endscript\n" );
 			m.push_back( Modif{ j[k].pos, 0, w0.o } );
