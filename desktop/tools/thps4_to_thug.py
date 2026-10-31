@@ -949,7 +949,39 @@ def goal_code(src_data, L, cache):
     # while the camera plays CAM_INTRO) freezes the skater and the start
     # button, then waits on animations and a camera THUG doesn't have.
     skip_intro = struct.pack('<BIBBi', 0x16, crc('skip_intro'), 0x07, 0x17, 1) + b'\x01'
-    return cache['goal_wrappers'] + mine + skip_intro
+    return cache['goal_wrappers'] + mine + skip_intro + pro_anim_arrays(L)
+
+
+# THUG's pro scripts (GenericProTalking & co) play anims from arrays such as
+# generic_pro_anims_talk, whose THUG names (Ped_M_Talk2_...) THPS4's human set
+# lacks: the missing anim fell back to 'default', the bind pose. The desktop
+# build first looks for <level>_pro_anims_<type>; these use THPS4's own anims.
+PRO_ANIMS = {
+    'wait': ['Ped_M_Idle1', 'Ped_M_LookAround', 'Ped_M_LookAtWatch', 'Ped_M_LookAtWatch2',
+             'Ped_M_LookLeftRight', 'Ped_M_Lookright', 'Ped_M_Idle2', 'Ped_M_Wave', 'Ped_M_Idle1'],
+    'talking': ['Ped_M_Talk1', 'Ped_M_Talk2', 'Ped_M_Talk_Explain', 'Ped_M_Talk_Point',
+                'Ped_M_Talk_PointOut', 'Ped_M_Talk_LikeThat', 'Ped_M_Talk_LikeThis', 'Ped_M_Talk_Nod',
+                'Ped_M_Talk_Shrug', 'Ped_M_Talk_RaiseArn', 'Ped_M_Talk_TurnThink', 'Ped_M_Talk_Isupposeso'],
+    'midgoal': ['Ped_M_Idle1', 'Ped_M_Clap', 'Ped_M_PlayerWave', 'Ped_M_Cheering', 'Ped_M_LookAround',
+                'Ped_M_ThumbUp', 'Ped_M_Idle3'],
+    'success': ['Ped_M_Cheer1', 'Ped_M_Cheer2', 'Ped_M_Cheer3', 'Ped_M_Cheer4', 'Ped_M_Cheer5',
+                'Ped_M_Cheer6', 'Ped_M_Cheer7', 'Ped_M_Cheering', 'Ped_M_Clap', 'Ped_M_ThumbUp', 'Ped_M_PeaceBro'],
+    'angry': ['Ped_M_Disgust', 'Ped_M_ShakeFist'],
+}
+PRO_ANIMS['talk'] = PRO_ANIMS['talking']
+PRO_ANIMS['spectate'] = PRO_ANIMS['midgoal']
+PRO_ANIMS['cheer'] = PRO_ANIMS['success']
+
+
+def pro_anim_arrays(L):
+    name = lambda n: struct.pack('<BI', 0x16, crc(n))
+    out = b''
+    for t, anims in PRO_ANIMS.items():
+        out += name(f'{L}_pro_anims_{t}') + b'\x07\x05'
+        for a in anims:
+            out += b'\x03' + name('anims') + b'\x07\x05\x03' + name('anim') + b'\x07' + name(a) + b'\x04\x06\x04'
+        out += b'\x06\x01'
+    return out
 
 
 # ---------------------------------------------------------------- main

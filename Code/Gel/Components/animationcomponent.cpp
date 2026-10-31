@@ -1104,8 +1104,14 @@ void CAnimationComponent::PlayPrimarySequence( uint32 animName, bool propagate, 
 		{
 			VLOG( "ANIM", "anim %s missing from set %s", Script::FindChecksumName( animName ), Script::FindChecksumName( m_animScriptName ) );
 		}
-		animName = CRCD(0x1ca1ff20,"default");
-		if ( !AnimExists( animName ) )
+		// A standing idle reads better than 'default', which for THPS4's
+		// human set is the bind pose (a T-pose).
+		static const uint32 s_idles[] = { CRCD(0xef5bade5,"Ped_M_Idle1"), Script::GenerateCRC("Ped_F_Idle1"), CRCD(0x1ca1ff20,"default") };
+		animName = 0;
+		for ( int i = 0; i < 3 && !animName; i++ )
+			if ( AnimExists( s_idles[i] ) )
+				animName = s_idles[i];
+		if ( !animName )
 		{
 			return;
 		}
