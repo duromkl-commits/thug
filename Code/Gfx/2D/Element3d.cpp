@@ -536,6 +536,10 @@ void CElement3d::SetProperties(Script::CStruct *p_props)
 				{
 					Nx::CGeom *p_orig_geom = p_src_model_comp->GetModel()->GetGeom(geomName);
 					Dbg_MsgAssert(p_orig_geom, ("Couldn't find CGeom %s", Script::FindChecksumName(geomName)));
+#ifdef THUG_DESKTOP
+					// Peds have no board geom: the pause menu's board preview would clone NULL
+					if (!p_orig_geom) continue;
+#endif
 
 					Nx::CGeom *p_new_geom = p_orig_geom->Clone(true, p_model);
 					Dbg_MsgAssert(p_new_geom, ("Couldn't clone CGeom %s", Script::FindChecksumName(geomName)));
