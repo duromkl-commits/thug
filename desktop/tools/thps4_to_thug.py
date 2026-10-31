@@ -816,6 +816,69 @@ def prefix_models(d, models):
     return bytes(out + d[last:])
 
 
+# ---------------------------------------------------------------- career goals
+# THPS4's levels add their goals with AddGoal_<type> (<L>_Goals, called as
+# the level struct's goals_script). THUG kept every THPS4 goal type and its
+# Goal_*_GenericParams, but not the AddGoal_ wrappers (two lines each) nor
+# the per-level texts and scores (goal_scores.qb, goal_descriptions.qb:
+# sch_highscore_text...). Both are appended to the level's scripts qb.
+
+def top_items(d):
+    """Top-level statements of a qb: [(name checksum, bytes)], scripts included."""
+    out, i, start, depth, last = [], 0, None, 0, 0
+    while i < len(d) and d[i]:
+        t = d[i]
+        if t == 0x2b:
+            break
+        if t in (0x01, 0x02) and depth == 0:		# EOL, or EOL with line number
+            if start is not None and last == 0x07:	# 'name =' with its value on the next line
+                i = skip(d, i, 4)
+                continue
+            if start is not None:
+                out.append((struct.unpack_from('<I', d, start + (2 if d[start] == 0x23 else 1))[0], d[start:i] + b'\x01'))
+            start = None
+        elif start is None:
+            start = i
+        if t not in (0x01, 0x02): last = t
+        if t in (0x03, 0x05, 0x23): depth += 1
+        elif t in (0x04, 0x06, 0x24): depth -= 1
+        i = skip(d, i, 4)
+    return out
+
+
+def always_init(b):
+    """THUG only starts goals listed in its story chapters, unless their
+    params carry always_initialize_goal: added after each '<...>'."""
+    out, i = bytearray(), 0
+    while i < len(b):
+        j = skip(b, i, 4)
+        out += b[i:j]
+        if b[i] == 0x2c:
+            out += struct.pack('<BI', 0x16, crc('always_initialize_goal'))
+        i = j
+    return bytes(out)
+
+
+def goal_code(src_data, L, cache):
+    if 'goal_wrappers' not in cache:
+        sc = find(src_data, 'scripts')
+        u = open(find(sc, 'goal_utilities.qb'), 'rb').read()
+        names = qb_names(u)
+        cache['goal_wrappers'] = b''.join(always_init(b) for c, b in top_items(u)
+                                         if b[0] == 0x23 and names.get(c, '').lower().startswith('addgoal_'))
+        g = []
+        for f in ('goal_scores.qb', 'goal_descriptions.qb'):
+            q = open(find(sc, f), 'rb').read()
+            n = qb_names(q)
+            g += [(n.get(c, '').lower(), b) for c, b in top_items(q) if b[0] == 0x16]
+        cache['goal_globals'] = g
+    pre = L.lower() + '_'
+    mine = b''.join(b for n, b in cache['goal_globals'] if n.startswith(pre))
+    print(f'  goals: {len(cache["goal_wrappers"])} bytes of AddGoal_ wrappers, '
+          f'{sum(1 for n, b in cache["goal_globals"] if n.startswith(pre))} {L} goal texts/scores')
+    return cache['goal_wrappers'] + mine
+
+
 # ---------------------------------------------------------------- main
 
 def find(folder, name):
@@ -895,6 +958,7 @@ def convert_level(src_levels, L, dst_levels, scripts=True):
         open(os.path.join(o, f'{L}.qb'), 'wb').write(q)
         if sq:
             copy_sounds(os.path.dirname(src_levels), sq, os.path.dirname(dst_levels))
+            sq = append_scripts(sq, goal_code(src_data, L, CACHE))
             q, r2 = fix_randoms(rename_checksums(sq, renames))
             r += r2
             open(os.path.join(o, f'{L}_scripts.qb'), 'wb').write(q)

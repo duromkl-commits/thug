@@ -1485,7 +1485,8 @@ static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, 
 // them in the level select with THUG's own levels, ahead of Created Park
 // (Marcus's call: real names, not with the secret levels). Their startup
 // scripts run (they load the level's sounds, shipped as loose .wav by the
-// converter); setup scripts and goals don't yet, they call THPS4 functions.
+// converter) and so do their THPS4 goals (TH4_Goals_<L>); setup scripts
+// don't yet, they call THPS4 functions.
 // A level whose files aren't installed is left out of the list.
 struct NiveauTH4 { const char *dossier, *nom; int numero; const char *startup, *lumieres; };
 static const NiveauTH4 s_niveaux_th4[] = {
@@ -1521,7 +1522,7 @@ static bool niveau_installe( const char *dossier )
 
 static std::string struct_niveau( const NiveauTH4 &n )
 {
-	char t[2048];
+	char t[4096];
 	snprintf( t, sizeof( t ),
 		"Level_TH4_%s = {\n"
 		"structure_name = Level_TH4_%s\n"
@@ -1537,13 +1538,23 @@ static std::string struct_niveau( const NiveauTH4 &n )
 		"default_stats = 5\n"
 		"level_number = %d\n"
 		"startup_script = %s\n"
+		"goals_script = TH4_Goals_%s\n"
 		"%s\n"
 		"}\n"
 		"script Load_TH4_%s\n"
 		"load_level Level_TH4_%s\n"
+		"endscript\n"
+		// THPS4's own <L>_Goals, once the converter has added the AddGoal_
+		// wrappers it needs (older conversions don't have them).
+		"script TH4_Goals_%s\n"
+		"if ScriptExists AddGoal_Skate\n"
+		"if ScriptExists %s_Goals\n"
+		"%s_Goals\n"
+		"endif\n"
+		"endif\n"
 		"endscript\n",
 		n.dossier, n.dossier, n.dossier, n.nom, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier,
-		n.numero, n.startup, n.lumieres, n.dossier, n.dossier );
+		n.numero, n.startup, n.dossier, n.lumieres, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier );
 	return t;
 }
 
