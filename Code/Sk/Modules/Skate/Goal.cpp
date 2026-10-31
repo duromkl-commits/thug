@@ -483,7 +483,7 @@ void CGoal::SetTimer()
 	// convert to milliseconds
 	m_timeLeft *= 1000;
 #ifdef THUG_DESKTOP
-	// Desktop difficulty / prestige: shorter (or longer) limits, never under 10 s.
+	// Desktop difficulty: shorter (or longer) limits, never under 10 s.
 	if ( !desktop_unscaled_goal( mp_params ) && !IsMinigame() && !IsCompetition() && !IsNetGoal() )
 	{
 		float scaled = (float)m_timeLeft * desktop_goal_time_scale();
@@ -537,14 +537,14 @@ void CGoal::AddTime( int time )
 /******************************************************************/
 	
 #ifdef THUG_DESKTOP
-// Desktop difficulty (thug_desktop.ini [difficulty], times the prestige
-// level): score targets go up, time limits down. The goal's "score" and
+// Desktop difficulty (thug_desktop.ini [difficulty]):
+// score targets go up, time limits down. The goal's "score" and
 // the numbers in its texts ("Get a High Score: 15,000 Points") are rewritten
-// from the originals each time the goal starts, so a changed setting or a
-// new prestige level applies from the next attempt.
+// from the originals each time the goal starts, so a changed setting
+// applies from the next attempt.
 static int desktop_nice_number( float v )
 {
-	// Uncapped prestige: never past what a score counter holds.
+	// Never past what a score counter holds.
 	if ( v > 2000000000.0f )
 		return 2000000000;
 	const int step = ( v >= 10000.0f ) ? 1000 : ( v >= 1000.0f ) ? 100 : 10;
