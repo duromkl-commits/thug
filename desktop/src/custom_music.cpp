@@ -1335,7 +1335,7 @@ static std::string profil_pieton( int i, const PietonJouable &p )
 	char t[2048];
 	snprintf( t, sizeof( t ),
 		"{ display_name = \"%s\" first_name = \"Ped\" file_name = \"Unimplemented\" skater_index = %d\n"
-		"default_appearance = desktop_ped_%d name = desktop_ped_%d stance = regular pushstyle = mongo_when_switch trickstyle = street\n"
+		"default_appearance = desktop_pedlook_%d name = desktop_ped_%d stance = regular pushstyle = mongo_when_switch trickstyle = street\n"
 		"is_pro = 1 is_head_locked = 1 is_locked = 1 is_male = %d age = -1 hometown = \"\" points_available = 0\n"
 		"air = 6 run = 6 ollie = 6 speed = 6 spin = 6 switch = 6 flip_speed = 6 rail_balance = 6 lip_balance = 6 manual_balance = 6\n"
 		"sponsors = [ ] trick_mapping = { } default_trick_mapping = WolverineTricks no_edit no_edit_groups = [ secret_options ]\n"
@@ -1378,7 +1378,9 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 		for( int i = 0; i < nb; ++i )
 		{
 			char t[1536];
-			snprintf( t, sizeof( t ), "desktop_ped_%d = { %s }\n", i, s_pietons[i].apparence );
+			// Not named like the profile: the select screen uses the profile name as a
+			// screen element id, and a global struct of that name would replace it.
+			snprintf( t, sizeof( t ), "desktop_pedlook_%d = { %s }\n", i, s_pietons[i].apparence );
 			compile_q( w2, t );
 		}
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
