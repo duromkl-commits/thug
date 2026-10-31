@@ -1389,6 +1389,47 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 	}
 }
 
+// Text naming the Xbox reads as the PS2 version's (Marcus): saves go to a
+// "memory card (8MB) (for PlayStation 2)", the console is a PlayStation 2.
+static const char *s_xbox_ps2[][2] = {
+	{ "Please do not turn off your Xbox console.", "Do not remove the memory card (8MB) (for PlayStation 2) or switch off the console." },
+	{ "Your Xbox does not have enough free blocks", "Your memory card (8MB) (for PlayStation 2) does not have enough free space" },
+	{ "the hard disk", "the memory card (8MB) (for PlayStation 2)" },
+	{ "hard disk", "memory card (8MB) (for PlayStation 2)" },
+	{ "Hard Disk", "Memory Card (8MB) (for PlayStation 2)" },
+	{ "HARD DISK", "MEMORY CARD (8MB) (FOR PLAYSTATION 2)" },
+	{ "Xbox", "PlayStation 2" },
+	{ "XBox", "PlayStation 2" },
+	{ "XBOX", "PLAYSTATION 2" },
+	// Save sizes: the desktop already counts 1 KB blocks, so only the unit changes
+	{ "Free: 50000+", "Free: 50000+ KB" },
+	{ " blocks", " KB" },
+	{ "Free More Blocks", "Free More Space" },
+};
+
+static void patch_xbox( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	for( size_t k = 0; k < j.size(); ++k )
+	{
+		const unsigned char t = qb[j[k].pos];
+		if( t != T_CHAINE && t != T_CHAINE_LOC ) continue;
+		const uint32_t n = lit32( qb + j[k].pos + 1 );
+		if( !n ) continue;
+		std::string texte( (const char *)qb + j[k].pos + 5, n - 1 );
+		bool change = false;
+		for( size_t r = 0; r < sizeof( s_xbox_ps2 ) / sizeof( s_xbox_ps2[0] ); ++r )
+			for( size_t i = 0; ( i = texte.find( s_xbox_ps2[r][0], i )) != std::string::npos; change = true )
+			{
+				texte.replace( i, strlen( s_xbox_ps2[r][0] ), s_xbox_ps2[r][1] );
+				i += strlen( s_xbox_ps2[r][1] );
+			}
+		if( !change ) continue;
+		Ecrit w; w.chaine( texte );
+		w.o[0] = t;
+		m.push_back( Modif{ j[k].pos, j[k].taille, w.o } );
+	}
+}
+
 // Every secret skater in the select screen's head strip (it shows the ones
 // whose unlock flag is set). Pedestrian stays locked: its ped list isn't in
 // the game's files.
@@ -1586,6 +1627,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_quitter( qb, j, m );
 	patch_histoire( qb, j, m );
 	patch_pietons( qb, j, m );
+	patch_xbox( qb, j, m );
 	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );
 	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
 	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
