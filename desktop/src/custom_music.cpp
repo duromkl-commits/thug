@@ -1192,6 +1192,7 @@ static void patch_quitter( const unsigned char *qb, const std::vector<Jeton> &j,
 // Story Mode menu (create_career_options_menu, skateshop.qb): the Pro Skater
 // 1-4 careers listed greyed out (not ported yet) above an Underground label,
 // ahead of THUG's own Level Select / Continue / Start New / Load items.
+static bool niveau_installe( const char *dossier );
 static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
 {
 	const uint32_t n = crc( "create_career_options_menu" ), item = crc( "make_main_menu_item" );
@@ -1203,12 +1204,28 @@ static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j
 		if( b >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) return;
 		while( b > k && qb[j[b].pos] != 37 ) --b;	// the 'if NOT cd' around Level Select
 		if( b == k ) return;
+		// PRO SKATER 4: a career-mode game at College (THPS4's goals only run
+		// in career mode), once the converted College is installed.
+		const bool th4 = niveau_installe( "Sch" );
+		if( th4 )
+		{
+			Ecrit w0;
+			compile_q( w0,
+				"script desktop_th4_career\n"
+				"change_gamemode_career\n"
+				"story_options_change_level level = load_TH4_Sch\n"
+				"endscript\n" );
+			m.push_back( Modif{ j[k].pos, 0, w0.o } );
+		}
 		Ecrit w;
 		compile_q( w,
 			"make_main_menu_item { text = \"PRO SKATER 1\" pad_choose_script = null_script not_focusable = not_focusable }\n"
 			"make_main_menu_item { text = \"PRO SKATER 2\" pad_choose_script = null_script not_focusable = not_focusable }\n"
-			"make_main_menu_item { text = \"PRO SKATER 3\" pad_choose_script = null_script not_focusable = not_focusable }\n"
-			"make_main_menu_item { text = \"PRO SKATER 4\" pad_choose_script = null_script not_focusable = not_focusable }\n"
+			"make_main_menu_item { text = \"PRO SKATER 3\" pad_choose_script = null_script not_focusable = not_focusable }\n" );
+		compile_q( w, th4
+			? "make_main_menu_item { text = \"PRO SKATER 4\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_th4_career kill_all } }\n"
+			: "make_main_menu_item { text = \"PRO SKATER 4\" pad_choose_script = null_script not_focusable = not_focusable }\n" );
+		compile_q( w,
 			"make_main_menu_item { text = \"- UNDERGROUND -\" pad_choose_script = null_script not_focusable = not_focusable }\n" );
 		m.push_back( Modif{ j[b].pos, 0, w.o } );
 		VLOG( "MUS", "story menu: Pro Skater 1-4 added" );
