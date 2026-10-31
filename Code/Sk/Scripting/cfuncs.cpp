@@ -5783,6 +5783,16 @@ bool DoNodeActionFromNodeNum( int nodeNum, int action, Script::CScript *pScript,
     GameNet::Manager * gamenet_man =  GameNet::Manager::Instance();
 	Mdl::Skate * skate_mod =  Mdl::Skate::Instance();
 
+#ifdef THUG_DESKTOP
+	// A name with no node (FindNamedNode gives -1): THPS4 goals name objects
+	// the converter left out. The original read past the node array.
+	{
+		Script::CArray *p_nodes = Script::GetArray( CRCD(0xc472ecc5,"NodeArray"), Script::NO_ASSERT );
+		if( !p_nodes || nodeNum < 0 || nodeNum >= (int)p_nodes->GetSize())
+			return false;
+	}
+#endif
+
 // In net games, check if the node is flagged to be absent
 // and just ignore the command it fo	
 	if( gamenet_man->InNetMode())
