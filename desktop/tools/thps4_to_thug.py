@@ -877,7 +877,11 @@ def goal_code(src_data, L, cache):
     mine = b''.join(b for n, b in cache['goal_globals'] if n.startswith(pre))
     print(f'  goals: {len(cache["goal_wrappers"])} bytes of AddGoal_ wrappers, '
           f'{sum(1 for n, b in cache["goal_globals"] if n.startswith(pre))} {L} goal texts/scores')
-    return cache['goal_wrappers'] + mine
+    # skip_intro = 1: the level's <L>_Ped_ExplainsGoals intro (a ped walks up
+    # while the camera plays CAM_INTRO) freezes the skater and the start
+    # button, then waits on animations and a camera THUG doesn't have.
+    skip_intro = struct.pack('<BIBBi', 0x16, crc('skip_intro'), 0x07, 0x17, 1) + b'\x01'
+    return cache['goal_wrappers'] + mine + skip_intro
 
 
 # ---------------------------------------------------------------- main
