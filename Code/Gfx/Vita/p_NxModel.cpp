@@ -2864,6 +2864,11 @@ static void lumieres_rigides( CVitaModelLights *p_lights, float lum[21] )
 // Televerse seulement si les lumieres ont bouge depuis le dernier calcul.
 static SceUInt64 g_pic_max = 0; static int g_pic_idx = -1;
 static SceUInt64 g_pic_calc = 0, g_pic_tele = 0; static int g_pic_n = 0, g_pic_v = 0;	// pics de dessin (#69)
+#ifdef THUG_DESKTOP
+#define RELIGHT_BUDGET 100000
+#else
+#define RELIGHT_BUDGET 60
+#endif
 static int s_budget_image = 0;	// pieces reeclairees dans l'image (#67)
 void VitaBudgetEclairageImage( void ) { s_budget_image = 0; }
 
@@ -2921,7 +2926,11 @@ static void eclairer_piece( SGpuMesh *p, const float lum[21], bool texture,
 		// Budget par image (#67) : au-dela de 60 pieces deja reeclairees dans
 		// l'image, une piece DEJA eclairee garde ses couleurs (une image de
 		// retard au plus) -- Manhattan, 30 voitures qui tournent : 240 ms/s.
+#ifdef THUG_DESKTOP
+		if( s_budget_image >= 100000 )	// desktop: relight every moving piece every frame
+#else
 		if( s_budget_image >= 60 )
+#endif
 			return;
 	}
 	++s_budget_image;
@@ -3041,7 +3050,7 @@ void CVitaMesh::Draw( const float *p_rgba,
 				if( e > ecart )
 					ecart = e;
 			}
-			if(( ecart <= 0.02f ) || ( recent && ( ecart <= 0.15f )) || ( s_budget_image >= 60 ))
+			if(( ecart <= 0.02f ) || ( recent && ( ecart <= 0.15f )) || ( s_budget_image >= RELIGHT_BUDGET ))
 				s_lum_decision = 0;
 			// Diagnostic #78 : quel terme de l'eclairage fait reeclairer ?
 			// 0-2 ambiante, 3-8 lumiere 0 (dir, couleur), 9-14 lumiere 1,
