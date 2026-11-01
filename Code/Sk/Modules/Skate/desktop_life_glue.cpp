@@ -33,6 +33,9 @@
 #include <gel/components/pedlogiccomponent.h>
 #include <sk/components/skaterphysicscontrolcomponent.h>
 #include <sk/engine/feeler.h>
+#include <sk/components/skatercorephysicscomponent.h>
+#include <sk/components/skaterbalancetrickcomponent.h>
+#include <sk/objects/skaterflags.h>
 #include <gfx/camera.h>
 #include <gfx/nxviewman.h>
 #include <gfx/nxviewport.h>
@@ -757,9 +760,12 @@ namespace
 namespace Mdl
 {
 
+void DesktopTriggersUpdate( Skate &mdl );
+
 // Each frame, from Skate::s_logic_code.
 void DesktopLifeUpdate( Skate &mdl )
 {
+	DesktopTriggersUpdate( mdl );
 	if( !life_on())
 	{
 		detruit_hud();
@@ -819,6 +825,80 @@ void DesktopLifeUpdate( Skate &mdl )
 }
 
 } // namespace Mdl
+
+
+// --- DualSense adaptive triggers ------------------------------------------------
+//
+// Skating: both triggers firm up slightly. In the air R2 (spine transfer,
+// revert) has a wall just before the point the game reads it as pressed.
+// Grinds, lips and manuals: both triggers stiffen as the balance meter tips.
+// On foot, driving, paused or in menus: loose. Sent only when it changes.
+
+extern "C" void desktop_pad_triggers( const unsigned char *droite, const unsigned char *gauche );
+
+namespace
+{
+static int s_gach_prec = -1;
+
+static void effet( unsigned char *e, int debut, int force )
+{
+	memset( e, 0, 11 );
+	if( force <= 0 ) { e[0] = 0x05; return; }	// no effect
+	e[0] = 0x01;								// resistance from 'debut' on
+	e[1] = (unsigned char)debut;
+	e[2] = (unsigned char)( force > 255 ? 255 : force );
+}
+
+static void gachettes( int dd, int fd, int dg, int fg )
+{
+	const int cle = (( dd & 0xf0 ) << 20 ) ^ (( fd & 0xf8 ) << 12 ) ^ (( dg & 0xf0 ) << 4 ) ^ ( fg & 0xf8 );
+	if( cle == s_gach_prec ) return;
+	s_gach_prec = cle;
+	unsigned char d[11], g[11];
+	effet( d, dd, fd );
+	effet( g, dg, fg );
+	desktop_pad_triggers( d, g );
+}
+}
+
+namespace Mdl
+{
+void DesktopTriggersUpdate( Skate &mdl )
+{
+	Obj::CSkater *sk = mdl.GetLocalSkater();
+	Game::CGameMode *mode = mdl.GetGameMode();
+	if( !sk || !mode || mode->IsFrontEnd() || Mdl::FrontEnd::Instance()->GamePaused() || ( s_l.actif && life_on()))
+	{
+		gachettes( 0, 0, 0, 0 );
+		return;
+	}
+	Obj::CSkaterPhysicsControlComponent *pc = GetSkaterPhysicsControlComponentFromObject( sk );
+	Obj::CSkaterCorePhysicsComponent *cp = GetSkaterCorePhysicsComponentFromObject( sk );
+	if( !pc || !cp || pc->IsDriving() || pc->IsWalking())
+	{
+		gachettes( 0, 0, 0, 0 );
+		return;
+	}
+	Obj::CSkaterBalanceTrickComponent *bt = GetSkaterBalanceTrickComponentFromObject( sk );
+	const Obj::EStateType st = cp->GetState();
+	int qui = -1;
+	if( st == Obj::RAIL ) qui = 0;
+	else if( st == Obj::LIP ) qui = 1;
+	else if( st == Obj::GROUND && bt && bt->DoingBalanceTrick()) qui = 2;
+	if( qui >= 0 && bt )
+	{
+		float l = bt->DesktopLean( qui ) / 4096.0f;
+		if( l < 0 ) l = -l;
+		if( l > 1 ) l = 1;
+		const int f = 40 + (int)( l * 200.0f );
+		gachettes( 0, f, 0, f );
+	}
+	else if( st == Obj::AIR || st == Obj::WALL || st == Obj::WALLPLANT )
+		gachettes( 80, 230, 0, 25 );
+	else
+		gachettes( 0, 25, 0, 25 );
+}
+}
 
 // --- script functions (ftables.cpp) ----------------------------------------------
 

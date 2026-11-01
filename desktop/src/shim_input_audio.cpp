@@ -43,6 +43,20 @@ extern "C" void desktop_request_quit( void )
 	SDL_PushEvent( &e );
 }
 
+// DualSense adaptive triggers: 11-byte effect blocks (SDL's DS5EffectsState_t
+// layout: enable bits, then the right trigger at 10 and the left at 21). Other
+// pads ignore it.
+extern "C" void desktop_pad_triggers( const unsigned char *droite, const unsigned char *gauche )
+{
+	if( !s_pad || SDL_GameControllerGetType( s_pad ) != SDL_CONTROLLER_TYPE_PS5 ) return;
+	unsigned char e[47];
+	memset( e, 0, sizeof( e ));
+	e[0] = 0x04 | 0x08;		// right and left trigger effects only
+	memcpy( e + 10, droite, 11 );
+	memcpy( e + 21, gauche, 11 );
+	SDL_GameControllerSendEffect( s_pad, e, sizeof( e ));
+}
+
 // The game's two vibration motors (SIO/Vita/p_siodev.cpp), 0..1. Held for
 // 10 s per call; the game always switches them off itself.
 extern "C" void desktop_pad_rumble( float low, float high )
