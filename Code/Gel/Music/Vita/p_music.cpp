@@ -55,6 +55,7 @@
 #include "vita_log.h"
 #ifdef THUG_DESKTOP
 #include "custom_music.h"
+#include "skater_life.h"
 #endif
 
 SVitaStreamInfo	gCurrentStreamInfo[ NUM_STREAMS ];
@@ -482,6 +483,22 @@ static bool demarre_perso( int i )
 		return false;
 	verrouille();
 	const bool ok = custom_music_open( i ) != 0;
+	s_perso = ok;
+	s_joue  = ok;
+	s_pause = false;
+	s_fini  = !ok;
+	deverrouille();
+	return ok;
+}
+
+// Skater Life's Sims radio: a song of the chosen Sims station, through the
+// same decoder, in place of whatever soundtrack song the engine asked for.
+static bool demarre_radio_vie( void )
+{
+	if( s_port < 0 || !s_sortie )
+		return false;
+	verrouille();
+	const bool ok = life_radio_open() != 0;
 	s_perso = ok;
 	s_joue  = ok;
 	s_pause = false;
@@ -1053,6 +1070,8 @@ bool	PCMAudio_PlayMusicTrack( const char *p_nom, bool )
 	if( !p_nom )
 		return false;
 #ifdef THUG_DESKTOP
+	if( life_radio_active() && demarre_radio_vie())
+		return true;
 	const int perso = custom_music_index( p_nom );
 	if( perso >= 0 )
 		return demarre_perso( perso );

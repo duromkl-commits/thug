@@ -326,6 +326,13 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 		snprintf( chemin, sizeof( chemin ), "sounds\\wav\\%s.wav", sfxName );
 		p_fic = File::Open( chemin, "rb" );
 	}
+	// Skater Life: Sims sounds from the player's Sims install, loose in
+	// Data\sims\Sound (LoadSound "sims\Sound\Sfx\Food_Snack_Eat1").
+	if( !p_fic && !strncasecmp( sfxName, "sims\\", 5 ))
+	{
+		snprintf( chemin, sizeof( chemin ), "%s.wav", sfxName );
+		p_fic = File::Open( chemin, "rb" );
+	}
 #endif
 	if( !p_fic )
 		return false;

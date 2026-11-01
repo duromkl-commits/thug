@@ -23,6 +23,9 @@
 *****************************************************************************/
 
 #include <sk/modules/skate/score.h>
+#ifdef THUG_DESKTOP
+#include "skater_life.h"
+#endif
 
 #include <core/defines.h>
 #include <core/string/stringutils.h>
@@ -998,6 +1001,9 @@ void Score::Land( void )
 	
 	// GLOOBY
 	int trick_score = m_scorePot * m_currentMult;
+#ifdef THUG_DESKTOP
+	life_landed( trick_score );		// Skater Life: cash and fun
+#endif
 
 	Obj::CSkater* pSkater = skate_mod->GetSkaterById( m_skaterId );
 	Dbg_Assert( pSkater );
@@ -1194,7 +1200,10 @@ void Score::ForceSpecial( void )
 	Called whenever skater bails. Clears combo history, resets score pot, stops special
 */
 void Score::Bail( bool clearScoreText )
-{    
+{
+#ifdef THUG_DESKTOP
+	if ( m_scorePot > 0 ) life_bailed();	// Skater Life: a bailed combo
+#endif    
 	// update trick history -- clear counts for this combo
 	for (int i = 0; i < m_historyTab.getSize(); i++)
 	{

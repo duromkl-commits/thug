@@ -72,6 +72,7 @@ extern "C" void vita_log_printf( const char *sys, const char *fmt, ... );
 #include <sys/file/asyncfilesys.h>
 #ifdef THUG_DESKTOP
 #include "custom_music.h"
+#include "skater_life.h"
 #endif
 
 #define TEST_FROM_CD 0
@@ -1789,6 +1790,13 @@ void RandomTrackUpdate( void )
                 // update track text on screen
                 Script::CStruct *pParams = new Script::CStruct;
                 pParams->AddInteger(CRCD(0x8d02705d,"current_track"),current_music_track);
+#ifdef THUG_DESKTOP
+                // Skater Life's Sims radio: the station's name, not the
+                // soundtrack song the engine thinks is playing.
+                if ( life_radio_active() )
+                    Script::RunScript( "desktop_life_radio_text" );
+                else
+#endif
                 Script::RunScript( "spawn_update_music_track_text", pParams );
                 delete pParams;
 
@@ -1855,6 +1863,13 @@ void TrackUpdate( void )
                 // update track text on screen
                 Script::CStruct *pParams = new Script::CStruct;
                 pParams->AddInteger(CRCD(0x8d02705d,"current_track"),current_music_track);
+#ifdef THUG_DESKTOP
+                // Skater Life's Sims radio: the station's name, not the
+                // soundtrack song the engine thinks is playing.
+                if ( life_radio_active() )
+                    Script::RunScript( "desktop_life_radio_text" );
+                else
+#endif
                 Script::RunScript( "spawn_update_music_track_text", pParams );
                 delete pParams;
 

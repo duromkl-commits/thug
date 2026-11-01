@@ -151,6 +151,12 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 #ifdef THUG_DESKTOP
 bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopQuitGame(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeStart(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeStop(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeOn(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeAction(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeHold(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeRadioName(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScript);
 #endif
 bool ScriptCareerStartLevel(Script::CStruct *pParams, Script::CScript *pScript);
