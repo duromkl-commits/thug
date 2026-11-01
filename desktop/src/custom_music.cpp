@@ -1412,7 +1412,87 @@ static const char *s_vie_item_pause =
 	"if DesktopLifeOn\n"
 	"make_sprite_menu_item text = \"Skater Life\" id = menu_desktop_life pad_choose_script = desktop_life_menu\n"
 	"make_text_sprite texture = <view_icon> parent = menu_desktop_life\n"
+	"endif\n"
+	"if NOT IsObserving\n"
+	"make_sprite_menu_item text = \"Extras\" id = menu_desktop_extras pad_choose_script = desktop_extras_menu\n"
+	"make_text_sprite texture = <view_icon> parent = menu_desktop_extras\n"
 	"endif\n";
+
+// Pause > Extras: the toggles (desktop_extras.cpp), and what they put on
+// screen (desktop_life_glue.cpp drives it).
+static std::string scripts_extras( void )
+{
+	std::string t =
+		"script desktop_extras_menu\n"
+		"if ObjectExists id = current_menu_anchor\n"
+		"DestroyScreenElement id = current_menu_anchor\n"
+		"endif\n"
+		"FormatText ChecksumName = title_icon \"%i_edit_skater\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
+		"make_new_themed_scrolling_menu title = \"EXTRAS\" title_icon = <title_icon> dims = (600,237) pos = (229,80) right_bracket_z = 1\n"
+		"SetScreenElementProps { id = sub_menu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = create_pause_menu } } ] }\n"
+		"create_helper_text generic_helper_text\n"
+		"kill_start_key_binding\n"
+		"DesktopExtrasText\n"
+		"theme_menu_add_item text = <text0> id = desktop_extras_item0 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 0 }\n"
+		"theme_menu_add_item text = <text1> id = desktop_extras_item1 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 1 }\n"
+		"theme_menu_add_item text = <text2> id = desktop_extras_item2 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 2 }\n"
+		"theme_menu_add_item text = \"SELECT in game: first-person camera\" id = desktop_extras_item3 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg not_focusable\n"
+		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
+		"endscript\n"
+		"script desktop_extras_flip\n"
+		"DesktopExtraToggle i = <i>\n"
+		"desktop_extras_menu\n"
+		"endscript\n"
+		// Input display: lit buttons bottom left, history above.
+		"script desktop_input_create\n"
+		"SetScreenElementLock id = root_window off\n"
+		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_input pos = (0,0) just = [ left top ] }\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_input texture = white2 pos = (20,354) just = [ left top ] scale = (18.5,14.2) rgba = [ 0 0 0 60 ] z_priority = -10 }\n";
+	static const struct { const char *id; int x, y; float sx, sy; } b[] = {
+		{ "desktop_in_l2", 30, 362, 3.0f, 1.1f }, { "desktop_in_l1", 30, 374, 3.0f, 1.1f },
+		{ "desktop_in_r2", 136, 362, 3.0f, 1.1f }, { "desktop_in_r1", 136, 374, 3.0f, 1.1f },
+		{ "desktop_in_up", 46, 392, 1.4f, 1.4f }, { "desktop_in_down", 46, 420, 1.4f, 1.4f },
+		{ "desktop_in_left", 32, 406, 1.4f, 1.4f }, { "desktop_in_right", 60, 406, 1.4f, 1.4f },
+		{ "desktop_in_tri", 146, 392, 1.4f, 1.4f }, { "desktop_in_x", 146, 420, 1.4f, 1.4f },
+		{ "desktop_in_sq", 132, 406, 1.4f, 1.4f }, { "desktop_in_ci", 160, 406, 1.4f, 1.4f },
+		{ "desktop_in_sel", 84, 400, 1.6f, 0.8f }, { "desktop_in_start", 108, 400, 1.6f, 0.8f },
+		{ NULL, 84, 444, 2.5f, 2.5f }, { NULL, 114, 444, 2.5f, 2.5f } };
+	for( size_t i = 0; i < sizeof( b ) / sizeof( b[0] ); ++i )
+	{
+		char l[300];
+		if( b[i].id )
+			snprintf( l, sizeof( l ), "CreateScreenElement { type = SpriteElement parent = desktop_input id = %s texture = white2 pos = (%d,%d) just = [ left top ] scale = (%.1f,%.1f) rgba = [ 30 30 30 70 ] z_priority = -9 }\n",
+				b[i].id, b[i].x, b[i].y, b[i].sx, b[i].sy );
+		else
+			snprintf( l, sizeof( l ), "CreateScreenElement { type = SpriteElement parent = desktop_input texture = white2 pos = (%d,%d) just = [ left top ] scale = (%.1f,%.1f) rgba = [ 30 30 30 70 ] z_priority = -9 }\n",
+				b[i].x, b[i].y, b[i].sx, b[i].sy );
+		t += l;
+	}
+	t +=
+		"CreateScreenElement { type = SpriteElement parent = desktop_input id = desktop_in_ls texture = white2 pos = (92,452) just = [ center center ] scale = (0.9,0.9) rgba = [ 128 128 128 120 ] z_priority = -8 }\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_input id = desktop_in_rs texture = white2 pos = (122,452) just = [ center center ] scale = (0.9,0.9) rgba = [ 128 128 128 120 ] z_priority = -8 }\n";
+	for( int i = 0; i < 8; ++i )
+	{
+		char l[300];
+		snprintf( l, sizeof( l ), "CreateScreenElement { type = TextElement parent = desktop_input id = desktop_in_h%d font = small text = \" \" pos = (24,%d) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 %d ] z_priority = -8 }\n",
+			i, 342 - 13 * i, 120 - 10 * i );
+		t += l;
+	}
+	t +=
+		"endscript\n"
+		"script desktop_input_off\n"
+		"if ScreenElementExists id = desktop_input\n"
+		"DestroyScreenElement id = desktop_input\n"
+		"endif\n"
+		"endscript\n"
+		"script desktop_combo_msg\n"
+		"create_panel_message id = desktop_combo_stats text = <text> pos = (320,110) rgba = [ 110 128 128 128 ] time = 3500\n"
+		"endscript\n"
+		"script desktop_chaos_msg\n"
+		"create_panel_message id = desktop_chaos_msg text = <text> pos = (320,170) rgba = [ 128 60 40 128 ] time = 2500\n"
+		"endscript\n";
+	return t;
+}
 
 // Pause menu (create_pause_menu, gamemenu.qb): the item before Change Level,
 // and the mode's scripts at the end of the file.
@@ -1430,7 +1510,7 @@ static void patch_vie_pause( const unsigned char *qb, const std::vector<Jeton> &
 		if( b == k ) return;
 		Ecrit w1; compile_q( w1, s_vie_item_pause );
 		m.push_back( Modif{ j[b].pos, 0, w1.o } );
-		Ecrit w2; w2.eol(); compile_q( w2, scripts_vie().c_str());
+		Ecrit w2; w2.eol(); compile_q( w2, ( scripts_vie() + scripts_extras()).c_str());
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
 		VLOG( "MUS", "pause menu: Skater Life added" );
 		return;

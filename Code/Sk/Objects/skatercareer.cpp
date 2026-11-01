@@ -35,6 +35,9 @@
 #include <sk/gamenet/gamenet.h>
 
 
+#ifdef THUG_DESKTOP
+bool desktop_chaos_cheat( uint32 cheat );	// desktop_life_glue.cpp: chaos mode
+#endif
 bool g_CheatsEnabled = false;
 
 /*****************************************************************************
@@ -467,6 +470,9 @@ int CSkaterCareer::GetBestMedal(int Level)
 
 bool	CSkaterCareer::GetCheat(uint32 cheat_checksum)
 {
+#ifdef THUG_DESKTOP
+	if (desktop_chaos_cheat(cheat_checksum)) { g_CheatsEnabled = true; return true; }
+#endif
 	g_CheatsEnabled = GetGlobalFlag(Script::GetInteger(cheat_checksum));
 	// This should be the ONLY way we access the cheat flags, so we can override them in network games
 	//if (GameNet::Manager::Instance()->InNetGame()) return false;
