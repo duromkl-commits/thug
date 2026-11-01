@@ -20,6 +20,7 @@
 #include "desktop_config.h"
 
 extern "C" void vita_log_printf( const char *sys, const char *fmt, ... );
+#include "skater_life.h"
 #define DLOG( ... ) vita_log_printf( "DSK", __VA_ARGS__ )
 
 // Desktop-only pad bits for the real L1/R1 (outside the Vita's sceCtrl set).
@@ -94,6 +95,9 @@ extern "C" void desktop_pump_events( void )
 					SDL_SetWindowFullscreen( w, fs ? 0 : desktop_fullscreen_flag());
 					desktop_cadence_refresh();
 				}
+				break;
+			case SDL_MOUSEWHEEL:
+				life_mouse_wheel( e.wheel.y );
 				break;
 			case SDL_WINDOWEVENT:
 				// The display rate can change (mode switch, Alt+Tab, another monitor).
@@ -190,6 +194,8 @@ extern "C" int sceCtrlPeekBufferPositive( int, SceCtrlData *d, int )
 		if( k[SDL_SCANCODE_K] ) y += 127;
 		if( x || y ) { d->rx = (unsigned char)( 128 + x ); d->ry = (unsigned char)( 128 + y ); }
 	}
+	// Skater Life's Sims view reads the pad itself and hides it from the game.
+	life_pad_filter( &b, &d->lx, &d->ly, &d->rx, &d->ry, SCE_CTRL_START );
 	d->buttons = b;
 	return 1;
 }

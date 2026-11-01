@@ -39,6 +39,22 @@ const char *life_station_name( void );
 int  life_radio_active( void );		/* a Sims station replaces the soundtrack */
 int  life_radio_open( void );		/* opens a song of it in the music decoder */
 
+/* Sims view: a social interaction with a ped (talk, joke, compliment, brag,
+   insult, flirt, beg, slap). Returns 1 when it went well; 'voice' gets the
+   Sims voice folder to pick the skater's line from. */
+int  life_social( const char *kind, char *text, int n_text, char *voice, int n_voice );
+/* A random Sims voice line from a Voice folder, as a LoadSound name. */
+int  life_voice( const char *folder, char *name, int n );
+
+/* Sims view input: while captured, the game only sees Start; the glue reads
+   the real pad with life_pad_raw (sticks -1..1, dead zone removed). */
+void     life_input_capture( int on );
+void     life_pad_filter( unsigned *buttons, unsigned char *lx, unsigned char *ly,
+                          unsigned char *rx, unsigned char *ry, unsigned start_bit );
+unsigned life_pad_raw( float *lx, float *ly, float *rx, float *ry );
+void     life_mouse_wheel( int delta );
+int      life_mouse( float *x, float *y, int *wheel );	/* 640x480 space; 1 left, 2 right */
+
 #ifdef __cplusplus
 }
 #endif

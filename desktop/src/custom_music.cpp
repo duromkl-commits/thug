@@ -945,7 +945,7 @@ static void compile_q( Ecrit &w, const char *t )
 {
 	static const struct { const char *mot; unsigned char jeton; } mots[] = {
 		{ "script", T_SCRIPT }, { "endscript", T_ENDSCRIPT }, { "if", 37 }, { "else", 38 },
-		{ "endif", 40 }, { "return", 41 }, { "NOT", 57 } };
+		{ "endif", 40 }, { "return", 41 }, { "NOT", 57 }, { "begin", 0x20 }, { "repeat", 0x21 } };
 	while( *t )
 	{
 		const char c = *t;
@@ -987,6 +987,7 @@ static void compile_q( Ecrit &w, const char *t )
 		if( c == ']' ) { w.octet( T_FTAB ); ++t; continue; }
 		if( c == '=' ) { w.octet( T_EGAL ); ++t; continue; }
 		if( c == ',' ) { w.octet( 9 ); ++t; continue; }
+		if( c == ':' ) { w.octet( 0x42 ); ++t; continue; }
 		if( c == '<' )
 		{
 			const char *f = strchr( t, '>' );
@@ -996,7 +997,7 @@ static void compile_q( Ecrit &w, const char *t )
 			continue;
 		}
 		const char *d = t;
-		while( *t && !strchr( " \t\r\n\"(){}[]=<,", *t )) ++t;
+		while( *t && !strchr( " \t\r\n\"(){}[]=<,:", *t )) ++t;
 		const std::string m( d, t );
 		if( m[0] == '#' )	// a checksum given as #hex (names with spaces)
 		{
@@ -1189,7 +1190,7 @@ static const char *s_vie_sons[] = {
 	"Sfx\\Food_Snack_Eat1", "Sfx\\Meal_Sloppy_Eater1", "Sfx\\COFFEE_SLURP1", "Sfx\\SHOWER1_SWATERON",
 	"Sfx\\Toilet_Flush_Cheap", "Sfx\\Get_Bills", "Sfx\\stereo_stations_switch1", "Stings\\sting_sleep1",
 	"Stings\\sting_socfail1", "Stings\\sting_danger1", "Stings\\sting_econsuc1", "UI\\Ui_Help", "UI\\UI_ERROR",
-	"UI\\UI_CLICK" };
+	"UI\\UI_CLICK", "UI\\UI_PIEMENU_APPEAR", "UI\\UI_PIEMENU_HIGHLIGHT", "UI\\UI_PIEMENU_SELECT", "UI\\UI_QUEUED", "UI\\UI_QUEUE_DELETE", "UI\\UI_WHOOSH" };
 
 static std::string scripts_vie( void )
 {
@@ -1197,12 +1198,12 @@ static std::string scripts_vie( void )
 		"script desktop_life_hud_create\n"
 		"SetScreenElementLock id = root_window off\n"
 		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_life_hud pos = (0,0) just = [ left top ] }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_life_hud texture = white2 pos = (630,14) just = [ right top ] scale = (21,13.25) rgba = [ 0 0 0 80 ] z_priority = -12 }\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_life_hud texture = white2 pos = (630,14) just = [ right top ] scale = (21,15) rgba = [ 0 0 0 80 ] z_priority = -12 }\n"
 		"CreateScreenElement { type = TextElement parent = desktop_life_hud id = desktop_life_clock font = small text = \" \" pos = (624,19) just = [ right top ] scale = 0.75 rgba = [ 128 128 128 128 ] z_priority = -10 }\n"
 		"CreateScreenElement { type = TextElement parent = desktop_life_hud id = desktop_life_cash font = small text = \" \" pos = (467,19) just = [ left top ] scale = 0.75 rgba = [ 70 128 70 128 ] z_priority = -10 }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_life_hud id = desktop_life_gain font = small text = \" \" pos = (467,122) just = [ left top ] scale = 0.75 rgba = [ 70 128 70 128 ] alpha = 0 z_priority = -10 }\n";
-	static const char *noms[] = { "Hunger", "Energy", "Hygiene", "Bladder", "Fun" };
-	for( int i = 0; i < 5; ++i )
+		"CreateScreenElement { type = TextElement parent = desktop_life_hud id = desktop_life_gain font = small text = \" \" pos = (467,136) just = [ left top ] scale = 0.75 rgba = [ 70 128 70 128 ] alpha = 0 z_priority = -10 }\n";
+	static const char *noms[] = { "Hunger", "Energy", "Hygiene", "Bladder", "Fun", "Social" };
+	for( int i = 0; i < 6; ++i )
 	{
 		char l[600];
 		const int y = 48 + 14 * i;
@@ -1273,6 +1274,85 @@ static std::string scripts_vie( void )
 		"fadetoblack off time = 0.4 id = desktop_life_fade\n"
 		"UnPauseSkaters\n"
 		"DesktopLifeHold\n"
+		"endscript\n"
+
+		// --- Sims view (live mode) ---
+		// Cursor, plumbob, destination marker and an 8-slot pie menu; the
+		// glue moves, fills and shows them.
+		"script desktop_life_live_create\n"
+		"SetScreenElementLock id = root_window off\n"
+		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_life_live pos = (0,0) just = [ left top ] }\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_plumbob texture = white2 pos = (320,200) just = [ center center ] scale = (1.6,1.6) rot_angle = 45 rgba = [ 30 128 30 110 ] z_priority = -8 }\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_marker texture = white2 pos = (320,240) just = [ center center ] scale = (1.1,1.1) rot_angle = 45 rgba = [ 30 128 30 100 ] alpha = 0 z_priority = -8 }\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_cursor_bg texture = white2 pos = (320,240) just = [ center center ] scale = (1.5,1.5) rot_angle = 45 rgba = [ 0 0 0 110 ] z_priority = 20 }\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_cursor texture = white2 pos = (320,240) just = [ center center ] scale = (1,1) rot_angle = 45 rgba = [ 128 128 128 128 ] z_priority = 21 }\n"
+		"CreateScreenElement { type = TextElement parent = desktop_life_live id = desktop_life_pie_title font = small text = \" \" pos = (320,240) just = [ center center ] scale = 0.75 rgba = [ 128 128 70 128 ] alpha = 0 z_priority = 31 }\n"
+		"CreateScreenElement { type = TextElement parent = desktop_life_live id = desktop_life_hint font = small text = \"X: select   O: cancel   Square: centre   R stick: camera   SELECT: skate\" pos = (320,462) just = [ center center ] scale = 0.55 rgba = [ 110 110 110 100 ] z_priority = -8 }\n"
+		"desktop_life_pie_slot i = 0\ndesktop_life_pie_slot i = 1\ndesktop_life_pie_slot i = 2\ndesktop_life_pie_slot i = 3\n"
+		"desktop_life_pie_slot i = 4\ndesktop_life_pie_slot i = 5\ndesktop_life_pie_slot i = 6\ndesktop_life_pie_slot i = 7\n"
+		"endscript\n"
+		"script desktop_life_pie_slot\n"
+		"FormatText ChecksumName = bg \"desktop_life_pie_bg%i\" i = <i>\n"
+		"FormatText ChecksumName = tx \"desktop_life_pie%i\" i = <i>\n"
+		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = <bg> texture = white2 pos = (320,240) just = [ center center ] scale = (13,2.4) rgba = [ 10 30 60 100 ] alpha = 0 z_priority = 30 }\n"
+		"CreateScreenElement { type = TextElement parent = desktop_life_live id = <tx> font = small text = \" \" pos = (320,240) just = [ center center ] scale = 0.7 rgba = [ 128 128 128 128 ] alpha = 0 z_priority = 31 }\n"
+		"endscript\n"
+		"script desktop_life_live_off\n"
+		"if ScreenElementExists id = desktop_life_live\n"
+		"DestroyScreenElement id = desktop_life_live\n"
+		"endif\n"
+		"endscript\n"
+		// Off the board (live mode walks only).
+		"script desktop_life_to_walk\n"
+		"MakeSkaterGoto desktop_life_walk_state\n"
+		"endscript\n"
+		"script desktop_life_walk_state\n"
+		"SwitchToWalkingPhysics\n"
+		"Goto JustStoppedSkatingState\n"
+		"endscript\n"
+
+		// An action animation on foot, n times, then back to walking.
+		"script desktop_life_anim_state n = 1\n"
+		"ClearExceptionGroup WalkingStateExceptions\n"
+		"SetWalkingTrickState NewWalkingTrickState = GROUND\n"
+		"Walk_ScaleAnimSpeed Off\n"
+		"begin\n"
+		"PlayWalkAnim Anim = <anim> BlendPeriod = 0.2\n"
+		"WaitAnimWalking\n"
+		"repeat <n>\n"
+		"Goto GroundOrAirWaitState\n"
+		"endscript\n"
+		// A social interaction: the skater's anim and Sims line, the ped's
+		// answer, then the result.
+		"script desktop_life_social\n"
+		"MakeSkaterGoto desktop_life_anim_state params = { anim = <anim> n = 2 }\n"
+		"if GotParam voice\n"
+		"LoadSound <voice>\n"
+		"PlaySound <voice_sound>\n"
+		"endif\n"
+		"wait 1.2 seconds\n"
+		"if GotParam ped\n"
+		"if ObjectExists id = <ped>\n"
+		"<ped> : Obj_PlayAnim Anim = <ped_anim> BlendPeriod = 0.2\n"
+		"endif\n"
+		"endif\n"
+		"wait 1 seconds\n"
+		"create_panel_message id = desktop_life_msg text = <text> pos = (320,150) rgba = [ 128 128 90 128 ] time = 3000\n"
+		"endscript\n"
+		// A self action from the pie: anim (if any), then the usual fade.
+		"script desktop_life_self\n"
+		"if GotParam anim\n"
+		"MakeSkaterGoto desktop_life_anim_state params = { anim = <anim> n = 1 }\n"
+		"wait 1.5 seconds\n"
+		"endif\n"
+		"desktop_life_act a = <a>\n"
+		"endscript\n"
+		"script desktop_life_snd\n"
+		"PlaySound <s>\n"
+		"endscript\n"
+		"script desktop_life_route_fail\n"
+		"PlaySound UI_ERROR\n"
+		"create_panel_message id = desktop_life_msg text = \"Can't get there\" pos = (320,150) rgba = [ 128 90 90 128 ] time = 2000\n"
 		"endscript\n"
 
 		"script desktop_life_radio_text\n"

@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <ctype.h>
 #include <string>
 #include <vector>
 #include <deque>
@@ -41,12 +42,12 @@ extern "C" void desktop_host_path( const char *vita_path, char *out, size_t out_
 namespace
 {
 
-enum { FAIM, ENERGIE, HYGIENE, VESSIE, FUN, NB_BESOINS };
+enum { FAIM, ENERGIE, HYGIENE, VESSIE, FUN, SOCIAL, NB_BESOINS };
 
-static const char *s_noms[NB_BESOINS] = { "Hunger", "Energy", "Hygiene", "Bladder", "Fun" };
+static const char *s_noms[NB_BESOINS] = { "Hunger", "Energy", "Hygiene", "Bladder", "Fun", "Social" };
 
 // Loss per game hour while awake.
-static const float s_perte[NB_BESOINS] = { 5.0f, 4.0f, 3.0f, 8.0f, 6.0f };
+static const float s_perte[NB_BESOINS] = { 5.0f, 4.0f, 3.0f, 8.0f, 6.0f, 4.0f };
 
 static const int   CASH_DEPART	= 100;
 static const int   LOYER		= 40;		// bills, every morning at 9
@@ -215,7 +216,8 @@ static void controle( void )
 		"You're getting tired. Find somewhere to crash",
 		"You smell. Hit the shower",
 		"You need to pee. Bad",
-		"You're bored. Go land something big" };
+		"You're bored. Go land something big",
+		"You're lonely. Go talk to somebody" };
 	for( int i = 0; i < NB_BESOINS; ++i )
 	{
 		if( !s_alerte[i] && s_e.besoin[i] < 30.0f )
@@ -605,4 +607,129 @@ extern "C" int life_radio_open( void )
 #endif
 	VLOG( "LIFE", "Sims radio %s: %s %s", nom_station( s_stations[st] ).c_str(), f[k].c_str(), ok ? "" : "(could not open)" );
 	return ok;
+}
+
+// --- social (Sims-view interactions with peds) ------------------------------------
+
+// kind: talk, joke, compliment, brag, insult, flirt, beg, slap. Returns 1 when
+// the ped takes it well. 'voix' gets a Sims voice folder for the skater's line.
+extern "C" int life_social( const char *kind, char *texte, int n_texte, char *voix, int n_voix )
+{
+	texte[0] = 0;
+	if( voix && n_voix ) voix[0] = 0;
+	if( !s_actif || !kind ) return 0;
+	// Odds of a good reaction: better in a good mood, worse when you stink.
+	float chance = 0.45f + humeur() / 200.0f;
+	if( s_e.besoin[HYGIENE] < 20.0f ) chance -= 0.3f;
+	const bool ok = ( rand() % 1000 ) < (int)( chance * 1000.0f );
+	const char *v = "converse";
+	float soc = 0.0f, fun = 0.0f;
+	int cash = 0;
+	const char *bien = "", *mal = "";
+	if( !strcmp( kind, "talk" ))		{ v = "converse";   soc = ok ? 15 : 3;  bien = "Good chat";              mal = "That went nowhere"; }
+	else if( !strcmp( kind, "joke" ))	{ v = "interactions"; soc = ok ? 18 : 2; fun = ok ? 8 : -3; bien = "They laughed!";  mal = "Tough crowd"; }
+	else if( !strcmp( kind, "compliment" )) { v = "compliment"; soc = ok ? 20 : 4; bien = "They loved that"; mal = "They looked at you funny"; }
+	else if( !strcmp( kind, "brag" ))	{ v = "brag";       soc = ok ? 12 : -5; fun = ok ? 5 : 0; bien = "They're impressed"; mal = "Nobody cares, man"; }
+	else if( !strcmp( kind, "insult" ))	{ v = "insult";     soc = ok ? -5 : -10; fun = ok ? 10 : -5; bien = "Burn!"; mal = "They insulted you right back"; }
+	else if( !strcmp( kind, "flirt" ))	{ v = "flirt";      soc = ok ? 25 : -8; fun = ok ? 6 : 0; bien = "Smooth"; mal = "Shot down"; }
+	else if( !strcmp( kind, "beg" ))	{ v = "interactions"; soc = ok ? 2 : -6; cash = ok ? 2 + rand() % 9 : 0; bien = "They spared some change"; mal = "\"Get a job\""; }
+	else if( !strcmp( kind, "slap" ))	{ v = "interactions"; soc = -15; fun = 6; bien = "*SLAP*"; mal = "*SLAP*"; }
+	else return 0;
+	avance( 0.25f, false );
+	ajoute( SOCIAL, soc );
+	ajoute( FUN, fun );
+	s_e.cash += cash;
+	if( cash )
+		snprintf( texte, n_texte, "%s: +$%d", bien, cash );
+	else
+		snprintf( texte, n_texte, "%s", ok ? bien : mal );
+	if( voix && n_voix ) snprintf( voix, n_voix, "%s", v );
+	controle();
+	return ok ? 1 : 0;
+}
+
+// A random Sims voice line from Data\sims\Sound\Voice\<folder>, as a LoadSound
+// name ("sims\Sound\Voice\converse\VOX_..."), preferring the male (M) takes.
+extern "C" int life_voice( const char *dossier, char *nom, int n )
+{
+	nom[0] = 0;
+	std::string base = hote( "ux0:data/thug/Data/sims/Sound/Voice" ) + SEP + dossier;
+	std::vector<std::string> f = liste( base, false ), m;
+	for( size_t i = 0; i < f.size(); ++i )
+	{
+		std::string x = f[i];
+		const size_t pt = x.rfind( '.' );
+		if( pt == std::string::npos || pt < 2 ) continue;
+		// ...M1.wav, ...M12.wav: the letter before the take number.
+		size_t k = pt;
+		while( k > 0 && isdigit((unsigned char)x[k - 1] )) --k;
+		if( k > 0 && k < pt && ( x[k - 1] == 'M' || x[k - 1] == 'm' )) m.push_back( x );
+	}
+	std::vector<std::string> &c = m.empty() ? f : m;
+	if( c.empty()) return 0;
+	std::string x = c[rand() % (int)c.size()];
+	x = x.substr( 0, x.rfind( '.' ));
+	snprintf( nom, n, "sims\\Sound\\Voice\\%s\\%s", dossier, x.c_str());
+	return 1;
+}
+
+// --- live mode input -----------------------------------------------------------
+
+namespace
+{
+static int  s_live_entree = 0;		// the game sees only Start while set
+static unsigned s_brut_b = 0;
+static unsigned char s_brut[4] = { 128, 128, 128, 128 };
+static int  s_molette = 0;
+}
+
+extern "C" void life_input_capture( int on ) { s_live_entree = on; }
+
+extern "C" void life_pad_filter( unsigned *buttons, unsigned char *lx, unsigned char *ly, unsigned char *rx, unsigned char *ry, unsigned start_bit )
+{
+	s_brut_b = *buttons;
+	s_brut[0] = *lx; s_brut[1] = *ly; s_brut[2] = *rx; s_brut[3] = *ry;
+	if( !s_live_entree ) return;
+	*buttons &= start_bit;
+	*lx = *ly = *rx = *ry = 128;
+}
+
+extern "C" unsigned life_pad_raw( float *lx, float *ly, float *rx, float *ry )
+{
+	float *o[4] = { lx, ly, rx, ry };
+	for( int i = 0; i < 4; ++i )
+	{
+		float v = ( s_brut[i] - 128.0f ) / 127.0f;
+		if( v > 1.0f ) v = 1.0f;
+		if( v < -1.0f ) v = -1.0f;
+		const float zm = 0.18f;
+		if( v > -zm && v < zm ) v = 0.0f;
+		else v = ( v > 0 ? v - zm : v + zm ) / ( 1.0f - zm );
+		if( o[i] ) *o[i] = v;
+	}
+	return s_brut_b;
+}
+
+extern "C" void life_mouse_wheel( int d ) { s_molette += d; }
+
+// Mouse in the game's 640x480 screen space (the 4:3 or Vita-shaped picture
+// centred in the window). Returns the buttons (1 left, 2 right).
+extern "C" int desktop_ecran_43( void );
+extern "C" SDL_Window *desktop_sdl_window( void );
+extern "C" int life_mouse( float *x, float *y, int *molette )
+{
+	int mx = 0, my = 0;
+	const Uint32 b = SDL_GetMouseState( &mx, &my );
+	int ww = 0, wh = 0;
+	SDL_Window *w = desktop_sdl_window();
+	if( w ) SDL_GetWindowSize( w, &ww, &wh );
+	if( ww <= 0 || wh <= 0 ) { ww = 640; wh = 480; }
+	const float aw = desktop_ecran_43() ? 4.0f : 960.0f, ah = desktop_ecran_43() ? 3.0f : 544.0f;
+	float pw = (float)ww, ph = pw * ah / aw;
+	if( ph > wh ) { ph = (float)wh; pw = ph * aw / ah; }
+	const float ox = ( ww - pw ) * 0.5f, oy = ( wh - ph ) * 0.5f;
+	*x = ( mx - ox ) / pw * 640.0f;
+	*y = ( my - oy ) / ph * 480.0f;
+	if( molette ) { *molette = s_molette; s_molette = 0; }
+	return (( b & SDL_BUTTON( SDL_BUTTON_LEFT )) ? 1 : 0 ) | (( b & SDL_BUTTON( SDL_BUTTON_RIGHT )) ? 2 : 0 );
 }
