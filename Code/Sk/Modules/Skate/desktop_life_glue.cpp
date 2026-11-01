@@ -35,6 +35,11 @@
 #include <gfx/camera.h>
 #include <gfx/nxviewman.h>
 #include <gfx/nxviewport.h>
+#include <gfx/nxmodel.h>
+#include <gfx/2D/Element3d.h>
+#include <gel/components/modelcomponent.h>
+#include <gel/scripting/array.h>
+#include <gel/scripting/symboltype.h>
 
 #include "skater_life.h"
 
@@ -294,6 +299,64 @@ static Obj::CCompositeObject *ped_par_id( uint32 id )
 static int nb_pie( void ) { return 8; }
 static const PieItem &item_pie( int i ) { return s_l.pie_genre == CIBLE_MOI ? s_pie_moi[i] : s_pie_ped[i]; }
 
+// The Sims pie menu shows your Sim's head in the middle, looking at the
+// option under the cursor. Here it is your skater's own head: the head,
+// hair, hat and glasses geoms cloned off the skater's model.
+static const char *s_geoms_tete[] = {
+	"skater_m_head", "skater_f_head", "ped_m_head", "ped_f_head", "skater_m_jaw",
+	"skater_m_hair", "skater_f_hair", "hat", "helmet", "glasses" };
+
+static bool s_tete = false;
+static float s_tete_ax = 0.0f, s_tete_ay = 0.0f;
+
+static void cree_tete( Obj::CCompositeObject *sk, float x, float y )
+{
+	s_tete = false;
+	s_tete_ax = s_tete_ay = 0.0f;
+	Obj::CModelComponent *mc = GetModelComponentFromObject( sk );
+	if( !mc || !mc->GetModel()) return;
+	Nx::CModel *m = mc->GetModel();
+	uint32 trouve[16];
+	int n = 0;
+	for( unsigned k = 0; k < sizeof( s_geoms_tete ) / sizeof( s_geoms_tete[0] ); ++k )
+	{
+		const uint32 g = crc( s_geoms_tete[k] );
+		for( int i = 0; i < m->GetNumGeoms() && n < 16; ++i )
+			if( m->GetGeomNameByIndex( i ) == g && m->GetGeom( g )) { trouve[n++] = g; break; }
+	}
+	// No head part (a single-mesh skater): no head, just the name.
+	if( !n || ( trouve[0] != crc( "skater_m_head" ) && trouve[0] != crc( "skater_f_head" ) &&
+				trouve[0] != crc( "ped_m_head" ) && trouve[0] != crc( "ped_f_head" )))
+		return;
+	Script::CArray *a = new Script::CArray;
+	a->SetSizeAndType( n, ESYMBOLTYPE_NAME );
+	for( int i = 0; i < n; ++i ) a->SetChecksum( i, trouve[i] );
+	Script::CStruct p;
+	p.AddChecksum( "obj", sk->GetID());
+	p.AddArrayPointer( "geoms", a );	// the struct owns it now
+	p.AddPair( "pos", x, y );
+	Script::RunScript( "desktop_life_head_create", &p );
+	s_tete = element( crc( "desktop_life_head" )) != NULL;
+}
+
+static void detruit_tete( void )
+{
+	if( element( crc( "desktop_life_head" ))) Script::RunScript( "desktop_life_head_off" );
+	s_tete = false;
+}
+
+// Turns the head toward (dx, dy), -1..1 from the pie's centre, eased.
+static void tourne_tete( float dx, float dy, float dt )
+{
+	Front::CScreenElement *e = element( crc( "desktop_life_head" ));
+	if( !e ) return;
+	const float vy = dx * 0.7f, vx = dy * 0.45f;
+	const float k = dt * 8.0f > 1.0f ? 1.0f : dt * 8.0f;
+	s_tete_ay += ( vy - s_tete_ay ) * k;
+	s_tete_ax += ( vx - s_tete_ax ) * k;
+	((Front::CElement3d *)e )->DesktopSetAngles( s_tete_ax, s_tete_ay, 0.0f );
+}
+
 static void ferme_pie( void )
 {
 	s_l.pie = false;
@@ -305,9 +368,10 @@ static void ferme_pie( void )
 		snprintf( t, sizeof( t ), "desktop_life_pie_bg%d", i ); montre( crc( t ), 0.0f );
 	}
 	montre( crc( "desktop_life_pie_title" ), 0.0f );
+	detruit_tete();
 }
 
-static void ouvre_pie( int genre, uint32 ped )
+static void ouvre_pie( int genre, uint32 ped, Obj::CCompositeObject *sk )
 {
 	s_l.pie = true;
 	s_l.pie_genre = genre;
@@ -327,8 +391,10 @@ static void ouvre_pie( int genre, uint32 ped )
 		place( crc( t ), x, y );
 		montre( crc( t ), 0.8f );
 	}
+	cree_tete( sk, s_l.px, s_l.py );
+	// With the head in the middle, the name goes under it.
 	Front::CTextElement *ti = (Front::CTextElement *)element( crc( "desktop_life_pie_title" ));
-	if( ti ) { ti->SetText( genre == CIBLE_MOI ? "You" : "Local" ); ti->SetPos( s_l.px, s_l.py, Front::CScreenElement::FORCE_INSTANT ); ti->SetAlpha( 1.0f, Front::CScreenElement::FORCE_INSTANT ); }
+	if( ti ) { ti->SetText( genre == CIBLE_MOI ? "You" : "Local" ); ti->SetPos( s_l.px, s_l.py + ( s_tete ? 34.0f : 0.0f ), Front::CScreenElement::FORCE_INSTANT ); ti->SetAlpha( 1.0f, Front::CScreenElement::FORCE_INSTANT ); }
 	son( "UI_PIEMENU_APPEAR" );
 }
 
@@ -558,6 +624,12 @@ static void live_update( Obj::CCompositeObject *sk, bool pause )
 	if( s_l.pie )
 	{
 		sel_pie();
+		{
+			float hx = ( s_l.cx - s_l.px ) / PIE_RAYON_X, hy = ( s_l.cy - s_l.py ) / PIE_RAYON_Y;
+			if( hx > 1.0f ) hx = 1.0f; if( hx < -1.0f ) hx = -1.0f;
+			if( hy > 1.0f ) hy = 1.0f; if( hy < -1.0f ) hy = -1.0f;
+			tourne_tete( hx, hy, dt );
+		}
 		if( annule || ( ok && s_l.sel < 0 ))
 		{
 			ferme_pie();
@@ -584,7 +656,7 @@ static void live_update( Obj::CCompositeObject *sk, bool pause )
 	}
 	else if( ok )
 	{
-		if( sous != CIBLE_RIEN ) ouvre_pie( sous, ped );
+		if( sous != CIBLE_RIEN ) ouvre_pie( sous, ped, sk );
 		else
 		{
 			Mth::Vector p;
