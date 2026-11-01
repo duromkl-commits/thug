@@ -767,12 +767,14 @@ namespace Mdl
 
 void DesktopTriggersUpdate( Skate &mdl );
 void DesktopExtrasUpdate( Skate &mdl );
+void DesktopModesUpdate( Skate &mdl );
 
 // Each frame, from Skate::s_logic_code.
 void DesktopLifeUpdate( Skate &mdl )
 {
 	DesktopTriggersUpdate( mdl );
 	DesktopExtrasUpdate( mdl );
+	DesktopModesUpdate( mdl );
 	if( !life_on())
 	{
 		detruit_hud();
@@ -1079,8 +1081,10 @@ static void fp_modele( Obj::CCompositeObject *sk, bool cache )
 } // namespace
 
 // CSkaterCareer::GetCheat: true while chaos mode fakes that cheat.
+bool desktop_practice_cheat( uint32 cheat );	// desktop_modes_glue.cpp
 bool desktop_chaos_cheat( uint32 cheat )
 {
+	if( desktop_practice_cheat( cheat )) return true;
 	return s_ch_actif >= 0 && s_chaos[s_ch_actif].cheat && crc( s_chaos[s_ch_actif].cheat ) == cheat;
 }
 

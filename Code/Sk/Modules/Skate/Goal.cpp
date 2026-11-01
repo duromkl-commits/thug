@@ -42,6 +42,7 @@
 #include <ctype.h>
 extern "C" float desktop_goal_score_scale( void );
 extern "C" float desktop_goal_time_scale( void );
+void desktop_goal_won( uint32 goal, const char *nom );	// desktop_modes_glue.cpp: goal attack splits
 
 // Goals built around stops or a route (tours, H.O.R.S.E., per-spot score
 // clusters such as Muska's moving SUV) keep their figures: their limits and
@@ -859,7 +860,14 @@ bool CGoal::Win( void )
 	// see if it's a leaf node
 	if ( mp_children->m_relative == 0 )
 	{
-		mp_params->AddChecksum( NONAME, CRCD( 0xc309cad1, "just_won_goal" ) );			
+		mp_params->AddChecksum( NONAME, CRCD( 0xc309cad1, "just_won_goal" ) );
+#ifdef THUG_DESKTOP
+		{
+			const char *p_nom = NULL;
+			GetViewGoalsText( &p_nom );
+			desktop_goal_won( GetGoalId(), p_nom );
+		}
+#endif			
 
 		GameNet::Manager * gamenet_man = GameNet::Manager::Instance();
 		

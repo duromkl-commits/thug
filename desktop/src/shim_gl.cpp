@@ -25,6 +25,11 @@
 #include <map>
 
 #include "desktop_config.h"
+#include <time.h>
+#include <sys/stat.h>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STBIW_WINDOWS_UTF8
+#include "../third_party/stb_image_write.h"
 
 extern "C" void vita_log_printf( const char *sys, const char *fmt, ... );
 #define DLOG( ... ) vita_log_printf( "DSK", __VA_ARGS__ )
@@ -547,6 +552,52 @@ static void gamma_draw( int x, int y, int w, int h, GLuint img )
 	glViewport( vp[0], vp[1], vp[2], vp[3] );
 }
 
+// Photo mode (desktop_photo_glue.cpp): the next presented frame, as shown
+// (after the PS2-look pass), saved to photos\thug_<date>_<time>.png next to
+// the exe; then two white frames as a flash.
+static bool s_photo = false;
+static int  s_photo_flash = 0;
+static char s_photo_nom[64] = "";
+
+extern "C" void desktop_photo_shot( void ) { s_photo = true; }
+extern "C" const char *desktop_photo_last( void ) { return s_photo_nom; }
+
+static void photo_ecrit( int x, int y, int w, int h )
+{
+	if( w <= 0 || h <= 0 ) return;
+	std::vector<unsigned char> px( (size_t)w * h * 3 );
+	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+	glReadBuffer( GL_BACK );
+	glReadPixels( x, y, w, h, GL_RGB, GL_UNSIGNED_BYTE, &px[0] );
+	glPixelStorei( GL_PACK_ALIGNMENT, 4 );
+	char *base = SDL_GetBasePath();
+	std::string dossier = std::string( base ? base : "" ) + "photos";
+	SDL_free( base );
+#ifdef _WIN32
+	CreateDirectoryA( dossier.c_str(), NULL );
+#else
+	mkdir( dossier.c_str(), 0755 );
+#endif
+	time_t t = time( NULL );
+	struct tm *lt = localtime( &t );
+	char nom[64];
+	strftime( nom, sizeof( nom ), "thug_%Y%m%d_%H%M%S", lt );
+	std::string f = dossier + "/" + nom + ".png";
+	for( int k = 2; k < 100; ++k )
+	{
+		FILE *e = fopen( f.c_str(), "rb" );
+		if( !e ) break;
+		fclose( e );
+		char suffixe[16];
+		snprintf( suffixe, sizeof( suffixe ), "_%d", k );
+		f = dossier + "/" + nom + suffixe + ".png";
+	}
+	stbi_flip_vertically_on_write( 1 );
+	const int ok = stbi_write_png( f.c_str(), w, h, 3, &px[0], w * 3 );
+	snprintf( s_photo_nom, sizeof( s_photo_nom ), "%s", ok ? f.substr( dossier.size() + 1 ).c_str() : "" );
+	fprintf( stderr, "photo: %s %s\n", f.c_str(), ok ? "saved" : "FAILED" );
+}
+
 extern "C" void vglSwapBuffers( GLboolean )
 {
 	if( !s_window )
@@ -598,6 +649,21 @@ extern "C" void vglSwapBuffers( GLboolean )
 	}
 	else
 		dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, x, y, x + w, y + h, GL_COLOR_BUFFER_BIT, GL_NEAREST );
+
+	if( s_photo )
+	{
+		s_photo = false;
+		dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, 0 );
+		photo_ecrit( x, y, w, h );
+		s_photo_flash = 2;
+	}
+	else if( s_photo_flash > 0 )
+	{
+		--s_photo_flash;
+		dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, 0 );
+		glClearColor( 1, 1, 1, 1 );
+		glClear( GL_COLOR_BUFFER_BIT );
+	}
 
 	cadence_attendre();
 	SDL_GL_SwapWindow( s_window );
