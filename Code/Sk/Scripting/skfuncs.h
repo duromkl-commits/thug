@@ -157,6 +157,8 @@ bool ScriptDesktopLifeOn(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopLifeAction(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopLifeHold(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopLifeRadioName(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopZeroArm(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopZeroArmed(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScript);
 #endif
 bool ScriptCareerStartLevel(Script::CStruct *pParams, Script::CScript *pScript);

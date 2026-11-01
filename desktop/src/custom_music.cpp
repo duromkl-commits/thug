@@ -1524,6 +1524,34 @@ static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j
 			"make_main_menu_item { text = \"- UNDERGROUND -\" pad_choose_script = null_script not_focusable = not_focusable }\n" );
 		m.push_back( Modif{ j[b].pos, 0, w.o } );
 		VLOG( "MUS", "story menu: Pro Skater 1-4 added" );
+
+		// THUG Zero (desktop): a new story with every stat at 0 and Sick
+		// goals, under Start New Story / Load Story (before the 'if cd' that
+		// places the menu).
+		{
+			Ecrit wz;
+			compile_q( wz,
+				"script desktop_zero_pick\n"
+				"DesktopZeroArm on\n"
+				"if GetGlobalFlag flag = CAREER_STARTED\n"
+				"career_overwrite_warning title = \"THUG Zero\"\n"
+				"else\n"
+				"career_options_menu_exit new_menu_script = create_career_difficulty_menu level = load_cas kill_all\n"
+				"endif\n"
+				"endscript\n" );
+			m.push_back( Modif{ j[k].pos, 0, wz.o } );
+			const uint32_t cd = crc( "cd" );
+			size_t c = b + 1;
+			for( ; c + 1 < j.size() && qb[j[c].pos] != T_ENDSCRIPT; ++c )
+				if( qb[j[c].pos] == 37 && est_nom( qb, j[c + 1], cd )) break;
+			if( c + 1 < j.size() && qb[j[c].pos] == 37 )
+			{
+				Ecrit wi;
+				compile_q( wi, "make_main_menu_item { text = \"THUG Zero\" pad_choose_script = desktop_zero_pick }\n" );
+				m.push_back( Modif{ j[c].pos, 0, wi.o } );
+				VLOG( "MUS", "story menu: THUG Zero added" );
+			}
+		}
 		return;
 	}
 }
@@ -1956,6 +1984,24 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_vie_pause( qb, j, m );
 	patch_debut( qb, j, m, "create_main_menu", "DesktopLifeStop\n" );
 	patch_histoire( qb, j, m );
+	// THUG Zero: armed by its story menu item, disarmed by any other way out.
+	patch_debut( qb, j, m, "create_career_options_menu", "DesktopZeroArm off\n" );
+	patch_debut( qb, j, m, "cancel_new_career", "DesktopZeroArm off\n" );
+	patch_debut( qb, j, m, "create_career_difficulty_menu",
+		"if DesktopZeroArmed\n"
+		"set_career_difficulty dif = 2\n"
+		"return\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "set_career_difficulty",
+		"if NOT GotParam from_ss_menu\n"
+		"if DesktopZeroArmed\n"
+		"<dif> = 2\n"
+		"SetGlobalFlag flag = 511\n"
+		"else\n"
+		"UnSetGlobalFlag flag = 511\n"
+		"endif\n"
+		"DesktopZeroArm off\n"
+		"endif\n" );
 	patch_pietons( qb, j, m );
 	patch_xbox( qb, j, m );
 	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );

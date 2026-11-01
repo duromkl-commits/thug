@@ -65,6 +65,9 @@
 
 #include <sk/scripting/cfuncs.h>
 #include <sk/scripting/skfuncs.h>
+#ifdef THUG_DESKTOP
+bool DesktopThugZero( void );	// desktop_life_glue.cpp: a THUG Zero story is running
+#endif
 
 namespace Game
 {
@@ -3496,6 +3499,11 @@ GOAL_MANAGER_DIFFICULTY_LEVEL CGoalManager::GetDifficultyLevel( bool career )
 			break;
 	}
 
+#ifdef THUG_DESKTOP
+	// THUG Zero: always Sick.
+	if( DesktopThugZero())
+		diff_level = GOAL_MANAGER_DIFFICULTY_HIGH;
+#endif
 	return diff_level;
 }
 

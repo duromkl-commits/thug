@@ -25,6 +25,7 @@
 #include <sk/modules/skate/gamemode.h>
 #include <sk/modules/frontend/frontend.h>
 #include <sk/objects/skater.h>
+#include <sk/objects/skatercareer.h>
 #include <sys/timer.h>
 #include <math.h>
 #include <gel/object/compositeobject.h>
@@ -882,6 +883,37 @@ bool ScriptDesktopLifeRadioName( Script::CStruct *pParams, Script::CScript *pScr
 	return true;
 }
 
+// --- THUG Zero ----------------------------------------------------------------
+//
+// A story with every stat at 0 and Sick goals. The story menu's "THUG Zero"
+// arms it, the new story's set_career_difficulty sets global flag 511 (saved
+// with the story; THUG's own flags stop at 461 and reset_career leaves it).
+
+static bool s_zero_arme = false;
+
+// @script | DesktopZeroArm | desktop: on arms THUG Zero for the next new story, off disarms
+bool ScriptDesktopZeroArm( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	s_zero_arme = pParams->ContainsFlag( Script::GenerateCRC( "on" ));
+	return true;
+}
+
+// @script | DesktopZeroArmed | desktop: true while THUG Zero is armed
+bool ScriptDesktopZeroArmed( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	return s_zero_arme;
+}
+
 } // namespace CFuncs
+
+bool DesktopThugZero( void )
+{
+	Mdl::Skate *sk = Mdl::Skate::Instance();
+	if( !sk ) return false;
+	Game::CGameMode *m = sk->GetGameMode();
+	if( !m || !m->IsTrue( CRCD( 0x1ded1ea4, "is_career" ))) return false;
+	Obj::CSkaterCareer *c = sk->GetCareer();
+	return c && c->GetGlobalFlag( 511 );
+}
 
 #endif // THUG_DESKTOP

@@ -689,6 +689,8 @@ SCFunction CFunctionLookupTable[]=
 	{"DesktopLifeAction",		CFuncs::ScriptDesktopLifeAction},
 	{"DesktopLifeHold",			CFuncs::ScriptDesktopLifeHold},
 	{"DesktopLifeRadioName",	CFuncs::ScriptDesktopLifeRadioName},
+	{"DesktopZeroArm",			CFuncs::ScriptDesktopZeroArm},
+	{"DesktopZeroArmed",		CFuncs::ScriptDesktopZeroArmed},
 #endif
 	{"SetParticleSysVisibility",CFuncs::ScriptSetParticleSysVisibility},
 	{"TogglePlayerNames",		CFuncs::ScriptTogglePlayerNames},
