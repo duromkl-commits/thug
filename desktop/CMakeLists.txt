@@ -66,6 +66,7 @@ set(DESKTOP_SOURCES
   src/custom_music_decode.c
   src/skater_life.cpp
   src/desktop_extras.cpp
+  src/achievements.cpp
   src/movie_player.cpp
   "${THUG_SRC_ROOT}/vita/src/vita_log.c"
 )

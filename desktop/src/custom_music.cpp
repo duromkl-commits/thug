@@ -40,6 +40,7 @@
 #include <algorithm>
 
 #include "custom_music.h"
+#include "achievements.h"
 #include "vita_log.h"
 
 extern "C" void desktop_host_path( const char *vita_path, char *out, size_t out_size );
@@ -1420,6 +1421,18 @@ static const char *s_vie_item_pause =
 
 // Pause > Extras: the toggles (desktop_extras.cpp), and what they put on
 // screen (desktop_life_glue.cpp drives it).
+static std::string ach_items( void )
+{
+	std::string t;
+	for( int i = 0; i < ach_count(); ++i )
+	{
+		char l[200];
+		snprintf( l, sizeof( l ), "theme_menu_add_item text = <text%d> id = desktop_ach_item%d highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = nullscript\n", i, i );
+		t += l;
+	}
+	return t;
+}
+
 static std::string scripts_extras( void )
 {
 	std::string t =
@@ -1434,6 +1447,7 @@ static std::string scripts_extras( void )
 		"kill_start_key_binding\n"
 		"DesktopExtrasText\n"
 		"theme_menu_add_item text = \"Photo Mode\" id = desktop_extras_photo highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_photo_go\n"
+		"theme_menu_add_item text = \"Achievements\" id = desktop_extras_ach highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_ach_menu\n"
 		"if GameModeEquals is_singlesession\n"
 		"if NOT DesktopLifeOn\n"
 		"if DesktopClassicOn\n"
@@ -1451,6 +1465,24 @@ static std::string scripts_extras( void )
 		"theme_menu_add_item text = <text5> id = desktop_extras_item5 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 5 }\n"
 		"theme_menu_add_item text = <text6> id = desktop_extras_item6 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 6 }\n"
 		"theme_menu_add_item text = \"SELECT in game: first-person camera\" id = desktop_extras_note highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg not_focusable\n"
+		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
+		"endscript\n"
+		// Achievements: the list, and the unlock pop-up.
+		"script desktop_ach_toast\n"
+		"create_panel_message id = desktop_ach_toast text = <text> pos = (320,96) rgba = [ 128 108 40 128 ] time = 4000\n"
+		"PlaySound GotStat04 vol = 150\n"
+		"endscript\n"
+		"script desktop_ach_menu\n"
+		"if ObjectExists id = current_menu_anchor\n"
+		"DestroyScreenElement id = current_menu_anchor\n"
+		"endif\n"
+		"DesktopAchText\n"
+		"FormatText ChecksumName = title_icon \"%i_edit_skater\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
+		"make_new_themed_scrolling_menu title = <title> title_icon = <title_icon> dims = (600,237) pos = (229,80) right_bracket_z = 1\n"
+		"SetScreenElementProps { id = sub_menu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = desktop_extras_menu } } ] }\n"
+		"create_helper_text generic_helper_text\n"
+		"kill_start_key_binding\n"
+		+ ach_items() +
 		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
 		"endscript\n"
 		// Photo mode: the menu and HUD hidden, the game still paused.

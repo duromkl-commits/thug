@@ -48,6 +48,7 @@
 
 #include "skater_life.h"
 #include "desktop_extras.h"
+#include "achievements.h"
 #include <sk/modules/skate/score.h>
 #include <sk/objects/skatercareer.h>
 #include <stdlib.h>
@@ -824,11 +825,13 @@ void DesktopLifeUpdate( Skate &mdl )
 		Script::CStruct *p = new Script::CStruct;
 		p->AddString( "text", texte_ev );
 		if( son[0] ) p->AddChecksum( "sound", Script::GenerateCRC( son ));
+		if( genre == LIFE_EVENT_BLACKOUT ) ach_add( ACH_LIFE_BLACKOUT, 1 );
 		if( genre == LIFE_EVENT_BLACKOUT ) p->AddChecksum( NONAME, Script::GenerateCRC( "blackout" ));
 		Script::SpawnScript( "desktop_life_event", p );
 		delete p;
 	}
 
+	ach_max( ACH_LIFE_CASH, (float)life_cash());
 	met_a_jour_hud();
 	live_update( mdl.GetLocalSkater(), Mdl::FrontEnd::Instance()->GamePaused());
 }
@@ -1044,6 +1047,7 @@ static void chaos_fin( void )
 
 static void chaos_suivant( void )
 {
+	if( s_ch_actif >= 0 ) ach_add( ACH_CHAOS, 1 );	// a round skated through
 	const int n = (int)( sizeof( s_chaos ) / sizeof( s_chaos[0] ));
 	const int prec = s_ch_actif;
 	chaos_fin();
@@ -1092,6 +1096,18 @@ bool desktop_chaos_cheat( uint32 cheat )
 void desktop_combo_end( int score, bool bail )
 {
 	const float total = s_c_air + s_c_rail + s_c_lip + s_c_man + s_c_sol;
+	// Achievements: none for combos helped by practice or chaos.
+	if( bail ) ach_add( ACH_BAILS, 1 );
+	else if( score > 0 && !extras_get( EXTRA_SLOWMO ) && !extras_get( EXTRA_PERFECT ) && s_ch_actif < 0 )
+	{
+		ach_max( ACH_COMBO_BEST, (float)score );
+		ach_add( ACH_POINTS, (float)score );
+		ach_max( ACH_COMBO_TIME, total );
+		ach_max( ACH_AIR_TIME, s_c_air );
+		ach_max( ACH_GRIND_TIME, s_c_rail );
+		ach_max( ACH_MANUAL_TIME, s_c_man );
+		if( s_fp ) ach_max( ACH_FP_COMBO, (float)score );
+	}
 	if( !bail && extras_get( EXTRA_COMBO_STATS ) && total >= 1.0f )
 	{
 		const float trucs = total - s_c_sol;

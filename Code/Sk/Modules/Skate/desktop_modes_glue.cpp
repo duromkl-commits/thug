@@ -38,6 +38,9 @@
 
 #include "skater_life.h"
 #include "desktop_extras.h"
+#include "achievements.h"
+
+bool DesktopThugZero( void );	// desktop_life_glue.cpp
 
 extern "C" void desktop_photo_shot( void );
 extern "C" const char *desktop_photo_last( void );
@@ -219,7 +222,7 @@ static void photo_maj( Obj::CCompositeObject *sk )
 	}
 	if( appui & 0x10 ) s_ph.vitesse = s_ph.vitesse * 2.0f > 4.0f ? 4.0f : s_ph.vitesse * 2.0f;
 	if( appui & 0x40 ) s_ph.vitesse = s_ph.vitesse * 0.5f < 0.25f ? 0.25f : s_ph.vitesse * 0.5f;
-	if( appui & 0x4000 ) desktop_photo_shot();
+	if( appui & 0x4000 ) { desktop_photo_shot(); ach_add( ACH_PHOTOS, 1 ); }
 
 	// Look: right stick, slower when zoomed in.
 	const float k_vue = 1.8f * ( s_ph.fov / 72.0f );
@@ -493,6 +496,10 @@ static void cl_gagne( int g, const char *quoi )
 {
 	if( s_cl.fait[g] ) return;
 	s_cl.fait[g] = true;
+	if( g == CL_SKATE ) ach_add( ACH_CL_SKATE, 1 );
+	if( g == CL_COMBO ) ach_add( ACH_CL_COMBO, 1 );
+	if( g == CL_TAPE ) ach_add( ACH_CL_TAPE, 1 );
+	if( g == CL_SICK ) ach_add( ACH_CL_SICK, 1 );
 	son( "goaldone" );
 	char t[96];
 	snprintf( t, sizeof( t ), "%s!", quoi );
@@ -558,6 +565,8 @@ static void cl_fin( Obj::CSkater *sk )
 	for( int i = 0; i < NB_OBJ; ++i ) if( s_cl.place[i] ) { cl_obj_tue( i ); s_cl.place[i] = false; }
 	s_cl.actif = false;
 	s_cl.fin_t = 6.0f;
+	ach_add( ACH_CL_RUNS, 1 );
+	ach_max( ACH_CL_ALL, (float)n );
 }
 
 static void cl_maj( Obj::CSkater *sk, float dt )
@@ -679,6 +688,12 @@ bool desktop_practice_cheat( uint32 cheat )
 void desktop_combo_detail( int score, int base, int mult, int n, const char *tricks, bool bail )
 {
 	if( n <= 0 ) return;
+	if( !bail && !aide())
+	{
+		ach_max( ACH_COMBO_TRICKS, (float)n );
+		ach_max( ACH_COMBO_MULT, (float)mult );
+	}
+	if( !bail && extras_get( EXTRA_SLOWMO )) ach_add( ACH_SLOWMO_COMBOS, 1 );
 	char s[32], b[32];
 	nombre( s, sizeof( s ), score );
 	nombre( b, sizeof( b ), base );
@@ -692,7 +707,10 @@ void desktop_combo_detail( int score, int base, int mult, int n, const char *tri
 // CGoal::Win: a goal won (goal attack splits).
 void desktop_goal_won( uint32 goal, const char *nom )
 {
+	ach_add( ACH_GOALS, 1 );
+	if( DesktopThugZero()) ach_add( ACH_ZERO_GOALS, 1 );
 	if( !s_ga_actif ) return;
+	ach_add( ACH_GA_GOALS, 1 );
 	++s_ga_n;
 	char cle[48], t[200], c[32], d[48] = "";
 	snprintf( cle, sizeof( cle ), "ga_%08x", goal );
@@ -704,7 +722,10 @@ void desktop_goal_won( uint32 goal, const char *nom )
 		snprintf( d, sizeof( d ), "  %s%c%.1fs\\c0", e < 0 ? "\\c4" : "\\c2", e < 0 ? '-' : '+', fabsf( e ));
 	}
 	if( !s_ga_aide && ( best <= 0.0f || s_ga_split < best ))
+	{
+		if( best > 0.0f ) ach_add( ACH_GA_PB, 1 );
 		extras_record_set( "thug_records.txt", cle, s_ga_split );
+	}
 	snprintf( t, sizeof( t ), "%s\\n%s%s%s", nom && nom[0] ? nom : "Goal", c, d, best <= 0.0f ? "  (first)" : "" );
 	panneau( "desktop_ga_msg", t );
 	s_ga_split = 0.0f;
@@ -727,6 +748,22 @@ void DesktopModesUpdate( Skate &mdl )
 		return;
 	}
 	const float dt = Tmr::FrameLength();
+
+	// Achievements: play time, pop-ups, saved every few seconds.
+	static float s_ach_t = 0.0f;
+	if( !pause )
+	{
+		ach_add( ACH_PLAYTIME, dt );
+		char nom[64], desc[96];
+		if( ach_pop( nom, sizeof( nom ), desc, sizeof( desc )))
+		{
+			char t[200];
+			snprintf( t, sizeof( t ), "ACHIEVEMENT UNLOCKED\\n%s\\n\\c0%s", nom, desc );
+			panneau( "desktop_ach_toast", t );
+		}
+	}
+	s_ach_t += dt;
+	if( s_ach_t > 5.0f || pause ) { s_ach_t = 0.0f; ach_flush(); }
 
 	// Photo mode: only while paused.
 	if( s_ph.actif )
@@ -758,8 +795,32 @@ void DesktopModesUpdate( Skate &mdl )
 }
 }
 
+// The story's ending has started (CScript::set_script).
+extern "C" void desktop_story_beaten( void )
+{
+	ach_add( ACH_STORY, 1 );
+	if( DesktopThugZero()) ach_add( ACH_ZERO_STORY, 1 );
+	ach_flush();
+}
+
 namespace CFuncs
 {
+
+// @script | DesktopAchText | desktop: adds text0..textN (the achievement list) and title
+bool ScriptDesktopAchText( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	for( int i = 0; i < ach_count(); ++i )
+	{
+		char n[16], t[160];
+		snprintf( n, sizeof( n ), "text%d", i );
+		ach_line( i, t, sizeof( t ));
+		pScript->GetParams()->AddString( n, t );
+	}
+	char t[48];
+	snprintf( t, sizeof( t ), "Achievements (%d/%d)", ach_unlocked_count(), ach_count());
+	pScript->GetParams()->AddString( "title", t );
+	return true;
+}
 
 // @script | DesktopPhoto | desktop: on starts photo mode (game paused, menu hidden), off ends it
 bool ScriptDesktopPhoto( Script::CStruct *pParams, Script::CScript *pScript )
