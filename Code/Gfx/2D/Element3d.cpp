@@ -402,7 +402,16 @@ void CElement3d::AutoComputeScale()
 	Mth::Vector element_world_min, element_world_max;
 	for (int i = 0; i < m_num_models; i++)
 	{
+#ifdef THUG_DESKTOP
+		// Cloned geoms are stored under their names, not 0: take the first one.
 		Nx::CGeom *p_geom = mp_models[i].mpModel->GetGeom(0);
+		if (!p_geom && mp_models[i].mpModel->GetNumGeoms() > 0)
+			p_geom = mp_models[i].mpModel->GetGeomByIndex(0);
+		if (!p_geom)
+			return;	// nothing to measure: scale left as it is
+#else
+		Nx::CGeom *p_geom = mp_models[i].mpModel->GetGeom(0);
+#endif
 		Dbg_Assert(p_geom);
 		Mth::CBBox b_box = p_geom->GetBoundingBox();
 		Mth::Vector model_min(mp_models[i].mOffset.GetX() + b_box.GetMin().GetX(),
