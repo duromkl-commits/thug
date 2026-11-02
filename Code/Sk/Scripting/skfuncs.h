@@ -148,6 +148,25 @@ bool ScriptSetPlayerFaceOverlayTexture(Script::CStruct *pParams, Script::CScript
 bool ScriptClearPlayerFaceTexture(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptPlayerFaceIsValid(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScript);
+#ifdef THUG_DESKTOP
+bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopQuitGame(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeStart(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeStop(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeOn(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeAction(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeHold(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopLifeRadioName(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopZeroArm(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopZeroArmed(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopExtraToggle(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopExtrasText(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopPhoto(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopClassic(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopClassicOn(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopAchText(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScript);
+#endif
 bool ScriptCareerStartLevel(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptCareerLevelIs(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptGetRecordText(Script::CStruct *pParams, Script::CScript *pScript);

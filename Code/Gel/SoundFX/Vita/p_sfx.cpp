@@ -64,7 +64,8 @@ namespace
 struct SVoix
 {
 	const SSonVita	*p_son;
-	unsigned int	 position;		// virgule fixe 16.16 dans le son
+	unsigned long long position;	// virgule fixe 16.16 dans le son ; 64 bits : en 32, un son de plus
+								// de 65536 echantillons (1,5 s) revenait a 0 et ne finissait jamais
 	unsigned int	 pas;			// increment 16.16 par echantillon de sortie
 	int				 vol_g;			// 0..256
 	int				 vol_d;
@@ -150,8 +151,8 @@ static int thread_mixeur( SceSize, void * )
 
 			for( int i = 0; i < GRAIN; ++i )
 			{
-				const unsigned int idx = p_v->position >> 16;
-				if( (int)idx >= p_s->nb_echantillons )
+				const unsigned long long idx = p_v->position >> 16;
+				if( idx >= (unsigned long long)p_s->nb_echantillons )
 				{
 					if( p_v->boucle )
 					{
@@ -297,6 +298,10 @@ void ArreteThreadSfx( void )
 }
 
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_full_log( void );
+#endif
+
 bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
                       bool loadPerm )
 {
@@ -313,6 +318,22 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 	snprintf( chemin, sizeof( chemin ), "sounds\\pcm\\%s.pcm", sfxName );
 
 	void *p_fic = File::Open( chemin, "rb" );
+#ifdef THUG_DESKTOP
+	// Imported THPS4 levels: their sounds are plain 16-bit PCM .wav files the
+	// converter copies loose to sounds/wav (THUG's own .pcm wins if it has one).
+	if( !p_fic )
+	{
+		snprintf( chemin, sizeof( chemin ), "sounds\\wav\\%s.wav", sfxName );
+		p_fic = File::Open( chemin, "rb" );
+	}
+	// Skater Life: Sims sounds from the player's Sims install, loose in
+	// Data\sims\Sound (LoadSound "sims\Sound\Sfx\Food_Snack_Eat1").
+	if( !p_fic && !strncasecmp( sfxName, "sims\\", 5 ))
+	{
+		snprintf( chemin, sizeof( chemin ), "%s.wav", sfxName );
+		p_fic = File::Open( chemin, "rb" );
+	}
+#endif
 	if( !p_fic )
 		return false;
 
@@ -382,6 +403,39 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 			++pos;
 	}
 
+#ifdef THUG_DESKTOP
+	// The loop flag as the Xbox reads it: CRiffChunk::Open (Xbox/p_sfx.cpp:373)
+	// steps chunk to chunk WITHOUT the RIFF word padding. After an odd-sized
+	// chunk it is lost and never finds 'smpl', so on the Xbox those sounds play
+	// once. Reading the padding found their 'smpl' and looped them forever
+	// (FallWater repeating after a fall into water).
+	{
+		bool boucle_xbox = false;
+		int p = 12;
+		while( p + 8 <= taille )
+		{
+			unsigned int t;
+			memcpy( &t, p_brut + p + 4, 4 );
+			if( memcmp( p_brut + p, "smpl", 4 ) == 0 )
+			{
+				if( p + 8 + 32 <= taille )
+				{
+					unsigned int n;
+					memcpy( &n, p_brut + p + 8 + 28, 4 );
+					boucle_xbox = ( n > 0 );
+				}
+				break;
+			}
+			if( t > (unsigned int)taille )
+				break;
+			p += 8 + (int)t;
+		}
+		if( boucle != boucle_xbox )
+			VLOG( "SFX", "%s : loop %d -> %d (Xbox chunk walk)", sfxName, (int)boucle, (int)boucle_xbox );
+		boucle = boucle_xbox;
+	}
+#endif
+
 	if(( off_fmt < 0 ) || ( off_data < 0 ))
 	{
 		VLOG( "SFX", "%s : bloc fmt ou data introuvable", sfxName );
@@ -394,6 +448,41 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 	int          hz;
 	memcpy( &hz, p_brut + off_fmt + 4, 4 );
 	const int    block  = (int)( p_brut[off_fmt + 12] | ( p_brut[off_fmt + 13] << 8 ));
+
+#ifdef THUG_DESKTOP
+	// 16-bit PCM (THPS4's .wav): keep the first channel, as below.
+	if(( tag == 0x0001 ) && ( canaux >= 1 ) && ( block == 2 * canaux ))
+	{
+		if( taille_data > ( taille - off_data ))
+			taille_data = taille - off_data;
+		const int n = taille_data / block;
+		short *p_pcm = ( n > 0 ) ? (short *)malloc( n * sizeof( short )) : NULL;
+		SSonVita *p_son = p_pcm ? (SSonVita *)malloc( sizeof( SSonVita )) : NULL;
+		if( !p_son )
+		{
+			free( p_pcm );
+			free( p_brut );
+			return false;
+		}
+		for( int i = 0; i < n; ++i )
+			memcpy( &p_pcm[i], p_brut + off_data + i * block, 2 );
+		free( p_brut );
+		p_son->p_echantillons  = p_pcm;
+		p_son->nb_echantillons = n;
+		p_son->hz              = hz;
+		p_son->boucle          = boucle;
+		const char *b = sfxName;
+		for( const char *q = sfxName; *q; ++q )
+			if(( *q == '\\' ) || ( *q == '/' ))
+				b = q + 1;
+		strncpy( p_son->nom, b, sizeof( p_son->nom ) - 1 );
+		p_son->nom[sizeof( p_son->nom ) - 1] = 0;
+		pInfo->p_sound_data = p_son;
+		pInfo->looping      = boucle;
+		pInfo->permanent    = loadPerm;
+		return true;
+	}
+#endif
 
 	if(( tag != 0x0069 ) || ( canaux < 1 ) || ( block < 8 ))
 	{
@@ -496,6 +585,17 @@ int PlaySoundPlease( PlatformWaveInfo *pInfo, sVolume *p_vol, float pitch )
 	p_v->boucle   = pInfo->looping;
 	p_v->t_debut  = sceKernelGetProcessTimeWide();
 	p_v->signalee = false;
+#ifdef THUG_DESKTOP
+	// Every voice start, with full_log: tells a sound replayed by the engine
+	// from one looping in the mixer (College's repeating break sound).
+	if( desktop_full_log())
+	{
+		static int s_n = 0;
+		if( s_n++ < 3000 )
+			VLOG( "SND", "voix %d : '%s'%s, %d echantillons a %d Hz", v, p_v->p_son->nom,
+			      p_v->boucle ? " EN BOUCLE" : "", p_v->p_son->nb_echantillons, p_v->p_son->hz );
+	}
+#endif
 
 	// Un seul pas porte le reechantillonnage ET le pitch : le son est a
 	// 44100 Hz, la sortie a 48000, et le jeu exprime le pitch en pourcentage.

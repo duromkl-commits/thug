@@ -109,6 +109,16 @@ void InstallFileSystem( void )
 	{
 		VLOG( "SYS", "ATTENTION: temoin %s introuvable", VITA_DATA_PROBE );
 		VLOG( "SYS", "  -> la racine '%s' est probablement fausse", VITA_DATA_ROOT );
+#ifdef THUG_DESKTOP
+		// Without its data the game crashes on the first archive: say why instead.
+		char host[1024], msg[1400];
+		desktop_host_path( VITA_DATA_ROOT, host, sizeof( host ));
+		snprintf( msg, sizeof( msg ),
+		          "The game files weren't found.\n\nExpected the Xbox disc's data folder at:\n%s\n\n"
+		          "Put the 'data' folder from the extracted ISO next to the game's .exe, "
+		          "or set [paths] data= in thug_desktop.ini.", host );
+		desktop_fatal( msg );
+#endif
 	}
 	else
 	{

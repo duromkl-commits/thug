@@ -37,6 +37,16 @@ public:
 	uint16			W() const				{ return m_width; }
 	uint16			H() const				{ return m_height; }
 	Image::RGBA		Color() const			{ return m_rgba; }
+	unsigned		Seq() const				{ return m_seq; }
+
+protected:
+	virtual void	plat_update_hidden();
+	virtual void	plat_update_priority();
+
+private:
+	unsigned		m_seq;			// rang d'inscription dans la liste XBox
+	float			m_seq_pri;
+	bool			m_seq_hidden;
 };
 
 } // namespace Nx

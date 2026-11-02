@@ -3791,7 +3791,15 @@ bool CCutsceneData::create_objects( uint32* pData )
 				{
 					pHeadStruct = pCASModelAppearance->GetActualDescStructure( CRCD(0x0fc85bae,"skater_f_head") );
 				}
-				if ( pHeadStruct && pHeadStruct->ContainsFlag( CRCD(0xc4c5b2cc,"NoCutsceneHead") ) )
+				bool keep_own_head = pHeadStruct && pHeadStruct->ContainsFlag( CRCD(0xc4c5b2cc,"NoCutsceneHead") );
+#ifdef THUG_DESKTOP
+				// A pro or secret skater picked from the pause menu (desktop):
+				// the cutscene's talking head is the create-a-skater one, so they
+				// keep their own in-game head, as the skull and paper bag do.
+				if ( pSkaterProfile->IsPro() )
+					keep_own_head = true;
+#endif
+				if ( keep_own_head )
 				{
 					Script::RunScript( CRCD(0xf37d9f53,"UnhideLoResHeads") );
 					delete pNodeData;

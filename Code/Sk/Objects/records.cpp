@@ -589,14 +589,20 @@ void 		CGameRecords::ReadFromStructure(Script::CStruct *pIn)
 	pIn->GetArray("GameRecords",&pArray);
 	Dbg_MsgAssert(pArray,("Structure is missing GameRecords parameter"));
 	
+	int saved_levels = m_numLevels;
+#ifdef THUG_DESKTOP
+	// saves from before the level count went up hold fewer levels
+	if ((int)pArray->GetSize() < saved_levels) saved_levels = pArray->GetSize();
+#else
 	if (m_numLevels!=(int)pArray->GetSize())
 	{
 		Dbg_Warning("m_numLevels mismatch: m_numLevels=%d, but num levels in structure=%d",m_numLevels,pArray->GetSize());
 		return;
 	}
+#endif
 	Dbg_MsgAssert(mp_levelRecords,("NULL mp_levelRecords"));
 		
-	for (int i=0; i<m_numLevels; ++i)
+	for (int i=0; i<saved_levels; ++i)
 	{
 		mp_levelRecords[i].ReadFromStructure(pArray->GetStructure(i));
 	}	

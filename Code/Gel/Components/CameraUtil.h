@@ -35,11 +35,21 @@
 
 #	define CAMERA_SLERP_STOP 0.9999f
 	   
+namespace Gfx
+{
+	class Camera;
+}
+
 namespace Obj
 {
 	float			GetTimeAdjustedSlerp ( float slerp, float delta );
 	void			ApplyCameraCollisionDetection ( Mth::Vector& camera_pos,  Mth::Matrix& camera_matrix, const Mth::Vector& target_pos, const Mth::Vector& forcus_pos, bool side_feelers = true, bool refocus = true );
 	
+#ifdef THUG_DESKTOP
+	// Landing dip, bail shake, speed FOV push and on-foot bob (desktop port).
+	void			DesktopCameraWeight ( Gfx::Camera *p_cam, const Mth::Vector &target_vel, bool on_foot, bool on_ground, bool bailing, bool instantly, Mth::Vector &cam_pos, Mth::Matrix &frame );
+#endif
+
 	struct SCameraState
 	{
 		Mth::Matrix lastActualMatrix;

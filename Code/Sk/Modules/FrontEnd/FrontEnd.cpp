@@ -403,6 +403,49 @@ void FrontEnd::AddEntriesToEventButtonMap(Script::CStruct *pParams)
 	*/
 	
 	Script::CArray *p_map;
+#ifdef THUG_DESKTOP
+	// Desktop: the PS2 layout (triangle = back, as on the original), with
+	// the PS2 table and button names. Same bit order as the Xbox names for
+	// indices 0-10, which are the ones the pad delivers.
+	static const char *p_ps2_names[] =
+	{
+		"left_trigger2", "right_trigger2", "left_trigger1", "right_trigger1",
+		"triangle", "circle", "x", "square", "select",
+		"left_stick_button", "right_stick_button"
+	};
+	if (pParams->GetArray("ps2", &p_map))
+	{
+		p_array_name = "ps2";
+		num_mapped_buttons = sizeof( p_ps2_names ) / sizeof( char* );
+		for (uint i = 0; i < p_map->GetSize(); i++)
+		{
+			Script::CArray *p_entry = p_map->GetArray(i);
+			uint32 button_crc = p_entry->GetChecksum(0);
+			uint32 event_crc = p_entry->GetChecksum(1);
+			for (uint j = 0; j < (uint) num_mapped_buttons; j++)
+			{
+				if (button_crc == Script::GenerateCRC(p_ps2_names[j]) || button_crc == null_crc)
+				{
+					for (int x = 0; x < MAX_BUTTON_EVENT_MAP_ENTRIES; x++)
+					{
+						if (button_crc == null_crc && m_digital_button_event_map[x].mEventType == event_crc)
+							m_digital_button_event_map[x].mEventType = DEAD_ENTRY;
+						else if (event_crc == null_crc && m_digital_button_event_map[x].mDigitalButtonIndex == j)
+							m_digital_button_event_map[x].mEventType = DEAD_ENTRY;
+						else if (m_digital_button_event_map[x].mEventType == DEAD_ENTRY)
+						{
+							m_digital_button_event_map[x].mDigitalButtonIndex = j;
+							m_digital_button_event_map[x].mEventType = event_crc;
+							break;
+						}
+					}
+					break;
+				}
+			}
+		}
+		return;
+	}
+#endif
 	if (!pParams->GetArray(p_array_name, &p_map))
 		return;
 

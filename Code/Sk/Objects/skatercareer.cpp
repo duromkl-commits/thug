@@ -35,6 +35,9 @@
 #include <sk/gamenet/gamenet.h>
 
 
+#ifdef THUG_DESKTOP
+bool desktop_chaos_cheat( uint32 cheat );	// desktop_life_glue.cpp: chaos mode
+#endif
 bool g_CheatsEnabled = false;
 
 /*****************************************************************************
@@ -467,6 +470,9 @@ int CSkaterCareer::GetBestMedal(int Level)
 
 bool	CSkaterCareer::GetCheat(uint32 cheat_checksum)
 {
+#ifdef THUG_DESKTOP
+	if (desktop_chaos_cheat(cheat_checksum)) { g_CheatsEnabled = true; return true; }
+#endif
 	g_CheatsEnabled = GetGlobalFlag(Script::GetInteger(cheat_checksum));
 	// This should be the ONLY way we access the cheat flags, so we can override them in network games
 	//if (GameNet::Manager::Instance()->InNetGame()) return false;
@@ -742,7 +748,13 @@ void CSkaterCareer::ReadFromStructure(Script::CScriptStructure *pIn)
 	Dbg_MsgAssert(pLevelFlags,("Missing LevelFlags array in Career structure"));
 	Dbg_MsgAssert(pLevelFlags->GetSize()==8*vMAX_CAREER_LEVELS,("Bad size of %d for level flags array, expected %d",pGoalFlags->GetSize(),vMAX_CAREER_LEVELS));
 
-	for (unsigned int i = 0; i<vMAX_CAREER_LEVELS; ++i)
+	unsigned int saved_levels = vMAX_CAREER_LEVELS;
+#ifdef THUG_DESKTOP
+	// saves from before the level count went up hold fewer levels
+	if (pGoalFlags->GetSize()/8 < saved_levels) saved_levels = pGoalFlags->GetSize()/8;
+	if (pLevelFlags->GetSize()/8 < saved_levels) saved_levels = pLevelFlags->GetSize()/8;
+#endif
+	for (unsigned int i = 0; i<saved_levels; ++i)
 	{
 		uint32 j;
 		for (j = 0;j<8;j++)
@@ -775,6 +787,9 @@ void CSkaterCareer::ReadFromStructure(Script::CScriptStructure *pIn)
 		{
 			CGapChecklist * p_checklist = GetGapChecklist(i);
 			p_checklist->FlushGapChecks();
+#ifdef THUG_DESKTOP
+			if (i >= (unsigned int)pGapChecklists->GetSize()) continue;
+#endif
 			Script::CStruct *p_gap_struct = pGapChecklists->GetStructure(i);
 			int level = 0;
 			int valid = 0;
@@ -824,7 +839,11 @@ void CSkaterCareer::ReadFromStructure(Script::CScriptStructure *pIn)
 		Dbg_MsgAssert( size <= (int)vMAX_CAREER_LEVELS, ( "wrong array size" ) );
 #endif		// __NOPT_ASSERT__
 		for ( int i = 0; i < (int)vMAX_CAREER_LEVELS; i++ )
+#ifdef THUG_DESKTOP
+			m_level_visited[i] = i < pVisitedLevels->GetSize() ? pVisitedLevels->GetInteger( i ) : 0;
+#else
 			m_level_visited[i] = pVisitedLevels->GetInteger( i );
+#endif
 	}
 }
 

@@ -155,6 +155,9 @@
 #include <gel/scripting/vecpair.h>
 #include <gel/scripting/checksum.h>
 #include <sk/scripting/nodearray.h>
+#ifdef THUG_DESKTOP
+bool DesktopThugZero( void );	// desktop_life_glue.cpp: a THUG Zero story is running
+#endif
 
 #ifdef __PLAT_NGC__
 #include "gfx/ngc/nx/nx_init.h"
@@ -624,6 +627,11 @@ float	CSkater::GetStat(EStat stat)
 		value += 3.0f;
 	}
 
+#ifdef THUG_DESKTOP
+	// THUG Zero: every stat stays at 0 for the whole story.
+	if( DesktopThugZero())
+		value = 0.0f;
+#endif
 	return value;
 	
 }

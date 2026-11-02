@@ -2480,7 +2480,16 @@ void Device::query_capabilities( void )
 
 	// La Vita ne vibre pas : zero actionneur. Annoncer le contraire
 	// entrainerait le moteur dans un protocole qu'on ne peut pas honorer.
+#ifdef THUG_DESKTOP
+	// Desktop pads rumble (SDL): the Xbox's two motors.
+	m_data.m_num_actuators = 2;
+	m_data.m_caps.SetMask( mACTUATORS );
+	m_data.m_actuator_max[0] = m_data.m_actuator_max[1] = 255;
+	m_data.m_actuator_direct[0] = m_data.m_actuator_direct[1] = 0;
+	m_data.m_actuator_old_direct[0] = m_data.m_actuator_old_direct[1] = 0;
+#else
 	m_data.m_num_actuators = 0;
+#endif
 
 	m_state      = vACQUIRED;
 	m_next_state = vIDLE;
@@ -2690,6 +2699,16 @@ void Device::read_data( void )
 	// qui comptent ; la descente de planche est L1+R1, voir #76) et le pave arriere L1/R1 (rotations).
 	// Avant : L1/R1 aux gachettes, et les doigts poses au dos de la console
 	// envoyaient L2+R2 = descente de planche intempestive. "inv 0/1".
+#ifdef THUG_DESKTOP
+	// A real pad has all four shoulders: triggers (LT/RT) = L2/R2,
+	// bumpers (LB/RB) = L1/R1, as on PS2. Touch corners still work.
+	{
+		if( pad.buttons & SCE_CTRL_LTRIGGER ) b3 &= ~( 1 << 0 );
+		if( pad.buttons & SCE_CTRL_RTRIGGER ) b3 &= ~( 1 << 1 );
+		if(( pad.buttons & SCE_CTRL_L1 ) || ( tac & ( TAC_L1 | TAC_DESCENTE ))) b3 &= ~( 1 << 2 );
+		if(( pad.buttons & SCE_CTRL_R1 ) || ( tac & ( TAC_R1 | TAC_DESCENTE ))) b3 &= ~( 1 << 3 );
+	}
+#else
 	{
 		const bool pg = ( pad.buttons & SCE_CTRL_LTRIGGER ) != 0, pd = ( pad.buttons & SCE_CTRL_RTRIGGER ) != 0;
 		const bool ag = ( pad.buttons & VITA_PAD_L2 ) != 0,       ad = ( pad.buttons & VITA_PAD_R2 ) != 0;
@@ -2701,6 +2720,7 @@ void Device::read_data( void )
 		if( l1 || ( tac & ( TAC_L1 | TAC_DESCENTE ))) b3 &= ~( 1 << 2 );
 		if( r1 || ( tac & ( TAC_R1 | TAC_DESCENTE ))) b3 &= ~( 1 << 3 );
 	}
+#endif // THUG_DESKTOP
 	if( pad.buttons & SCE_CTRL_TRIANGLE )	b3 &= ~( 1 << 4 );
 	if( pad.buttons & SCE_CTRL_CIRCLE )		b3 &= ~( 1 << 5 );
 	if( pad.buttons & SCE_CTRL_CROSS )		b3 &= ~( 1 << 6 );
@@ -2771,16 +2791,104 @@ bool Device::IsPluggedIn( void )
 }
 
 
-// --- vibration : la Vita n'en a pas -----------------------------------------
+// --- vibration ----------------------------------------------------------------
+//
+// Desktop: the two Xbox motors (0 = left, big; 1 = right, small) go to the
+// pad's rumble through SDL (DualSense, DualShock 4, Xbox pads), following
+// XBox/p_siodev.cpp: disabled flag, pause saves and restores the strengths.
+// The Vita itself has no motors.
 
-void Device::ActivateActuator( int act_num, int percent )				{}
 void Device::ActivatePressureSensitiveMode( void )						{}
 void Device::DeactivatePressureSensitiveMode( void )					{}
+
+#ifdef THUG_DESKTOP
+extern "C" void desktop_pad_rumble( float low, float high );
+
+static void envoie_vibration( const unsigned char *v )
+{
+	desktop_pad_rumble( v[0] / 255.0f, v[1] / 255.0f );
+}
+
+void Device::ActivateActuator( int act_num, int percent )
+{
+	if( m_data.m_actuators_disabled || act_num < 0 || act_num > 1 )
+		return;
+	if( percent < 0 ) percent = 0;
+	if( percent > 100 ) percent = 100;
+	m_data.m_actuator_direct[act_num] = (unsigned char)( percent * 255 / 100 );
+	if( !m_data.m_paused_ref.InUse())
+		envoie_vibration( m_data.m_actuator_direct );
+}
+
+void Device::Pause( void )
+{
+	if( !m_data.m_paused_ref.InUse())
+	{
+		for( int i = 0; i < 2; ++i )
+		{
+			m_data.m_actuator_old_direct[i] = m_data.m_actuator_direct[i];
+			m_data.m_actuator_direct[i] = 0;
+		}
+		desktop_pad_rumble( 0.0f, 0.0f );
+	}
+	m_data.m_paused_ref.Acquire();
+}
+
+void Device::UnPause( void )
+{
+	if( !m_data.m_paused_ref.InUse())
+		return;
+	m_data.m_paused_ref.Release();
+	if( !m_data.m_paused_ref.InUse())
+	{
+		for( int i = 0; i < 2; ++i )
+			m_data.m_actuator_direct[i] = m_data.m_actuator_old_direct[i];
+		envoie_vibration( m_data.m_actuator_direct );
+	}
+}
+
+void Device::DisableActuators( void )
+{
+	if( m_data.m_actuators_disabled )
+		return;
+	m_data.m_actuator_direct[0] = m_data.m_actuator_direct[1] = 0;
+	desktop_pad_rumble( 0.0f, 0.0f );
+	m_data.m_actuators_disabled = true;
+}
+
+void Device::EnableActuators( void )
+{
+	m_data.m_actuators_disabled = false;
+}
+
+void Device::ResetActuators( void )
+{
+	if( m_data.m_actuators_disabled )
+	{
+		EnableActuators();
+		DisableActuators();
+	}
+	else
+	{
+		DisableActuators();
+		EnableActuators();
+	}
+}
+
+void Device::StopAllVibrationIncludingSaved( void )
+{
+	for( int i = 0; i < 2; ++i )
+		m_data.m_actuator_direct[i] = m_data.m_actuator_old_direct[i] = 0;
+	desktop_pad_rumble( 0.0f, 0.0f );
+}
+#else
+void Device::ActivateActuator( int act_num, int percent )				{}
 void Device::Pause( void )												{}
 void Device::UnPause( void )											{}
 void Device::DisableActuators( void )									{}
 void Device::EnableActuators( void )									{}
 void Device::ResetActuators( void )										{}
 void Device::StopAllVibrationIncludingSaved( void )						{}
+#endif
 
 } // namespace SIO

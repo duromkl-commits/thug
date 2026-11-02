@@ -35,6 +35,9 @@
 #include <sk/components/skaterbalancetrickcomponent.h>
 
 #include <sk/objects/playerprofilemanager.h>
+#ifdef THUG_DESKTOP
+bool DesktopThugZero( void );	// desktop_life_glue.cpp: a THUG Zero story is running
+#endif
 
 
 namespace Obj
@@ -1040,6 +1043,11 @@ void CStatsManagerComponent::Bail()
 
 void CStatsManagerComponent::Land()
 {
+#ifdef THUG_DESKTOP
+    // THUG Zero: stat goals never pay out.
+    if ( DesktopThugZero() )
+        return;
+#endif
     if ( !(Mdl::Skate::Instance()->GetGameMode()->IsTrue( CRCD(0x1ded1ea4,"is_career") )) )
     {
         return;

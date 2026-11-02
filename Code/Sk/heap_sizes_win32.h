@@ -139,6 +139,12 @@
 #define	SCRIPT_HEAP_SIZE _SCRIPT_HEAP_SIZE
 #endif // __PLAT_NGC__
 
+#ifdef THUG_DESKTOP
+// Desktop: room for the ~110 playable peds' profiles
+#undef	SKATERINFO_HEAP_SIZE
+#define	SKATERINFO_HEAP_SIZE			 	(60000+100000+20000+1500000)
+#endif
+
 
 #endif // __SK_HEAP_SIZES_H
 

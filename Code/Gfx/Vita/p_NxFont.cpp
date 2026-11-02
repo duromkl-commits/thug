@@ -14,6 +14,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 
 #include "vita_log.h"
@@ -317,14 +318,22 @@ bool CVitaFont::plat_load( const char *filename )
 		File::Close( p_file );
 		return false;
 	}
+	// Except ButtonsPs2: the Xbox discs carry it unused, with its palette
+	// still in PS2 order (R, G, B, A). Read as BGRA it swapped red and blue:
+	// blue circle, yellow triangle and X.
+	const char *p_base = strrchr( filename, '/' );
+	if( !p_base ) p_base = strrchr( filename, '\\' );
+	p_base = p_base ? p_base + 1 : filename;
+	const bool rgba_ps2 = !strncasecmp( p_base, "buttonsps2", 10 );
+	const int ir = rgba_ps2 ? 0 : 2, ib = rgba_ps2 ? 2 : 0;
 	for( int i = 0; i < tw * th; ++i )
 	{
 		const unsigned char *p_c = clut + p_idx[i] * 4;
 		unsigned int a = p_c[3];
 		a = ( a >= 0x80 ) ? 0xFF : ( a * 2 );
-		p_rgba[i * 4 + 0] = p_c[2];		// R
+		p_rgba[i * 4 + 0] = p_c[ir];		// R
 		p_rgba[i * 4 + 1] = p_c[1];		// G
-		p_rgba[i * 4 + 2] = p_c[0];		// B
+		p_rgba[i * 4 + 2] = p_c[ib];		// B
 		p_rgba[i * 4 + 3] = (unsigned char)a;
 	}
 	free( p_idx );
