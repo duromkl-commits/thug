@@ -28,6 +28,7 @@ int         ach_count( void );
 int         ach_unlocked_count( void );
 /* One line for the list: "* Name - what to do" or "Name - what to do (3/25)". */
 void        ach_line( int i, char *out, int n );
+void        ach_desc( int i, char *out, int n );
 /* A new unlock to announce: name and description. 0 when none. */
 int         ach_pop( char *name, int n_name, char *desc, int n_desc );
 /* Saves if anything changed (cheap to call every few seconds). */

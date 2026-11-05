@@ -989,6 +989,12 @@ static void compile_q( Ecrit &w, const char *t )
 		if( c == '=' ) { w.octet( T_EGAL ); ++t; continue; }
 		if( c == ',' ) { w.octet( 9 ); ++t; continue; }
 		if( c == ':' ) { w.octet( 0x42 ); ++t; continue; }
+		if( !strncmp( t, "<...>", 5 ))	// all the script's params
+		{
+			w.octet( 0x2c );
+			t += 5;
+			continue;
+		}
 		if( c == '<' )
 		{
 			const char *f = strchr( t, '>' );
@@ -1183,8 +1189,8 @@ static std::string ach_items( void )
 	std::string t;
 	for( int i = 0; i < ach_count(); ++i )
 	{
-		char l[200];
-		snprintf( l, sizeof( l ), "theme_menu_add_item text = <text%d> id = desktop_ach_item%d highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = nullscript\n", i, i );
+		char l[280];
+		snprintf( l, sizeof( l ), "theme_menu_add_item text = <text%d> id = desktop_ach_item%d highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = nullscript focus_script = desktop_ach_focus focus_params = { desc = <desc%d> }\n", i, i, i );
 		t += l;
 	}
 	return t;
@@ -1231,6 +1237,13 @@ static std::string scripts_extras( void )
 		"create_panel_message id = desktop_ach_toast text = <text> pos = (320,96) rgba = [ 128 108 40 128 ] time = 4000\n"
 		"PlaySound GotStat04 vol = 150\n"
 		"endscript\n"
+		// The focused achievement's description, under the list.
+		"script desktop_ach_focus\n"
+		"main_theme_focus <...>\n"
+		"if ScreenElementExists id = desktop_ach_desc\n"
+		"SetScreenElementProps id = desktop_ach_desc text = <desc>\n"
+		"endif\n"
+		"endscript\n"
 		"script desktop_ach_menu\n"
 		"if ObjectExists id = current_menu_anchor\n"
 		"DestroyScreenElement id = current_menu_anchor\n"
@@ -1241,6 +1254,7 @@ static std::string scripts_extras( void )
 		"SetScreenElementProps { id = sub_menu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = desktop_extras_menu } } ] }\n"
 		"create_helper_text generic_helper_text\n"
 		"kill_start_key_binding\n"
+		"CreateScreenElement { type = TextElement parent = current_menu_anchor id = desktop_ach_desc font = small text = \" \" pos = (320,392) just = [ center center ] scale = 0.9 rgba = [ 128 128 128 128 ] z_priority = 5 }\n"
 		+ ach_items() +
 		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
 		"endscript\n"

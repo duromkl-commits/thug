@@ -809,7 +809,7 @@ extern "C" void desktop_story_beaten( void )
 namespace CFuncs
 {
 
-// @script | DesktopAchText | desktop: adds text0..textN (the achievement list) and title
+// @script | DesktopAchText | desktop: adds text0..textN (the names), desc0..descN and title
 bool ScriptDesktopAchText( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	for( int i = 0; i < ach_count(); ++i )
@@ -817,6 +817,9 @@ bool ScriptDesktopAchText( Script::CStruct *pParams, Script::CScript *pScript )
 		char n[16], t[160];
 		snprintf( n, sizeof( n ), "text%d", i );
 		ach_line( i, t, sizeof( t ));
+		pScript->GetParams()->AddString( n, t );
+		snprintf( n, sizeof( n ), "desc%d", i );
+		ach_desc( i, t, sizeof( t ));
 		pScript->GetParams()->AddString( n, t );
 	}
 	char t[48];

@@ -155,12 +155,34 @@ extern "C" void ach_line( int i, char *out, int n )
 	lit();
 	if( i < 0 || i >= NB ) { snprintf( out, n, " " ); return; }
 	const Ach &a = s_ach[i];
-	if( s_fait[i] )
-		snprintf( out, n, "\\c4%s\\c0 - %s", a.nom, a.desc );
+	if( s_fait[i] ) snprintf( out, n, "\\c4%s\\c0", a.nom );
+	else snprintf( out, n, "%s", a.nom );
+}
+
+// "12", "3.4M", "2.5h" (playtime is in seconds).
+static void compte( char *out, int n, int stat, float v )
+{
+	if( stat == ACH_PLAYTIME ) snprintf( out, n, "%.1fh", v / 3600.0f );
+	else if( v >= 1000000.0f ) snprintf( out, n, "%.1fM", v / 1000000.0f );
+	else snprintf( out, n, "%d", (int)v );
+}
+
+// What the focused achievement asks for, and how far along it is.
+extern "C" void ach_desc( int i, char *out, int n )
+{
+	lit();
+	if( i < 0 || i >= NB ) { snprintf( out, n, " " ); return; }
+	const Ach &a = s_ach[i];
+	if( s_fait[i] ) snprintf( out, n, "%s  \\c4Unlocked\\c0", a.desc );
 	else if( a.montre_progres )
-		snprintf( out, n, "%s - %s (%d/%d)", a.nom, a.desc, (int)s_val[a.stat], (int)a.seuil );
-	else
-		snprintf( out, n, "%s - %s", a.nom, a.desc );
+	{
+		char v[16], s[16];
+		const float x = s_val[a.stat] < a.seuil ? s_val[a.stat] : a.seuil;
+		compte( v, sizeof( v ), a.stat, x );
+		compte( s, sizeof( s ), a.stat, a.seuil );
+		snprintf( out, n, "%s  (%s/%s)", a.desc, v, s );
+	}
+	else snprintf( out, n, "%s", a.desc );
 }
 
 extern "C" int ach_pop( char *name, int n_name, char *desc, int n_desc )
