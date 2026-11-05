@@ -53,6 +53,9 @@ uint32 g_hack_address = 0;
 extern char * g_p_buffer;
 #endif		// __PLAT_NGC__
 
+#ifdef THUG_DESKTOP
+void desktop_th4_leave( void );	// desktop_th4_glue.cpp: Pro Skater 4 career set aside first
+#endif
 namespace CFuncs
 {
 
@@ -1156,6 +1159,9 @@ static void s_read_global_info(CStruct *p_globalInfo, CScript *p_script)
 	
 static void s_read_story_info(CStruct *p_storyInfo)
 {
+#ifdef THUG_DESKTOP
+	::desktop_th4_leave();
+#endif
 	// Load in the goal manager parameters.
 	CStruct *p_loaded_goal_manager_params=NULL;
 	p_storyInfo->GetStructure(CRCD(0xac7c2b62,"GoalManagerParams"),&p_loaded_goal_manager_params);

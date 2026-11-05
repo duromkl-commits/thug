@@ -21,6 +21,11 @@ const char *extras_name( int i );
 float extras_record_get( const char *file, const char *key, float def );
 void  extras_record_set( const char *file, const char *key, float value );
 
+/* Whole binary files next to the exe (the Pro Skater 4 career save).      */
+/* read: malloc'd, NULL when missing; write: 1 when written.               */
+void *extras_file_read( const char *file, unsigned *size );
+int   extras_file_write( const char *file, const void *data, unsigned size );
+
 #ifdef __cplusplus
 }
 #endif

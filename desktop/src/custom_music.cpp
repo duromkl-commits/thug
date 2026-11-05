@@ -1223,6 +1223,10 @@ static std::string scripts_extras( void )
 		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
 		"endscript\n"
 		// Achievements: the list, and the unlock pop-up.
+		"script desktop_th4_toast\n"
+		"create_panel_message id = desktop_th4_toast text = <text> pos = (320,140) rgba = [ 40 110 128 128 ] time = 5000\n"
+		"PlaySound GotStat04 vol = 150\n"
+		"endscript\n"
 		"script desktop_ach_toast\n"
 		"create_panel_message id = desktop_ach_toast text = <text> pos = (320,96) rgba = [ 128 108 40 128 ] time = 4000\n"
 		"PlaySound GotStat04 vol = 150\n"
@@ -1460,6 +1464,8 @@ static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j
 			compile_q( w0,
 				"script desktop_th4_career\n"
 				"change_gamemode_career\n"
+				// its own goal memory and save (desktop_th4_glue.cpp)
+				"DesktopTH4Career on\n"
 				// no THUG story startup menu: it parks the skater (physics
 				// paused, out of the world, start key off) and never showed
 				"change show_career_startup_menu = 0\n"
@@ -1958,6 +1964,36 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_pietons( qb, j, m );
 	patch_xbox( qb, j, m );
 	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );
+	// Pro Skater 4 career (desktop_th4_glue.cpp): the level select lists only
+	// the THPS4 levels, each open once its flag is set; THUG's story doesn't
+	// list them. Saving writes the PS4 career's own file, never a story save.
+	patch_debut( qb, j, m, "level_select_menu_add_item",
+		"if DesktopTH4Level level = <level>\n"
+		"if DesktopTH4Active\n"
+		"<flag> = <th4_flag>\n"
+		"else\n"
+		"if GameModeEquals is_career\n"
+		"return\n"
+		"endif\n"
+		"endif\n"
+		"else\n"
+		"if DesktopTH4Active\n"
+		"return\n"
+		"endif\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "launch_pause_menu_save_game_sequence",
+		"if DesktopTH4Active\n"
+		"DesktopTH4Career save\n"
+		"desktop_th4_toast text = \"Pro Skater 4 career saved\"\n"
+		"return\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "goal_save_accept",
+		"if DesktopTH4Active\n"
+		"DesktopTH4Career save\n"
+		"desktop_th4_toast text = \"Pro Skater 4 career saved\"\n"
+		"goal_save_reject\n"
+		"return\n"
+		"endif\n" );
 	patch_debut( qb, j, m, "change_clothes", s_debut_habits );
 	patch_debut( qb, j, m, "change_deck_to_muska", s_debut_planche );
 	// Music keeps going, where it was, through level loads and run starts

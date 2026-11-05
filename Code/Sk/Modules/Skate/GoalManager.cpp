@@ -13,6 +13,9 @@
 							   
 #ifdef THUG_DESKTOP
 #include "vita_log.h"
+void desktop_th4_level_load( void );	// desktop_th4_glue.cpp: the Pro Skater 4 career's own goal memory
+void desktop_th4_level_unload( void );
+void desktop_th4_leave( void );
 #endif
 #include <sk/modules/skate/goalmanager.h>
 
@@ -3217,6 +3220,52 @@ void CGoalManager::ResetCareer()
 	mp_difficulty_levels->Clear();
 }
 
+#ifdef THUG_DESKTOP
+// Everything ResetCareer clears, plus the team: what a story keeps between
+// levels. The Pro Skater 4 career swaps it with THUG's story's.
+void CGoalManager::DesktopExport( Script::CStruct* p_out )
+{
+	p_out->AddStructure( CRCD(0x5cad30fe,"desktop_goal_flags"), mp_goalFlags );
+	p_out->AddInteger( CRCD(0x6abb6fcb,"goalPoints"), m_goalPoints );
+	p_out->AddInteger( CRCD(0x79ed60aa,"totalGoalPointsEarned"), m_totalGoalPointsEarned );
+	p_out->AddInteger( CRCD(0xf9461a46,"cash"), m_cash );
+	p_out->AddInteger( CRCD(0x875e89bb,"total_cash"), m_totalCash );
+	p_out->AddInteger( CRCD(0x46f71d38,"numGoalsBeaten"), m_numGoalsBeaten );
+	p_out->AddInteger( CRCD(0x40801d41,"isPro"), m_isPro ? 1 : 0 );
+	p_out->AddInteger( CRCD(0xf884773c,"currentChapter"), m_currentChapter );
+	p_out->AddInteger( CRCD(0xaf1575eb,"currentStage"), m_currentStage );
+	p_out->AddChecksum( CRCD(0x7e73362b,"sponsor"), m_sponsor );
+	p_out->AddStructure( CRCD(0x3b1f59e0,"team"), mp_team );
+	p_out->AddStructure( CRCD(0xb13d98d3,"difficulty_levels"), mp_difficulty_levels );
+}
+
+void CGoalManager::DesktopImport( Script::CStruct* p_in )
+{
+	ResetCareer();
+	mp_team->Clear();
+	if ( !p_in )
+		return;
+	Script::CStruct* p;
+	if ( p_in->GetStructure( CRCD(0x5cad30fe,"desktop_goal_flags"), &p, Script::NO_ASSERT ) )
+		mp_goalFlags->AppendStructure( p );
+	p_in->GetInteger( CRCD(0x6abb6fcb,"goalPoints"), &m_goalPoints, Script::NO_ASSERT );
+	p_in->GetInteger( CRCD(0x79ed60aa,"totalGoalPointsEarned"), &m_totalGoalPointsEarned, Script::NO_ASSERT );
+	p_in->GetInteger( CRCD(0xf9461a46,"cash"), &m_cash, Script::NO_ASSERT );
+	p_in->GetInteger( CRCD(0x875e89bb,"total_cash"), &m_totalCash, Script::NO_ASSERT );
+	p_in->GetInteger( CRCD(0x46f71d38,"numGoalsBeaten"), &m_numGoalsBeaten, Script::NO_ASSERT );
+	int pro = 0;
+	p_in->GetInteger( CRCD(0x40801d41,"isPro"), &pro, Script::NO_ASSERT );
+	m_isPro = pro != 0;
+	p_in->GetInteger( CRCD(0xf884773c,"currentChapter"), &m_currentChapter, Script::NO_ASSERT );
+	p_in->GetInteger( CRCD(0xaf1575eb,"currentStage"), &m_currentStage, Script::NO_ASSERT );
+	p_in->GetChecksum( CRCD(0x7e73362b,"sponsor"), &m_sponsor, Script::NO_ASSERT );
+	if ( p_in->GetStructure( CRCD(0x3b1f59e0,"team"), &p, Script::NO_ASSERT ) )
+		mp_team->AppendStructure( p );
+	if ( p_in->GetStructure( CRCD(0xb13d98d3,"difficulty_levels"), &p, Script::NO_ASSERT ) )
+		mp_difficulty_levels->AppendStructure( p );
+}
+#endif
+
 /******************************************************************/
 /*                                                                */
 /*                                                                */
@@ -4974,6 +5023,9 @@ bool ScriptLevelLoad(Script::CStruct* pParams, Script::CScript* pScript)
     CGoalManager* pGoalManager = GetGoalManager();
     Dbg_Assert( pGoalManager );
 
+#ifdef THUG_DESKTOP
+    desktop_th4_level_load();
+#endif
     pGoalManager->LevelLoad();
     return true;
 }
@@ -4992,6 +5044,9 @@ bool ScriptLevelUnload(Script::CStruct* pParams, Script::CScript* pScript)
     Dbg_Assert( pGoalManager );
 
     pGoalManager->LevelUnload();
+#ifdef THUG_DESKTOP
+    desktop_th4_level_unload();
+#endif
     return true;
 }
 
@@ -6573,6 +6628,9 @@ bool ScriptResetCareer( Script::CStruct* pParams, Script::CScript* pScript )
 	CGoalManager* pGoalManager = GetGoalManager();
 	Dbg_Assert( pGoalManager );
 
+#ifdef THUG_DESKTOP
+	desktop_th4_leave();
+#endif
 	pGoalManager->ResetCareer();
 	return true;
 }

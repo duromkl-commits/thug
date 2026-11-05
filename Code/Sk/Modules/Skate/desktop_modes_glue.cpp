@@ -705,8 +705,11 @@ void desktop_combo_detail( int score, int base, int mult, int n, const char *tri
 }
 
 // CGoal::Win: a goal won (goal attack splits).
+void desktop_th4_goal_won( void );	// desktop_th4_glue.cpp
+
 void desktop_goal_won( uint32 goal, const char *nom )
 {
+	desktop_th4_goal_won();
 	ach_add( ACH_GOALS, 1 );
 	if( DesktopThugZero()) ach_add( ACH_ZERO_GOALS, 1 );
 	if( !s_ga_actif ) return;

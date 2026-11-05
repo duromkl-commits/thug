@@ -80,6 +80,7 @@ namespace Mdl
 void DesktopTriggersUpdate( Skate &mdl );
 void DesktopExtrasUpdate( Skate &mdl );
 void DesktopModesUpdate( Skate &mdl );
+void DesktopTH4Update( Skate &mdl );
 
 // Each frame, from Skate::s_logic_code.
 void DesktopGlueUpdate( Skate &mdl )
@@ -87,6 +88,7 @@ void DesktopGlueUpdate( Skate &mdl )
 	DesktopTriggersUpdate( mdl );
 	DesktopExtrasUpdate( mdl );
 	DesktopModesUpdate( mdl );
+	DesktopTH4Update( mdl );
 }
 } // namespace Mdl
 

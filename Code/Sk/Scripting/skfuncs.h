@@ -159,6 +159,9 @@ bool ScriptDesktopPhoto(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopClassic(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopClassicOn(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopAchText(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopTH4Career(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopTH4Active(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopTH4Level(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScript);
 #endif
 bool ScriptCareerStartLevel(Script::CStruct *pParams, Script::CScript *pScript);
