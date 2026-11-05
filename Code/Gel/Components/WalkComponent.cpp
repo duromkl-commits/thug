@@ -71,9 +71,6 @@
  
 extern bool g_CheatsEnabled;
 
-#ifdef THUG_DESKTOP
-bool desktop_life_autopilot( const Mth::Vector &skater_pos, Mth::Vector &dir, float &magnitude );
-#endif
 
 namespace Obj
 {
@@ -3170,20 +3167,6 @@ void CWalkComponent::get_controller_input (   )
 		m_control_magnitude = Mth::ClampMin(m_control_magnitude * Mth::DotProduct(m_control_direction, m_facing), 0.0f);
 		m_control_direction = m_facing;
 	}
-#ifdef THUG_DESKTOP
-	// Skater Life's Sims view: click-to-walk.
-	{
-		Mth::Vector dir = m_control_direction;
-		float mag = 0.0f;
-		if( desktop_life_autopilot( GetObject()->GetPos(), dir, mag ))
-		{
-			m_control_direction = dir;
-			m_control_magnitude = mag;
-			m_analog_control = true;
-			m_control_pegged = mag >= 1.0f;
-		}
-	}
-#endif
 }
 
 /******************************************************************/

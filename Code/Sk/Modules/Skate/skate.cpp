@@ -193,7 +193,7 @@ static Script::CStruct *spStatData=NULL;
 /******************************************************************/
 
 #ifdef THUG_DESKTOP
-void DesktopLifeUpdate( Skate &mdl );	// desktop_life_glue.cpp
+void DesktopGlueUpdate( Skate &mdl );	// desktop_extras_glue.cpp
 #endif
 
 void		Skate::s_logic_code ( const Tsk::Task< Skate >& task )
@@ -206,7 +206,7 @@ void		Skate::s_logic_code ( const Tsk::Task< Skate >& task )
 
 	mdl.DoUpdate();
 #ifdef THUG_DESKTOP
-	DesktopLifeUpdate( mdl );
+	DesktopGlueUpdate( mdl );
 #endif
 
 	if( gamenet_man->OnServer() && ( mdl.GetNumSkaters() > 0 ))

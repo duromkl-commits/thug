@@ -36,7 +36,7 @@
 
 #include <sk/objects/playerprofilemanager.h>
 #ifdef THUG_DESKTOP
-bool DesktopThugZero( void );	// desktop_life_glue.cpp: a THUG Zero story is running
+bool DesktopThugZero( void );	// desktop_extras_glue.cpp: a THUG Zero story is running
 #endif
 
 

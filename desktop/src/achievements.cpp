@@ -2,7 +2,7 @@
 **  THUG desktop -- achievements                                            **
 **                                                                          **
 **  A list of goals across every mode, unlocked from stats the game reports **
-**  (Code/Sk/Modules/Skate/desktop_life_glue.cpp and desktop_modes_glue.cpp) **
+**  (Code/Sk/Modules/Skate/desktop_extras_glue.cpp, desktop_modes_glue.cpp)  **
 **  and saved in thug_achievements.txt next to the exe, apart from story    **
 **  saves. Shown with a pop-up when unlocked and in Pause > Extras.         **
 *****************************************************************************/
@@ -57,8 +57,6 @@ static const Ach s_ach[] = {
 	{ "ga_pb",         "Personal Best",       "Beat a goal attack split",                       ACH_GA_PB,        1, false },
 	{ "photo_1",       "Say Cheese",          "Take a photo",                                   ACH_PHOTOS,       1, false },
 	{ "photo_25",      "Photographer",        "Take 25 photos",                                 ACH_PHOTOS,       25, true },
-	{ "life_cash",     "Paid",                "Have $1,000 in Skater Life",                     ACH_LIFE_CASH,    1000, false },
-	{ "life_out",      "Lights Out",          "Pass out in Skater Life",                        ACH_LIFE_BLACKOUT, 1, false },
 	{ "chaos_10",      "Chaos Theory",        "Skate through 10 chaos rounds",                  ACH_CHAOS,        10, true },
 	{ "fp_50k",        "Eyes Only",           "Land a 50,000 point combo in first person",      ACH_FP_COMBO,     50000, false },
 	{ "slowmo_10",     "Bullet Time",         "Land 10 combos in slow motion practice",         ACH_SLOWMO_COMBOS, 10, true },
@@ -70,7 +68,7 @@ enum { NB = sizeof( s_ach ) / sizeof( s_ach[0] ) };
 static const char *s_stats[ACH_NB_STATS] = {
 	"combo_best", "combo_tricks", "combo_mult", "combo_time", "air_time", "grind_time", "manual_time",
 	"bails", "goals", "story", "zero_goals", "zero_story", "cl_runs", "cl_skate", "cl_combo", "cl_tape",
-	"cl_sick", "cl_all", "ga_goals", "ga_pb", "photos", "life_cash", "life_blackout", "chaos", "fp_combo",
+	"cl_sick", "cl_all", "ga_goals", "ga_pb", "photos", "chaos", "fp_combo",
 	"slowmo_combos", "points", "playtime" };
 
 static float s_val[ACH_NB_STATS];

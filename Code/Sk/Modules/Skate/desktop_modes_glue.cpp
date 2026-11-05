@@ -4,7 +4,7 @@
 **                                                                          **
 **  Photo mode, classic runs, the goal attack timer and practice options,   **
 **  all reached from Pause > Extras (scripts in desktop/src/custom_music.cpp **
-**  scripts_extras()). Run each frame from DesktopLifeUpdate.               **
+**  scripts_extras()). Run each frame from DesktopGlueUpdate.               **
 *****************************************************************************/
 
 #ifdef THUG_DESKTOP
@@ -36,11 +36,11 @@
 #include <sk/scripting/nodearray.h>
 #include <sys/timer.h>
 
-#include "skater_life.h"
+#include "desktop_pad.h"
 #include "desktop_extras.h"
 #include "achievements.h"
 
-bool DesktopThugZero( void );	// desktop_life_glue.cpp
+bool DesktopThugZero( void );	// desktop_extras_glue.cpp
 
 extern "C" void desktop_photo_shot( void );
 extern "C" const char *desktop_photo_last( void );
@@ -79,7 +79,7 @@ static void son( const char *nom )
 {
 	Script::CStruct p;
 	p.AddChecksum( "s", crc( nom ));
-	Script::SpawnScript( "desktop_life_snd", &p );
+	Script::SpawnScript( "desktop_snd", &p );
 }
 
 static void temps( char *o, int n, float s )
@@ -174,7 +174,7 @@ static void photo_debut( void )
 	s_ph.cam_m0 = cam->GetMatrix();
 	s_ph.fov0 = cam->GetHFOV();
 	s_ph.skater_cache = false;
-	s_ph.prec = life_pad_raw( NULL, NULL, NULL, NULL );
+	s_ph.prec = desktop_pad_raw( NULL, NULL, NULL, NULL );
 	s_ph.t = Tmr::GetTime();
 	photo_reset( cam );
 }
@@ -204,7 +204,7 @@ static void photo_maj( Obj::CCompositeObject *sk )
 	s_ph.t = maintenant;
 	if( dt > 0.1f ) dt = 0.1f;
 	float lx, ly, rx, ry;
-	const unsigned b = life_pad_raw( &lx, &ly, &rx, &ry );
+	const unsigned b = desktop_pad_raw( &lx, &ly, &rx, &ry );
 	const unsigned appui = b & ~s_ph.prec, lache = s_ph.prec & ~b;
 	s_ph.prec = b;
 
@@ -772,8 +772,8 @@ void DesktopModesUpdate( Skate &mdl )
 		else photo_fin( sk, false );
 	}
 
-	// Classic: free skate only, not Skater Life; a level change ends it.
-	const bool libre = mode_libre( mode ) && !life_on();
+	// Classic: free skate only; a level change ends it.
+	const bool libre = mode_libre( mode );
 	if(( s_cl.actif || s_cl.demande ) && ( !libre || mdl.m_cur_level != s_cl.niveau ))
 	{
 		if( s_cl.actif && mdl.m_cur_level != s_cl.niveau ) { for( int i = 0; i < NB_OBJ; ++i ) s_cl.place[i] = false; }
@@ -840,7 +840,7 @@ bool ScriptDesktopClassic( Script::CStruct *pParams, Script::CScript *pScript )
 		cl_arret();
 		return true;
 	}
-	if( !mode_libre( mdl->GetGameMode()) || life_on())
+	if( !mode_libre( mdl->GetGameMode()))
 	{
 		pScript->GetParams()->AddString( "reason", "Classic runs are for Free Skate" );
 		return false;

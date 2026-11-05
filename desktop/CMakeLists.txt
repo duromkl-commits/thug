@@ -64,7 +64,7 @@ set(DESKTOP_SOURCES
   src/crash_handler.cpp
   src/custom_music.cpp
   src/custom_music_decode.c
-  src/skater_life.cpp
+  src/desktop_pad.cpp
   src/desktop_extras.cpp
   src/achievements.cpp
   src/movie_player.cpp

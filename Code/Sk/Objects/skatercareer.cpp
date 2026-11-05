@@ -36,7 +36,7 @@
 
 
 #ifdef THUG_DESKTOP
-bool desktop_chaos_cheat( uint32 cheat );	// desktop_life_glue.cpp: chaos mode
+bool desktop_chaos_cheat( uint32 cheat );	// desktop_extras_glue.cpp: chaos mode
 #endif
 bool g_CheatsEnabled = false;
 

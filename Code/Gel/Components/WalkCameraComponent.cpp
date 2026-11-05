@@ -27,7 +27,6 @@
 #include <gel/scripting/struct.h>
 #include <gfx/debuggfx.h>
 #ifdef THUG_DESKTOP
-bool desktop_life_camera( const Mth::Vector &target, Mth::Vector &pos, Mth::Matrix &m );
 namespace Obj { class CCompositeObject; }
 bool desktop_first_person( Obj::CCompositeObject *sk, Mth::Vector &pos, Mth::Matrix &m );
 #endif
@@ -374,9 +373,8 @@ void CWalkCameraComponent::Update()
 							 mp_target_walk_component->GetState() == CWalkComponent::WALKING_GROUND,
 							 false, instantly, camera_pos, GetObject()->GetMatrix());
 	}
-	// Skater Life's Sims view: an overhead camera, no collision.
-	if( desktop_life_camera( mp_target->GetPos(), camera_pos, GetObject()->GetMatrix())
-	 || desktop_first_person( mp_target, camera_pos, GetObject()->GetMatrix()))
+	// First person (Extras): no collision.
+	if( desktop_first_person( mp_target, camera_pos, GetObject()->GetMatrix()))
 	{
 		camera_pos[W] = 1.0f;
 		GetObject()->SetPos( camera_pos );

@@ -24,8 +24,7 @@
 
 #include <sk/modules/skate/score.h>
 #ifdef THUG_DESKTOP
-#include "skater_life.h"
-void desktop_combo_end( int score, bool bail );	// desktop_life_glue.cpp: combo stats
+void desktop_combo_end( int score, bool bail );	// desktop_extras_glue.cpp: combo stats
 void desktop_combo_detail( int score, int base, int mult, int n, const char *tricks, bool bail );	// desktop_modes_glue.cpp
 #endif
 
@@ -1004,7 +1003,6 @@ void Score::Land( void )
 	// GLOOBY
 	int trick_score = m_scorePot * m_currentMult;
 #ifdef THUG_DESKTOP
-	life_landed( trick_score );		// Skater Life: cash and fun
 	desktop_detail( false );
 	desktop_combo_end( trick_score, false );	// Extras: combo stats
 #endif
@@ -1221,7 +1219,6 @@ void Score::ForceSpecial( void )
 void Score::Bail( bool clearScoreText )
 {
 #ifdef THUG_DESKTOP
-	if ( m_scorePot > 0 ) life_bailed();	// Skater Life: a bailed combo
 	if ( m_scorePot > 0 ) desktop_detail( true );
 	desktop_combo_end( 0, true );
 #endif    

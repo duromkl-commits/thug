@@ -156,7 +156,7 @@
 #include <gel/scripting/checksum.h>
 #include <sk/scripting/nodearray.h>
 #ifdef THUG_DESKTOP
-bool DesktopThugZero( void );	// desktop_life_glue.cpp: a THUG Zero story is running
+bool DesktopThugZero( void );	// desktop_extras_glue.cpp: a THUG Zero story is running
 #endif
 
 #ifdef __PLAT_NGC__

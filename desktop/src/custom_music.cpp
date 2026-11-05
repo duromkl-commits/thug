@@ -1169,258 +1169,15 @@ static void patch_air_shuffle( const unsigned char *qb, const std::vector<Jeton>
 	}
 }
 
-// --- Skater Life (desktop/src/skater_life.cpp, Sk/Modules/Skate/desktop_life_glue.cpp)
-//
-// Main menu: "Skater Life" under High Score / Free Skate. It is a free skate
-// session (singlesession) with the mode turned on; showing the main menu
-// turns it off again. Pause menu: a "Skater Life" item (eat, sleep, shower,
-// toilet, coffee, radio, start over). The HUD and messages are scripts the
-// glue runs.
-
-static const char *s_vie_main =
-	"script desktop_life_main\n"
-	"DesktopLifeStart\n"
-	"main_menu_exit new_menu_script = launch_select_skater_menu change_gamemode = change_gamemode_singlesession hold_camera\n"
-	"endscript\n";
-
-static const char *s_vie_item_main =
-	"make_main_menu_item { text = \"Skater Life\" id = menu_desktop_life pad_choose_script = desktop_life_main focus_params = { attract_timer } mark_first_input }\n";
-
-// Sims sounds the mode plays, from Data\sims\Sound (Marcus's own Sims install).
-static const char *s_vie_sons[] = {
-	"Sfx\\Food_Snack_Eat1", "Sfx\\Meal_Sloppy_Eater1", "Sfx\\COFFEE_SLURP1", "Sfx\\SHOWER1_SWATERON",
-	"Sfx\\Toilet_Flush_Cheap", "Sfx\\Get_Bills", "Sfx\\stereo_stations_switch1", "Stings\\sting_sleep1",
-	"Stings\\sting_socfail1", "Stings\\sting_danger1", "Stings\\sting_econsuc1", "UI\\Ui_Help", "UI\\UI_ERROR",
-	"UI\\UI_CLICK", "UI\\UI_PIEMENU_APPEAR", "UI\\UI_PIEMENU_HIGHLIGHT", "UI\\UI_PIEMENU_SELECT", "UI\\UI_QUEUED", "UI\\UI_QUEUE_DELETE", "UI\\UI_WHOOSH" };
-
-static std::string scripts_vie( void )
-{
-	std::string t =
-		"script desktop_life_hud_create\n"
-		"SetScreenElementLock id = root_window off\n"
-		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_life_hud pos = (0,0) just = [ left top ] }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_life_hud texture = white2 pos = (630,14) just = [ right top ] scale = (21,15) rgba = [ 0 0 0 80 ] z_priority = -12 }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_life_hud id = desktop_life_clock font = small text = \" \" pos = (624,19) just = [ right top ] scale = 0.75 rgba = [ 128 128 128 128 ] z_priority = -10 }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_life_hud id = desktop_life_cash font = small text = \" \" pos = (467,19) just = [ left top ] scale = 0.75 rgba = [ 70 128 70 128 ] z_priority = -10 }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_life_hud id = desktop_life_gain font = small text = \" \" pos = (467,136) just = [ left top ] scale = 0.75 rgba = [ 70 128 70 128 ] alpha = 0 z_priority = -10 }\n";
-	static const char *noms[] = { "Hunger", "Energy", "Hygiene", "Bladder", "Fun", "Social" };
-	for( int i = 0; i < 6; ++i )
-	{
-		char l[600];
-		const int y = 48 + 14 * i;
-		snprintf( l, sizeof( l ),
-			"CreateScreenElement { type = TextElement parent = desktop_life_hud font = small text = \"%s\" pos = (467,%d) just = [ left center ] scale = 0.65 rgba = [ 128 128 128 128 ] z_priority = -10 }\n"
-			"CreateScreenElement { type = SpriteElement parent = desktop_life_hud texture = white2 pos = (534,%d) just = [ left center ] scale = (11.5,1.25) rgba = [ 25 25 25 110 ] z_priority = -11 }\n"
-			"CreateScreenElement { type = SpriteElement parent = desktop_life_hud id = desktop_life_bar%d texture = white2 pos = (538,%d) just = [ left center ] scale = (10.5,1) rgba = [ 40 110 20 128 ] z_priority = -10 }\n",
-			noms[i], y, y, i, y );
-		t += l;
-	}
-	for( size_t i = 0; i < sizeof( s_vie_sons ) / sizeof( s_vie_sons[0] ); ++i )
-		t += std::string( "LoadSound \"sims\\Sound\\" ) + s_vie_sons[i] + "\" FLAG_PERM\n";
-	t +=
-		"endscript\n"
-		"script desktop_life_hud_off\n"
-		"if ScreenElementExists id = desktop_life_hud\n"
-		"DestroyScreenElement id = desktop_life_hud\n"
-		"endif\n"
-		"endscript\n"
-
-		// A message from the simulation (spawned by the glue).
-		"script desktop_life_event\n"
-		"if GotParam blackout\n"
-		"desktop_life_blackout text = <text> sound = <sound>\n"
-		"return\n"
-		"endif\n"
-		"if GotParam sound\n"
-		"PlaySound <sound>\n"
-		"endif\n"
-		"create_panel_message id = desktop_life_msg text = <text> pos = (320,150) rgba = [ 128 128 90 128 ] time = 3500\n"
-		"endscript\n"
-
-		// Passing out: black screen, the sting, then the message.
-		"script desktop_life_blackout\n"
-		"DesktopLifeHold on\n"
-		"PauseSkaters\n"
-		"fadetoblack on time = 0.4 alpha = 1.0 z_priority = 5000 id = desktop_life_fade\n"
-		"wait 0.4 seconds\n"
-		"if GotParam sound\n"
-		"PlaySound <sound>\n"
-		"endif\n"
-		"wait 3.5 seconds\n"
-		"fadetoblack off time = 0.5 id = desktop_life_fade\n"
-		"UnPauseSkaters\n"
-		"create_panel_message id = desktop_life_msg text = <text> pos = (320,150) rgba = [ 128 90 90 128 ] time = 4500\n"
-		"DesktopLifeHold\n"
-		"endscript\n"
-
-		// A Skater Life menu action, after the pause menu has closed.
-		"script desktop_life_act\n"
-		"if NOT DesktopLifeAction a = <a>\n"
-		"return\n"
-		"endif\n"
-		"if ( <fade> = 0.0 )\n"
-		"if GotParam sound\n"
-		"PlaySound <sound>\n"
-		"endif\n"
-		"return\n"
-		"endif\n"
-		"DesktopLifeHold on\n"
-		"PauseSkaters\n"
-		"fadetoblack on time = 0.3 alpha = 1.0 z_priority = 5000 id = desktop_life_fade\n"
-		"wait 0.3 seconds\n"
-		"if GotParam sound\n"
-		"PlaySound <sound>\n"
-		"endif\n"
-		"wait <fade> seconds\n"
-		"fadetoblack off time = 0.4 id = desktop_life_fade\n"
-		"UnPauseSkaters\n"
-		"DesktopLifeHold\n"
-		"endscript\n"
-
-		// --- Sims view (live mode) ---
-		// Cursor, plumbob, destination marker and an 8-slot pie menu; the
-		// glue moves, fills and shows them.
-		"script desktop_life_live_create\n"
-		"SetScreenElementLock id = root_window off\n"
-		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_life_live pos = (0,0) just = [ left top ] }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_plumbob texture = white2 pos = (320,200) just = [ center center ] scale = (1.6,1.6) rot_angle = 45 rgba = [ 30 128 30 110 ] z_priority = -8 }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_marker texture = white2 pos = (320,240) just = [ center center ] scale = (1.1,1.1) rot_angle = 45 rgba = [ 30 128 30 100 ] alpha = 0 z_priority = -8 }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_cursor_bg texture = white2 pos = (320,240) just = [ center center ] scale = (1.5,1.5) rot_angle = 45 rgba = [ 0 0 0 110 ] z_priority = 20 }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = desktop_life_cursor texture = white2 pos = (320,240) just = [ center center ] scale = (1,1) rot_angle = 45 rgba = [ 128 128 128 128 ] z_priority = 21 }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_life_live id = desktop_life_pie_title font = small text = \" \" pos = (320,240) just = [ center center ] scale = 0.75 rgba = [ 128 128 70 128 ] alpha = 0 z_priority = 31 }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_life_live id = desktop_life_hint font = small text = \"X: select   O: cancel   Square: centre   R stick: camera   SELECT: skate\" pos = (320,462) just = [ center center ] scale = 0.55 rgba = [ 110 110 110 100 ] z_priority = -8 }\n"
-		"desktop_life_pie_slot i = 0\ndesktop_life_pie_slot i = 1\ndesktop_life_pie_slot i = 2\ndesktop_life_pie_slot i = 3\n"
-		"desktop_life_pie_slot i = 4\ndesktop_life_pie_slot i = 5\ndesktop_life_pie_slot i = 6\ndesktop_life_pie_slot i = 7\n"
-		"endscript\n"
-		"script desktop_life_pie_slot\n"
-		"FormatText ChecksumName = bg \"desktop_life_pie_bg%i\" i = <i>\n"
-		"FormatText ChecksumName = tx \"desktop_life_pie%i\" i = <i>\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_life_live id = <bg> texture = white2 pos = (320,240) just = [ center center ] scale = (13,2.4) rgba = [ 10 30 60 100 ] alpha = 0 z_priority = 30 }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_life_live id = <tx> font = small text = \" \" pos = (320,240) just = [ center center ] scale = 0.7 rgba = [ 128 128 128 128 ] alpha = 0 z_priority = 31 }\n"
-		"endscript\n"
-		// The pie menu's head: your skater's head geoms, framed to 64x64.
-		"script desktop_life_head_create\n"
-		"CreateScreenElement { type = Element3d parent = desktop_life_live id = desktop_life_head SkeletonName = thps5_human CloneModel = <obj> CloneModelGeoms = <geoms> pos = <pos> just = [ center center ] dims = (64,64) CameraZ = -400 scale_to_screen_dims AngleOrderYXZ }\n"
-		"endscript\n"
-		"script desktop_life_head_off\n"
-		"if ScreenElementExists id = desktop_life_head\n"
-		"DestroyScreenElement id = desktop_life_head\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_life_live_off\n"
-		"if ScreenElementExists id = desktop_life_live\n"
-		"DestroyScreenElement id = desktop_life_live\n"
-		"endif\n"
-		"endscript\n"
-		// Off the board (live mode walks only).
-		"script desktop_life_to_walk\n"
-		"MakeSkaterGoto desktop_life_walk_state\n"
-		"endscript\n"
-		"script desktop_life_walk_state\n"
-		"SwitchToWalkingPhysics\n"
-		"Goto JustStoppedSkatingState\n"
-		"endscript\n"
-
-		// An action animation on foot, n times, then back to walking.
-		"script desktop_life_anim_state n = 1\n"
-		"ClearExceptionGroup WalkingStateExceptions\n"
-		"SetWalkingTrickState NewWalkingTrickState = GROUND\n"
-		"Walk_ScaleAnimSpeed Off\n"
-		"begin\n"
-		"PlayWalkAnim Anim = <anim> BlendPeriod = 0.2\n"
-		"WaitAnimWalking\n"
-		"repeat <n>\n"
-		"Goto GroundOrAirWaitState\n"
-		"endscript\n"
-		// A social interaction: the skater's anim and Sims line, the ped's
-		// answer, then the result.
-		"script desktop_life_social\n"
-		"MakeSkaterGoto desktop_life_anim_state params = { anim = <anim> n = 2 }\n"
-		"if GotParam voice\n"
-		"LoadSound <voice>\n"
-		"PlaySound <voice_sound>\n"
-		"endif\n"
-		"wait 1.2 seconds\n"
-		"if GotParam ped\n"
-		"if ObjectExists id = <ped>\n"
-		"<ped> : Obj_PlayAnim Anim = <ped_anim> BlendPeriod = 0.2\n"
-		"endif\n"
-		"endif\n"
-		"wait 1 seconds\n"
-		"create_panel_message id = desktop_life_msg text = <text> pos = (320,150) rgba = [ 128 128 90 128 ] time = 3000\n"
-		"endscript\n"
-		// A self action from the pie: anim (if any), then the usual fade.
-		"script desktop_life_self\n"
-		"if GotParam anim\n"
-		"MakeSkaterGoto desktop_life_anim_state params = { anim = <anim> n = 1 }\n"
-		"wait 1.5 seconds\n"
-		"endif\n"
-		"desktop_life_act a = <a>\n"
-		"endscript\n"
-		"script desktop_life_snd\n"
-		"PlaySound <s>\n"
-		"endscript\n"
-		"script desktop_life_route_fail\n"
-		"PlaySound UI_ERROR\n"
-		"create_panel_message id = desktop_life_msg text = \"Can't get there\" pos = (320,150) rgba = [ 128 90 90 128 ] time = 2000\n"
-		"endscript\n"
-
-		"script desktop_life_radio_text\n"
-		"DesktopLifeRadioName\n"
-		"FormatText TextName = t \"Radio: %s\" s = <station>\n"
-		"create_panel_message id = desktop_life_radio text = <t> pos = (320,410) rgba = [ 100 128 100 128 ] time = 3000\n"
-		"endscript\n"
-
-		// The menu, from the pause menu.
-		"script desktop_life_menu\n"
-		"if ObjectExists id = current_menu_anchor\n"
-		"DestroyScreenElement id = current_menu_anchor\n"
-		"endif\n"
-		"FormatText ChecksumName = title_icon \"%i_edit_skater\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
-		"make_new_themed_scrolling_menu title = \"SKATER LIFE\" title_icon = <title_icon> dims = (600,237) pos = (229,80) right_bracket_z = 1\n"
-		"SetScreenElementProps { id = sub_menu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = create_pause_menu } } ] }\n"
-		"create_helper_text generic_helper_text\n"
-		"kill_start_key_binding\n"
-		"DesktopLifeRadioName\n"
-		"FormatText TextName = radio_text \"Radio: %s\" s = <station>\n";
-	static const struct { const char *texte, *action; } items[] = {
-		{ "Eat a Snack  ($5)", "snack" }, { "Eat a Meal  ($15)", "meal" }, { "Drink Coffee  ($3)", "coffee" },
-		{ "Take a Shower", "shower" }, { "Use the Bathroom", "toilet" }, { "Sleep", "sleep" },
-		{ "<radio_text>", "radio" }, { "Start a New Life", "newlife" } };
-	for( size_t i = 0; i < sizeof( items ) / sizeof( items[0] ); ++i )
-	{
-		char l[400];
-		const bool arg = items[i].texte[0] == '<';
-		snprintf( l, sizeof( l ),
-			"theme_menu_add_item text = %s%s%s id = desktop_life_item%d highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = menu_select pad_choose_params = { menu_select_script = desktop_life_do_%s }\n",
-			arg ? "" : "\"", items[i].texte, arg ? "" : "\"", (int)i, items[i].action );
-		t += l;
-	}
-	t +=
-		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
-		"endscript\n";
-	for( size_t i = 0; i < sizeof( items ) / sizeof( items[0] ); ++i )
-	{
-		char l[200];
-		snprintf( l, sizeof( l ), "script desktop_life_do_%s\nSpawnScript desktop_life_act params = { a = %s }\nendscript\n",
-			items[i].action, items[i].action );
-		t += l;
-	}
-	return t;
-}
-
-static const char *s_vie_item_pause =
-	"if DesktopLifeOn\n"
-	"make_sprite_menu_item text = \"Skater Life\" id = menu_desktop_life pad_choose_script = desktop_life_menu\n"
-	"make_text_sprite texture = <view_icon> parent = menu_desktop_life\n"
-	"endif\n"
+// Pause menu: the "Extras" item.
+static const char *s_item_pause =
 	"if NOT IsObserving\n"
 	"make_sprite_menu_item text = \"Extras\" id = menu_desktop_extras pad_choose_script = desktop_extras_menu\n"
 	"make_text_sprite texture = <view_icon> parent = menu_desktop_extras\n"
 	"endif\n";
 
 // Pause > Extras: the toggles (desktop_extras.cpp), and what they put on
-// screen (desktop_life_glue.cpp drives it).
+// screen (desktop_extras_glue.cpp and desktop_modes_glue.cpp drive it).
 static std::string ach_items( void )
 {
 	std::string t;
@@ -1449,12 +1206,10 @@ static std::string scripts_extras( void )
 		"theme_menu_add_item text = \"Photo Mode\" id = desktop_extras_photo highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_photo_go\n"
 		"theme_menu_add_item text = \"Achievements\" id = desktop_extras_ach highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_ach_menu\n"
 		"if GameModeEquals is_singlesession\n"
-		"if NOT DesktopLifeOn\n"
 		"if DesktopClassicOn\n"
 		"theme_menu_add_item text = \"End Classic Run\" id = desktop_extras_classic highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_classic_stop\n"
 		"else\n"
 		"theme_menu_add_item text = \"Classic Run (2:00)\" id = desktop_extras_classic highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_classic_go\n"
-		"endif\n"
 		"endif\n"
 		"endif\n"
 		"theme_menu_add_item text = <text0> id = desktop_extras_item0 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 0 }\n"
@@ -1578,6 +1333,9 @@ static std::string scripts_extras( void )
 		"DestroyScreenElement id = desktop_readout\n"
 		"endif\n"
 		"endscript\n"
+		"script desktop_snd\n"
+		"PlaySound <s>\n"
+		"endscript\n"
 		"script desktop_extras_flip\n"
 		"DesktopExtraToggle i = <i>\n"
 		"desktop_extras_menu\n"
@@ -1635,7 +1393,7 @@ static std::string scripts_extras( void )
 
 // Pause menu (create_pause_menu, gamemenu.qb): the item before Change Level,
 // and the mode's scripts at the end of the file.
-static void patch_vie_pause( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
 {
 	const uint32_t n = crc( "create_pause_menu" ), item = crc( "make_sprite_menu_item" ), niveau = crc( "menu_level_select" ), id = crc( "id" );
 	for( size_t k = 0; k + 1 < j.size(); ++k )
@@ -1647,33 +1405,11 @@ static void patch_vie_pause( const unsigned char *qb, const std::vector<Jeton> &
 		if( b + 2 >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) { VLOG( "MUS", "pause menu: Change Level not found" ); return; }
 		while( b > k && !est_nom( qb, j[b], item )) --b;
 		if( b == k ) return;
-		Ecrit w1; compile_q( w1, s_vie_item_pause );
+		Ecrit w1; compile_q( w1, s_item_pause );
 		m.push_back( Modif{ j[b].pos, 0, w1.o } );
-		Ecrit w2; w2.eol(); compile_q( w2, ( scripts_vie() + scripts_extras()).c_str());
+		Ecrit w2; w2.eol(); compile_q( w2, scripts_extras().c_str());
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
-		VLOG( "MUS", "pause menu: Skater Life added" );
-		return;
-	}
-}
-
-// Main menu: the item before Create / Play Goals.
-static void patch_vie_main( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
-{
-	const uint32_t n = crc( "create_main_menu" ), item = crc( "make_main_menu_item" ), cag = crc( "menu_creategoals" ), id = crc( "id" );
-	for( size_t k = 0; k + 1 < j.size(); ++k )
-	{
-		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
-		size_t b = k + 2;
-		for( ; b + 2 < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
-			if( est_nom( qb, j[b], id ) && qb[j[b + 1].pos] == T_EGAL && est_nom( qb, j[b + 2], cag )) break;
-		if( b + 2 >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) { VLOG( "MUS", "main menu: Create / Play Goals not found" ); return; }
-		while( b > k && !est_nom( qb, j[b], item )) --b;
-		if( b == k ) return;
-		Ecrit w0; compile_q( w0, s_vie_main );
-		m.push_back( Modif{ j[k].pos, 0, w0.o } );
-		Ecrit w1; compile_q( w1, s_vie_item_main );
-		m.push_back( Modif{ j[b].pos, 0, w1.o } );
-		VLOG( "MUS", "main menu: Skater Life added" );
+		VLOG( "MUS", "pause menu: Extras added" );
 		return;
 	}
 }
@@ -2199,9 +1935,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_niveaux( qb, j, m );
 	patch_air_shuffle( qb, j, m );
 	patch_quitter( qb, j, m );
-	patch_vie_main( qb, j, m );
-	patch_vie_pause( qb, j, m );
-	patch_debut( qb, j, m, "create_main_menu", "DesktopLifeStop\n" );
+	patch_pause_extras( qb, j, m );
 	patch_histoire( qb, j, m );
 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
 	patch_debut( qb, j, m, "create_career_options_menu", "DesktopZeroArm off\n" );

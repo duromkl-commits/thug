@@ -3,7 +3,7 @@
 **                                                                          **
 **  Input display, combo stats and chaos mode, on or off, kept in           **
 **  thug_extras.txt next to the exe. The features themselves live in        **
-**  Code/Sk/Modules/Skate/desktop_life_glue.cpp.                            **
+**  Code/Sk/Modules/Skate/desktop_extras_glue.cpp.                          **
 *****************************************************************************/
 
 #include <SDL.h>
