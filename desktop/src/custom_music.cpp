@@ -1649,6 +1649,108 @@ static const PietonJouable s_pietons[] = {
 	{ "PedPro_Vallely", "Ped Vallely", 0, "ped_body = { desc_id = PedPro_Vallely } ped_board = { desc_id = Skateboard }" },
 };
 
+// GTA San Andreas peds (desktop, Marcus's own models): converted from his
+// XNALara .xps rips by desktop/tools/xps_to_thug.py into
+// data/models/gta/<name>/. Each one, when its files are there, becomes a
+// ped_body part (cas_ped_m.qb) and a pro skater after THUG's peds. GTA's
+// women are converted at a man's height and shrunk by female_scale_info.
+struct PersoGTA { const char *nom, *affiche; int femme; };
+static const PersoGTA s_gta[] = {
+	{ "andre", "Andre", 0 },
+	{ "male01", "GTA MALE01", 0 },
+	{ "bfori", "GTA BFORI", 1 },
+	{ "bfost", "GTA BFOST", 1 },
+	{ "vbfycrp", "GTA VBFYCRP", 1 },
+	{ "bfyri", "GTA BFYRI", 1 },
+	{ "bfyst", "GTA BFYST", 1 },
+	{ "bmori", "GTA BMORI", 0 },
+	{ "bmost", "GTA BMOST", 0 },
+	{ "bmyap", "GTA BMYAP", 0 },
+	{ "bmybu", "GTA BMYBU", 0 },
+	{ "bmybe", "GTA BMYBE", 0 },
+	{ "bmydj", "GTA BMYDJ", 0 },
+	{ "bmyri", "GTA BMYRI", 0 },
+	{ "bmycr", "GTA BMYCR", 0 },
+	{ "bmyst", "GTA BMYST", 0 },
+	{ "wmybmx", "GTA WMYBMX", 0 },
+	{ "wbdyg1", "GTA WBDYG1", 0 },
+	{ "wbdyg2", "GTA WBDYG2", 0 },
+	{ "wmybp", "GTA WMYBP", 0 },
+	{ "wmycon", "GTA WMYCON", 0 },
+	{ "bmydrug", "GTA BMYDRUG", 0 },
+	{ "wmydrug", "GTA WMYDRUG", 0 },
+	{ "hmydrug", "GTA HMYDRUG", 0 },
+	{ "dwfolc", "GTA DWFOLC", 1 },
+	{ "dwmolc1", "GTA DWMOLC1", 0 },
+	{ "dwmolc2", "GTA DWMOLC2", 0 },
+	{ "dwmylc1", "GTA DWMYLC1", 0 },
+	{ "hmogar", "GTA HMOGAR", 0 },
+	{ "wmygol1", "GTA WMYGOL1", 0 },
+	{ "wmygol2", "GTA WMYGOL2", 0 },
+	{ "hfori", "GTA HFORI", 1 },
+	{ "hfost", "GTA HFOST", 1 },
+	{ "hfyri", "GTA HFYRI", 1 },
+	{ "hfyst", "GTA HFYST", 1 },
+	{ "hmori", "GTA HMORI", 0 },
+	{ "hmost", "GTA HMOST", 0 },
+	{ "hmybe", "GTA HMYBE", 0 },
+	{ "hmyri", "GTA HMYRI", 0 },
+	{ "hmycr", "GTA HMYCR", 0 },
+	{ "hmyst", "GTA HMYST", 0 },
+	{ "omokung", "GTA OMOKUNG", 0 },
+	{ "wmymech", "GTA WMYMECH", 0 },
+};
+enum { NB_GTA = sizeof( s_gta ) / sizeof( s_gta[0] ) };
+
+static bool gta_installe( const PersoGTA &g )
+{
+	char vita[256], chemin[1024];
+	snprintf( vita, sizeof( vita ), "ux0:data/thug/Data/models/gta/%s/%s.skin.xbx", g.nom, g.nom );
+	desktop_host_path( vita, chemin, sizeof( chemin ));
+	FILE *f = fopen( chemin, "rb" );
+	if( f ) fclose( f );
+	return f != NULL;
+}
+
+// The installed ones, looked up once.
+static const std::vector<int> &gta_presents( void )
+{
+	static std::vector<int> v;
+	static bool vu = false;
+	if( !vu )
+	{
+		vu = true;
+		for( int i = 0; i < NB_GTA; ++i ) if( gta_installe( s_gta[i] )) v.push_back( i );
+		VLOG( "MUS", "GTA skaters: %d of %d installed", (int)v.size(), (int)NB_GTA );
+	}
+	return v;
+}
+
+// ped_body = [ ... ] (cas_ped_m.qb): the GTA bodies go first.
+static void patch_gta_corps( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "ped_body" );
+	for( size_t k = 0; k + 2 < j.size(); ++k )
+	{
+		if( !est_nom( qb, j[k], n ) || qb[j[k + 1].pos] != T_EGAL ) continue;
+		size_t a = sans_eol( qb, j, k + 2 );
+		if( a >= j.size() || qb[j[a].pos] != T_TAB ) continue;
+		const std::vector<int> &g = gta_presents();
+		if( g.empty()) return;
+		Ecrit w;
+		for( size_t i = 0; i < g.size(); ++i )
+		{
+			char t[256];
+			snprintf( t, sizeof( t ), "{ desc_id = desktop_gta_%s mesh = \"models/gta/%s/%s.skin\" no_random }\n",
+			          s_gta[g[i]].nom, s_gta[g[i]].nom, s_gta[g[i]].nom );
+			compile_q( w, t );
+		}
+		m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
+		VLOG( "MUS", "ped_body: %d GTA bodies added", (int)g.size());
+		return;
+	}
+}
+
 static std::string profil_pieton( int i, const PietonJouable &p )
 {
 	char t[2048];
@@ -1689,21 +1791,36 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 		}
 		if( a >= j.size() || qb[j[a].pos] != T_FTAB ) return;
 		const int nb = (int)( sizeof( s_pietons ) / sizeof( s_pietons[0] ));
+		// GTA peds after THUG's, numbered on from them.
+		const std::vector<int> &g = gta_presents();
+		std::vector<std::string> looks;
+		std::vector<PietonJouable> tous( s_pietons, s_pietons + nb );
+		for( int i = 0; i < nb; ++i ) looks.push_back( s_pietons[i].apparence );
+		for( size_t i = 0; i < g.size(); ++i )
+		{
+			const PersoGTA &p = s_gta[g[i]];
+			PietonJouable pj = { p.nom, p.affiche, p.femme, "" };
+			tous.push_back( pj );
+			char t[256];
+			snprintf( t, sizeof( t ), "ped_body = { desc_id = desktop_gta_%s } ped_board = { desc_id = Skateboard }%s",
+			          p.nom, p.femme ? " body_shape = female_scale_info" : "" );
+			looks.push_back( t );
+		}
 		Ecrit w1;
-		for( int i = 0; i < nb; ++i )
-			compile_q( w1, profil_pieton( i, s_pietons[i] ).c_str());
+		for( size_t i = 0; i < tous.size(); ++i )
+			compile_q( w1, profil_pieton( (int)i, tous[i] ).c_str());
 		m.push_back( Modif{ j[a].pos, 0, w1.o } );
 		Ecrit w2; w2.eol();
-		for( int i = 0; i < nb; ++i )
+		for( size_t i = 0; i < looks.size(); ++i )
 		{
 			char t[1536];
 			// Not named like the profile: the select screen uses the profile name as a
 			// screen element id, and a global struct of that name would replace it.
-			snprintf( t, sizeof( t ), "desktop_pedlook_%d = { %s }\n", i, s_pietons[i].apparence );
+			snprintf( t, sizeof( t ), "desktop_pedlook_%d = { %s }\n", (int)i, looks[i].c_str());
 			compile_q( w2, t );
 		}
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
-		VLOG( "MUS", "skaters: %d peds added", nb );
+		VLOG( "MUS", "skaters: %d peds + %d GTA added", nb, (int)g.size());
 		return;
 	}
 }
@@ -1976,6 +2093,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		"DesktopZeroArm off\n"
 		"endif\n" );
 	patch_pietons( qb, j, m );
+	patch_gta_corps( qb, j, m );
 	patch_xbox( qb, j, m );
 	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );
 	// Pro Skater 4 career (desktop_th4_glue.cpp): the level select lists only
