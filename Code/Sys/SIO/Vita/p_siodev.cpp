@@ -2793,95 +2793,11 @@ bool Device::IsPluggedIn( void )
 
 // --- vibration ----------------------------------------------------------------
 //
-// Desktop: the two Xbox motors (0 = left, big; 1 = right, small) go to the
-// pad's rumble through SDL (DualSense, DualShock 4, Xbox pads), following
-// XBox/p_siodev.cpp: disabled flag, pause saves and restores the strengths.
-// The Vita itself has no motors.
+// No motors on the Vita; on desktop rumble was removed (Marcus, 2026-11-07).
 
 void Device::ActivatePressureSensitiveMode( void )						{}
 void Device::DeactivatePressureSensitiveMode( void )					{}
 
-#ifdef THUG_DESKTOP
-extern "C" void desktop_pad_rumble( float low, float high );
-
-static void envoie_vibration( const unsigned char *v )
-{
-	desktop_pad_rumble( v[0] / 255.0f, v[1] / 255.0f );
-}
-
-void Device::ActivateActuator( int act_num, int percent )
-{
-	if( m_data.m_actuators_disabled || act_num < 0 || act_num > 1 )
-		return;
-	if( percent < 0 ) percent = 0;
-	if( percent > 100 ) percent = 100;
-	m_data.m_actuator_direct[act_num] = (unsigned char)( percent * 255 / 100 );
-	if( !m_data.m_paused_ref.InUse())
-		envoie_vibration( m_data.m_actuator_direct );
-}
-
-void Device::Pause( void )
-{
-	if( !m_data.m_paused_ref.InUse())
-	{
-		for( int i = 0; i < 2; ++i )
-		{
-			m_data.m_actuator_old_direct[i] = m_data.m_actuator_direct[i];
-			m_data.m_actuator_direct[i] = 0;
-		}
-		desktop_pad_rumble( 0.0f, 0.0f );
-	}
-	m_data.m_paused_ref.Acquire();
-}
-
-void Device::UnPause( void )
-{
-	if( !m_data.m_paused_ref.InUse())
-		return;
-	m_data.m_paused_ref.Release();
-	if( !m_data.m_paused_ref.InUse())
-	{
-		for( int i = 0; i < 2; ++i )
-			m_data.m_actuator_direct[i] = m_data.m_actuator_old_direct[i];
-		envoie_vibration( m_data.m_actuator_direct );
-	}
-}
-
-void Device::DisableActuators( void )
-{
-	if( m_data.m_actuators_disabled )
-		return;
-	m_data.m_actuator_direct[0] = m_data.m_actuator_direct[1] = 0;
-	desktop_pad_rumble( 0.0f, 0.0f );
-	m_data.m_actuators_disabled = true;
-}
-
-void Device::EnableActuators( void )
-{
-	m_data.m_actuators_disabled = false;
-}
-
-void Device::ResetActuators( void )
-{
-	if( m_data.m_actuators_disabled )
-	{
-		EnableActuators();
-		DisableActuators();
-	}
-	else
-	{
-		DisableActuators();
-		EnableActuators();
-	}
-}
-
-void Device::StopAllVibrationIncludingSaved( void )
-{
-	for( int i = 0; i < 2; ++i )
-		m_data.m_actuator_direct[i] = m_data.m_actuator_old_direct[i] = 0;
-	desktop_pad_rumble( 0.0f, 0.0f );
-}
-#else
 void Device::ActivateActuator( int act_num, int percent )				{}
 void Device::Pause( void )												{}
 void Device::UnPause( void )											{}
@@ -2889,6 +2805,5 @@ void Device::DisableActuators( void )									{}
 void Device::EnableActuators( void )									{}
 void Device::ResetActuators( void )										{}
 void Device::StopAllVibrationIncludingSaved( void )						{}
-#endif
 
 } // namespace SIO
