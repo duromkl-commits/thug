@@ -115,7 +115,13 @@ void AllocatePools()
 	// 4000 is the max number of strings.
 	//AllocatePermanentStringHeap(60500,4000);
 	Mem::PushMemProfile("AllocatePermanentStringHeap");
+#ifdef THUG_DESKTOP
+	// Desktop: custom_music songs (3 strings each) and the extra skaters'
+	// profiles go here too; 160000 overflowed with Marcus's ~330 songs.
+	AllocatePermanentStringHeap(1000000,40000);
+#else
 	AllocatePermanentStringHeap(160000,7000);	
+#endif
 	Mem::PopMemProfile();
 	
 	Mem::Manager::sHandle().PopContext();
