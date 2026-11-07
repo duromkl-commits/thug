@@ -2572,7 +2572,10 @@ static void rejouer_poses( void )
 	// nom, cumules sur 5 s. Dit QUI clignote, rejeu actif ou non.
 	if( !pause )
 	{
-		static const char *s_nom[32];
+		// Copies, not pointers: a geom's name dies with its model, and a
+		// model freed within the 5 s left a dangling pointer for snprintf
+		// (crash on the desktop build, front end, 2026-10-09).
+		static char s_nom[32][48];
 		static int s_trous[32];
 		static int s_nn = 0;
 		static SceUInt64 s_tt = 0;
@@ -2582,13 +2585,15 @@ static void rejouer_poses( void )
 			if( !nm )
 				continue;
 			int k = 0;
-			while(( k < s_nn ) && ( s_nom[k] != nm ))
+			while(( k < s_nn ) && strncmp( s_nom[k], nm, sizeof( s_nom[k] ) - 1 ))
 				++k;
 			if( k == s_nn )
 			{
 				if( s_nn == 32 )
 					continue;
-				s_nom[s_nn] = nm; s_trous[s_nn] = 0; ++s_nn;
+				strncpy( s_nom[s_nn], nm, sizeof( s_nom[s_nn] ) - 1 );
+				s_nom[s_nn][sizeof( s_nom[s_nn] ) - 1] = 0;
+				s_trous[s_nn] = 0; ++s_nn;
 			}
 			++s_trous[k];
 		}
@@ -2859,6 +2864,11 @@ static void lumieres_rigides( CVitaModelLights *p_lights, float lum[21] )
 // Televerse seulement si les lumieres ont bouge depuis le dernier calcul.
 static SceUInt64 g_pic_max = 0; static int g_pic_idx = -1;
 static SceUInt64 g_pic_calc = 0, g_pic_tele = 0; static int g_pic_n = 0, g_pic_v = 0;	// pics de dessin (#69)
+#ifdef THUG_DESKTOP
+#define RELIGHT_BUDGET 100000
+#else
+#define RELIGHT_BUDGET 60
+#endif
 static int s_budget_image = 0;	// pieces reeclairees dans l'image (#67)
 void VitaBudgetEclairageImage( void ) { s_budget_image = 0; }
 
@@ -2916,7 +2926,11 @@ static void eclairer_piece( SGpuMesh *p, const float lum[21], bool texture,
 		// Budget par image (#67) : au-dela de 60 pieces deja reeclairees dans
 		// l'image, une piece DEJA eclairee garde ses couleurs (une image de
 		// retard au plus) -- Manhattan, 30 voitures qui tournent : 240 ms/s.
+#ifdef THUG_DESKTOP
+		if( s_budget_image >= 100000 )	// desktop: relight every moving piece every frame
+#else
 		if( s_budget_image >= 60 )
+#endif
 			return;
 	}
 	++s_budget_image;
@@ -3036,7 +3050,7 @@ void CVitaMesh::Draw( const float *p_rgba,
 				if( e > ecart )
 					ecart = e;
 			}
-			if(( ecart <= 0.02f ) || ( recent && ( ecart <= 0.15f )) || ( s_budget_image >= 60 ))
+			if(( ecart <= 0.02f ) || ( recent && ( ecart <= 0.15f )) || ( s_budget_image >= RELIGHT_BUDGET ))
 				s_lum_decision = 0;
 			// Diagnostic #78 : quel terme de l'eclairage fait reeclairer ?
 			// 0-2 ambiante, 3-8 lumiere 0 (dir, couleur), 9-14 lumiere 1,

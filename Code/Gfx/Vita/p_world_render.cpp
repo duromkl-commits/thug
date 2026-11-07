@@ -35,7 +35,9 @@ extern "C" void vita_memspy_niveau( void );
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
+#ifndef THUG_DESKTOP
 #include <arm_neon.h>	// teinte de scene (#15)
+#endif
 
 #include "vita_log.h"
 #include "p_NxModel.h"
@@ -2549,6 +2551,12 @@ static void mat_mul( float *out, const float *a, const float *b )
 // "pll X" : plan lointain (#69). XBox : 32000 (NX/render.cpp:1788) ; Vita : 100000.
 float g_vita_plan_loin = 100000.0f;
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_ssao_projection( float f, float aspect, float znear, float zfar );
+extern "C" void desktop_ssao( void );
+extern "C" void desktop_post( void );
+#endif
+
 static void set_projection( float fov_deg, float aspect, float znear, float zfar )
 {
 	float f = 1.0f / tanf( fov_deg * 0.5f * 3.14159265f / 180.0f );
@@ -2563,6 +2571,9 @@ static void set_projection( float fov_deg, float aspect, float znear, float zfar
 
 	glMatrixMode( GL_PROJECTION );
 	glLoadMatrixf( m );
+#ifdef THUG_DESKTOP
+	desktop_ssao_projection( f, aspect, znear, zfar );
+#endif
 
 	// Conservee pour le calcul du tronc de vision : la relire depuis GL
 	// couterait une synchronisation, et on la connait deja.
@@ -4303,7 +4314,11 @@ static bool s_vcw_ecrit = false;		// des couleurs animees sont en place
 
 static inline unsigned char *vcw_donnees( GLuint nom )
 {
+#ifdef THUG_DESKTOP
+	return desktop_buffer_data( nom );
+#else
 	return nom ? *(unsigned char * const *)nom : NULL;
+#endif
 }
 
 // --- Sommets de rendu des secteurs (#5), voir p_world_render.h --------------
@@ -4937,6 +4952,7 @@ static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
 	const unsigned int f7r = (unsigned int)( f[0] * 128.0f + 0.5f );
 	const unsigned int f7g = (unsigned int)( f[1] * 128.0f + 0.5f );
 	const unsigned int f7b = (unsigned int)( f[2] * 128.0f + 0.5f );
+#ifndef THUG_DESKTOP	// NEON (ARM) ; le PC prend la boucle scalaire
 	if( g_vita_teinte_neon && ( f7r <= 255 ) && ( f7g <= 255 ) && ( f7b <= 255 ))
 	{
 		// Tete scalaire jusqu'a une adresse de destination alignee sur 16.
@@ -4960,6 +4976,7 @@ static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
 			vst1q_u8( (uint8_t *)( w + v ), vcombine_u8( lo, hi ));
 		}
 	}
+#endif
 	for( ; v < nombre; ++v )
 		w[v] = teinte_sommet( o + 4 * v, fr, fg, fb );
 }
@@ -6838,6 +6855,13 @@ void RenderWorld( void )
 	{
 		VitaMondeEtape( MW_OMBRE );
 		ombre_reception( true, RANG_TRANSP, RANG_TRI );
+#ifdef THUG_DESKTOP
+		// Ambient occlusion, then bloom and haze, once the whole world is
+		// down: roads, grass and decals are blended "opaques" drawn in the
+		// translucent passes, and after the opaque pass they missed it.
+		desktop_ssao();
+		desktop_post();
+#endif
 	}
 	if( pass == RANG_CIEL )
 	{

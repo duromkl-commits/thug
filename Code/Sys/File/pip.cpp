@@ -1107,6 +1107,11 @@ void * LoadAlloc(const char *p_fileName, int *p_filesize, void *p_dest, int maxS
 			if (!p_file)
 			{
 				Dbg_MsgAssert(0,("Could not open file '%s'",p_fileName));
+#ifdef THUG_DESKTOP
+				// Assert compiled out: a missing file read garbage from a NULL handle.
+				if (p_filesize) *p_filesize = 0;
+				return NULL;
+#endif
 			}
 
 			file_size=File::GetFileSize(p_file);

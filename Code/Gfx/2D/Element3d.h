@@ -112,6 +112,10 @@ public:
 	virtual		~CElement3d();
 
 	void		SetProperties(Script::CStruct *p_props);
+#ifdef THUG_DESKTOP
+	// Skater Life pie menu: the head looks at the highlighted option.
+	void		DesktopSetAngles(float x, float y, float z) { m_angle_x = x; m_angle_y = y; m_angle_z = z; }
+#endif
 	void		SetMorph(Script::CStruct *pProps);
 
 	void		UnloadModels();

@@ -53,6 +53,9 @@ uint32 g_hack_address = 0;
 extern char * g_p_buffer;
 #endif		// __PLAT_NGC__
 
+#ifdef THUG_DESKTOP
+void desktop_th4_leave( void );	// desktop_th4_glue.cpp: Pro Skater 4 career set aside first
+#endif
 namespace CFuncs
 {
 
@@ -1156,6 +1159,9 @@ static void s_read_global_info(CStruct *p_globalInfo, CScript *p_script)
 	
 static void s_read_story_info(CStruct *p_storyInfo)
 {
+#ifdef THUG_DESKTOP
+	::desktop_th4_leave();
+#endif
 	// Load in the goal manager parameters.
 	CStruct *p_loaded_goal_manager_params=NULL;
 	p_storyInfo->GetStructure(CRCD(0xac7c2b62,"GoalManagerParams"),&p_loaded_goal_manager_params);
@@ -3025,6 +3031,9 @@ static uint32 sGetFixedFileSize(uint32 fileType)
 	{
 		case 0xb010f357: // OptionsAndPros
 			fixed_size=Script::GetInteger(CRCD(0xe7f51ffe,"SaveSize_OptionsAndPros"),Script::ASSERT);
+#ifdef THUG_DESKTOP
+			fixed_size+=65536;	// career and records arrays sized for 40 levels
+#endif
 			break;
 		case 0xffc529f4: // Cas
 			Dbg_MsgAssert(0,("CAS mem card files are no longer supported! Use OptionsAndPros file type instead"));
@@ -3240,6 +3249,13 @@ bool ScriptSaveToMemoryCard(Script::CStruct *pParams, Script::CScript *pScript)
 	}	
 	#endif
 
+#ifdef THUG_DESKTOP
+	if (required_size > fixed_size)
+	{
+		printf("save too big: %d > %d\n",required_size,fixed_size);
+		goto ERRORGOTO;
+	}
+#endif
 	pad_size=fixed_size-required_size;
 	if (pad_size && Config::GetHardware() != Config::HARDWARE_NGC)
 	{

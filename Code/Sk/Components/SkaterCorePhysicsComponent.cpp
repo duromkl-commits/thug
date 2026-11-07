@@ -8182,6 +8182,13 @@ void CSkaterCorePhysicsComponent::do_jump ( Script::CStruct *pParams )
 	
 	// If any speed param is specified, then use that instead. Need by Zac for when small skater is doing scripted jumps in the front end.
 	pParams->GetFloat(CRCD(0xf0d90109, "speed"), &jump_speed);
+#ifdef THUG_DESKTOP
+	// Air shuffle (desktop): the pop scales with the ollie stat, 290 at 0 up to 440 at 10
+	if (pParams->ContainsFlag(CRCD(0x128deca9, "desktop_air_shuffle")))
+	{
+		jump_speed = 290.0f + 15.0f * GetSkater()->GetStat(Obj::CSkater::STATS_OLLIE);
+	}
+#endif
 
 	SetFlagFalse(TENSE);
 

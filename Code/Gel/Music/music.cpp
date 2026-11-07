@@ -40,6 +40,9 @@
 #include <gel/scripting/checksum.h>
 
 #include <gel/soundfx/soundfx.h>
+#ifdef THUG_DESKTOP
+extern "C" void vita_log_printf( const char *sys, const char *fmt, ... );
+#endif
 #include <gel/music/music.h>
 #include <gel/components/streamcomponent.h>
 
@@ -67,6 +70,9 @@
 #include <sys/config/config.h>
 #include <sys/replay/replay.h>
 #include <sys/file/asyncfilesys.h>
+#ifdef THUG_DESKTOP
+#include "custom_music.h"
+#endif
 
 #define TEST_FROM_CD 0
 #define WAIT_AFTER_STOP_STREAM		0		// Set to 1 if we need to wait for stream to clear after stopping a stream
@@ -143,7 +149,13 @@ static bool 			gMusicStreamWaitingToStart;	// true if we are still waiting for t
 #endif // WAIT_AFTER_STOP_STREAM
 
 // Limit is actually 500 ...
-#define			MAX_USER_SONGS					600
+#define			MAX_USER_SONGS					( MAX_NUM_TRACKS > 600 ? MAX_NUM_TRACKS : 600 )
+
+// Track on/off and played bits: one per track, 64 per word.
+static inline bool masque_lit( const uint64 *m, int i )	{ return ( m[ i >> 6 ] >> ( i & 63 ) ) & 1; }
+static inline void masque_met( uint64 *m, int i )		{ m[ i >> 6 ] |= ((uint64)1) << ( i & 63 ); }
+static inline void masque_ote( uint64 *m, int i )		{ m[ i >> 6 ] &= ~( ((uint64)1) << ( i & 63 ) ); }
+static inline void masque_vide( uint64 *m )				{ for ( int k = 0; k < TRACK_MASK_WORDS; k++ ) m[ k ] = 0; }
 
 #ifdef __PLAT_XBOX__
 static bool		s_xbox_play_user_soundtracks	= false;
@@ -216,6 +228,14 @@ void StopMusic( void )
 	// so resetting the counter keeps a new song from playing right away.
 	sCounter = 1;
 	gMusicStreamType = MUSIC_STREAM_TYPE_NONE;		// In case we were in this mode
+#ifdef THUG_DESKTOP
+	{
+		// Who stopped the song: a track that ends early shows up here.
+		Script::CScript *p_script = Script::GetCurrentScript();
+		vita_log_printf( "PCM", "music stopped (script %s)",
+		                 p_script ? Script::FindChecksumName( p_script->mScriptChecksum ) : "none" );
+	}
+#endif
 	PCMAudio_StopMusic( true );
 }
 
@@ -1168,10 +1188,8 @@ void Init( void )
 	for ( i = 0; i < NUM_TRACKLISTS; i++ )
 	{
 		gTrackLists[ i ].numTracks = 0;
-		gTrackLists[ i ].trackForbidden0 = 0;
-        gTrackLists[ i ].trackForbidden1 = 0;
-		gTrackLists[ i ].trackPlayed0 = 0;
-        gTrackLists[ i ].trackPlayed1 = 0;
+		masque_vide( gTrackLists[ i ].trackForbidden );
+		masque_vide( gTrackLists[ i ].trackPlayed );
 		// no tracks, so all tracks forbidden, right?
 		gTrackLists[ i ].allTracksForbidden = true;
 	}
@@ -1507,6 +1525,15 @@ void AddTrackToPlaylist( const char *trackName, int whichList, const char *track
 		Dbg_Message("Could not find music track '%s'",pTrackName);
 		return;
 	}	
+#ifdef THUG_DESKTOP
+	if ( whichList == TRACKLIST_PERM && custom_music_playlist_known() )
+	{
+		if ( custom_music_playlist_off( PermTrackTitle[ pTrackList->numTracks ].trackTitle ) )
+			masque_met( pTrackList->trackForbidden, pTrackList->numTracks );
+		else
+			masque_ote( pTrackList->trackForbidden, pTrackList->numTracks );
+	}
+#endif
 	pTrackList->allTracksForbidden = false;
     pTrackList->numTracks++;
 }
@@ -1520,10 +1547,8 @@ void ClearPlaylist( int whichList )
 	TrackList *pTrackList = &gTrackLists[ whichList ];
 	pTrackList->numTracks = 0;
 	pTrackList->allTracksForbidden = true; // if there are no tracks, all are forbidden, no?
-	pTrackList->trackForbidden0 = 0;
-    pTrackList->trackForbidden1 = 0;
-	pTrackList->trackPlayed0 = 0;
-    pTrackList->trackPlayed1 = 0;
+	masque_vide( pTrackList->trackForbidden );
+	masque_vide( pTrackList->trackPlayed );
 	
 	gNumStreams = 0;
 }
@@ -1566,8 +1591,7 @@ void SetRandomMode( int randomModeOn )
 	
 	Dbg_MsgAssert(gCurrentTrackList>=0 && gCurrentTrackList<NUM_TRACKLISTS,("Bad gCurrentTrackList"));
 	TrackList *pTrackList = &gTrackLists[ gCurrentTrackList ];
-	pTrackList->trackPlayed0=0;
-    pTrackList->trackPlayed1=0;
+	masque_vide( pTrackList->trackPlayed );
 }
 
 int GetRandomMode( void )
@@ -1684,25 +1708,12 @@ void RandomTrackUpdate( void )
             num_random_songs=0;
             for (int i=0; i<pTrackList->numTracks; ++i)
             {
-                if ( i < 64)
+                if ( !masque_lit( pTrackList->trackForbidden, i ) )
                 {
-                    if ( !( pTrackList->trackForbidden0 & ( ((uint64)1) << i ) ) )
-                    {
-                        // Intialize order
-                        sp_random_song_order[num_random_songs]=i;
-                        // add one
-                        num_random_songs++;
-                    }
-                }
-                else
-                {
-                    if ( !( pTrackList->trackForbidden1 & ( ((uint64)1) << (i-64) ) ) )
-                    {
-                        // Intialize order
-                        sp_random_song_order[num_random_songs]=i;
-                        // add one
-                        num_random_songs++;
-                    }
+                    // Intialize order
+                    sp_random_song_order[num_random_songs]=i;
+                    // add one
+                    num_random_songs++;
                 }
             }
 
@@ -1752,8 +1763,7 @@ void RandomTrackUpdate( void )
             // reset index
             random_song_index=0;
             shuffle_random_songs=false;
-            pTrackList->trackPlayed0 = 0;
-            pTrackList->trackPlayed1 = 0;
+            masque_vide( pTrackList->trackPlayed );
         }
         else
         {
@@ -1769,28 +1779,9 @@ void RandomTrackUpdate( void )
 			int t = ( sp_random_song_order[random_song_index] );
             //printf("index = %i song = %i\n", random_song_index, sp_random_song_order[random_song_index] );
 
-            if ( ( !( pTrackList->trackForbidden0 & ( ((uint64)1) << t ) ) && ( t < 64 ) && 
-                   !( pTrackList->trackPlayed0 & ( ((uint64)1) << t ) ) ) )
+            if ( !masque_lit( pTrackList->trackForbidden, t ) && !masque_lit( pTrackList->trackPlayed, t ) )
 			{
-				pTrackList->trackPlayed0 |= ( ((uint64)1) << t );
-				PlayTrack( pTrackList->trackInfo[ t ].trackName );
-                current_music_track=t;
-				Dbg_Message( "Playing track %s %i %i", pTrackList->trackInfo[ t ].trackName, t, current_music_track );
-
-                // update track text on screen
-                Script::CStruct *pParams = new Script::CStruct;
-                pParams->AddInteger(CRCD(0x8d02705d,"current_track"),current_music_track);
-                Script::RunScript( "spawn_update_music_track_text", pParams );
-                delete pParams;
-
-				return;
-			}
-
-            if ( ( !( pTrackList->trackForbidden1 & ( ((uint64)1) << (t-64) ) ) && ( t >= 64 ) && 
-                   !( pTrackList->trackPlayed1 & ( ((uint64)1) << (t-64) ) ) )
-               )
-			{
-				pTrackList->trackPlayed1 |= ( ((uint64)1) << (t-64) );
+				masque_met( pTrackList->trackPlayed, t );
 				PlayTrack( pTrackList->trackInfo[ t ].trackName );
                 current_music_track=t;
 				Dbg_Message( "Playing track %s %i %i", pTrackList->trackInfo[ t ].trackName, t, current_music_track );
@@ -1854,27 +1845,9 @@ void TrackUpdate( void )
 		int i;
 		for ( i = 0; i < pTrackList->numTracks; i++ )
 		{
-            if ( ( !( pTrackList->trackForbidden0 & ( ((uint64)1) << i ) ) && ( i < 64 ) && 
-                   !( pTrackList->trackPlayed0 & ( ((uint64)1) << i ) ) ) )
+            if ( !masque_lit( pTrackList->trackForbidden, i ) && !masque_lit( pTrackList->trackPlayed, i ) )
 			{
-				pTrackList->trackPlayed0 |= ( ((uint64)1) << i );
-				PlayTrack( pTrackList->trackInfo[ i ].trackName );
-                current_music_track=i;
-				Dbg_Message( "Playing track %s %i %i", pTrackList->trackInfo[ i ].trackName, i, current_music_track );
-
-                // update track text on screen
-                Script::CStruct *pParams = new Script::CStruct;
-                pParams->AddInteger(CRCD(0x8d02705d,"current_track"),current_music_track);
-                Script::RunScript( "spawn_update_music_track_text", pParams );
-                delete pParams;
-
-				return;
-			}
-
-            if ( ( !( pTrackList->trackForbidden1 & ( ((uint64)1) << (i-64) ) ) && ( i >= 64 ) && 
-                   !( pTrackList->trackPlayed1 & ( ((uint64)1) << (i-64) ) ) ) )
-			{
-				pTrackList->trackPlayed1 |= ( ((uint64)1) << (i-64) );
+				masque_met( pTrackList->trackPlayed, i );
 				PlayTrack( pTrackList->trackInfo[ i ].trackName );
                 current_music_track=i;
 				Dbg_Message( "Playing track %s %i %i", pTrackList->trackInfo[ i ].trackName, i, current_music_track );
@@ -1889,8 +1862,7 @@ void TrackUpdate( void )
 			}
 		}
 		// all the tracks have been played... reset:
-		pTrackList->trackPlayed0 = 0;
-        pTrackList->trackPlayed1 = 0;
+		masque_vide( pTrackList->trackPlayed );
 	}
 }
 
@@ -2008,14 +1980,37 @@ void Update( void )
 
 void GetPlaylist( uint64* flags1, uint64* flags2 )
 {
-    *flags1 = gTrackLists[ TRACKLIST_PERM ].trackForbidden0;
-    *flags2 = gTrackLists[ TRACKLIST_PERM ].trackForbidden1;
+    // The save holds the first 128 tracks' bits. On the desktop the on/off
+    // state lives in thug_playlist.txt by song name instead (see SetPlaylist).
+    *flags1 = gTrackLists[ TRACKLIST_PERM ].trackForbidden[0];
+    *flags2 = gTrackLists[ TRACKLIST_PERM ].trackForbidden[1];
 }
 
 void SetPlaylist( uint64 flags1, uint64 flags2 )
 {
-	gTrackLists[ TRACKLIST_PERM ].trackForbidden0 = flags1;
-    gTrackLists[ TRACKLIST_PERM ].trackForbidden1 = flags2;
+	TrackList *pTrackList = &gTrackLists[ TRACKLIST_PERM ];
+	masque_vide( pTrackList->trackForbidden );
+	pTrackList->trackForbidden[0] = flags1;
+	pTrackList->trackForbidden[1] = flags2;
+#ifdef THUG_DESKTOP
+	// Custom songs move the game's own around in the list, and there are
+	// more of them than the save's 128 bits: the names in thug_playlist.txt
+	// win once it exists.
+	if ( custom_music_playlist_known() )
+	{
+		for ( int i = 0; i < pTrackList->numTracks; i++ )
+		{
+			if ( custom_music_playlist_off( PermTrackTitle[ i ].trackTitle ) )
+				masque_met( pTrackList->trackForbidden, i );
+			else
+				masque_ote( pTrackList->trackForbidden, i );
+		}
+	}
+#endif
+	pTrackList->allTracksForbidden = true;
+	for ( int i = 0; i < pTrackList->numTracks; i++ )
+		if ( !masque_lit( pTrackList->trackForbidden, i ) )
+			pTrackList->allTracksForbidden = false;
 }
 
 // Ambient volume is the same as SoundFX volume...
@@ -2045,14 +2040,11 @@ void SetTrackForbiddenStatus( int trackNum, bool forbidden, int whichList )
 	Dbg_MsgAssert( trackNum < pTrackList->numTracks,( "Not that many tracks in list." ));
 	if ( forbidden )
 	{
-		if ( trackNum < 64)
-        {
-            pTrackList->trackForbidden0 |= ( ((uint64)1) << trackNum );
-        }
-        else
-        {
-            pTrackList->trackForbidden1 |= ( ((uint64)1) << (trackNum-64) );
-        }
+		masque_met( pTrackList->trackForbidden, trackNum );
+#ifdef THUG_DESKTOP
+		if ( whichList == TRACKLIST_PERM )
+			custom_music_playlist_set( PermTrackTitle[ trackNum ].trackTitle, 1 );
+#endif
         
         if ( TrackIsPlaying( whichList, trackNum ) )
 		{
@@ -2060,7 +2052,7 @@ void SetTrackForbiddenStatus( int trackNum, bool forbidden, int whichList )
 		}
 		for ( i = 0; i < pTrackList->numTracks; i++ )
 		{
-			if ( !( pTrackList->trackForbidden0 & ( ((uint64)1) << i ) ) || !( pTrackList->trackForbidden1 & ( ((uint64)1) << (i-64) ) ) )
+			if ( !masque_lit( pTrackList->trackForbidden, i ) )
 			{
 				pTrackList->allTracksForbidden = false;
 				return;
@@ -2070,14 +2062,11 @@ void SetTrackForbiddenStatus( int trackNum, bool forbidden, int whichList )
 		return;
 	}
 	
-    if ( trackNum < 64)
-    {
-        pTrackList->trackForbidden0 &= ~( ((uint64)1) << trackNum );
-    }
-    else
-    {
-        pTrackList->trackForbidden1 &= ~( ((uint64)1) << (trackNum-64) );
-    }
+	masque_ote( pTrackList->trackForbidden, trackNum );
+#ifdef THUG_DESKTOP
+	if ( whichList == TRACKLIST_PERM )
+		custom_music_playlist_set( PermTrackTitle[ trackNum ].trackTitle, 0 );
+#endif
 	pTrackList->allTracksForbidden = false;
 }
 
@@ -2131,28 +2120,7 @@ int GetTrackForbiddenStatus( int trackNum, int whichList )
 	TrackList *pTrackList = &gTrackLists[ whichList ];
 	Dbg_MsgAssert( trackNum < pTrackList->numTracks,( "Requesting forbidden status on invalid track." ));
 	
-    if ( trackNum < 64 )
-    {
-        if (pTrackList->trackForbidden0 & ( ((uint64)1) << trackNum ))
-    	{
-    		return true;
-    	}
-    	else
-    	{
-    		return false;
-    	}
-    }
-    else
-    {
-        if (pTrackList->trackForbidden1 & ( ((uint64)1) << (trackNum-64) ))
-    	{
-    		return true;
-    	}
-    	else
-    	{
-    		return false;
-    	}
-    }
+    return masque_lit( pTrackList->trackForbidden, trackNum );
 }
 
 const char *GetTrackName( int trackNum, int whichList )

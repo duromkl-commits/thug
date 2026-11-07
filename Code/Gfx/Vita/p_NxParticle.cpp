@@ -54,6 +54,7 @@
 #include <gfx/nxparticle.h>
 #include <gfx/nxparticlemgr.h>
 #include <gel/scripting/checksum.h>
+#include <sys/timer.h>
 
 #include <vitaGL.h>
 #include <psp2/kernel/processmgr.h>
@@ -358,7 +359,12 @@ void CVitaParticle::plat_render( void )
 	// est coupe (prs 0) : c'est de la logique.
 	if( m_type == VPRS_FLAT && m_emit_rate > 0.0f )
 	{
+#ifdef THUG_DESKTOP
+		// Per second, not per frame, so max_fps above 60 doesn't add smoke.
+		m_emit_rate_fractional += ( m_emit_rate * Tmr::FrameLength());
+#else
 		m_emit_rate_fractional += ( m_emit_rate * ( 1.0f / 60.0f ));
+#endif
 		if( m_emit_rate_fractional >= 1.0f )
 		{
 			const int n = (int)m_emit_rate_fractional;

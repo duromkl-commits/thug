@@ -19,7 +19,11 @@ namespace Sfx
 
 // Le moteur en réserve un par son joué et teste l'index rendu par
 // PlaySoundPlease contre cette borne.
+#ifdef THUG_DESKTOP
+#define NUM_VOICES		48	// PS2/Xbox: 2 cores x 24
+#else
 #define NUM_VOICES		24
+#endif
 
 class CSfxManager;
 struct sVolume;

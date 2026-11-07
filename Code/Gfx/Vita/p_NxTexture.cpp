@@ -58,7 +58,11 @@ bool g_vita_dxt_align = true;
 // majorite du decor, n'ont pas leur chaine (le chemin compresse de vitaGL
 // plante, voir PORTING_NOTES). Lu AU CHARGEMENT : « mip 1 » a chaud n'a
 // d'effet que sur un niveau charge avec mip > 0.
+#ifdef THUG_DESKTOP
+int g_vita_mip = 2;	// desktop: trilinear, like the PS2/Xbox (the Vita had none)
+#else
 int g_vita_mip = 0;
+#endif
 static GLuint *sp_tex_mip   = NULL;
 static int     s_nb_tex_mip = 0, s_cap_tex_mip = 0;
 
@@ -597,7 +601,12 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			// [DESACTIVE] gpu_alloc_compressed_texture plante sur ces envois
 			// (copie de taille negative, voir PORTING_NOTES) : a refaire en
 			// construisant la chaine nous-memes.
-			if( false && ( level > 0 ) && gl_tex && ( dxt > 0 ) && ( dxt != 5 ) && pot
+#ifdef THUG_DESKTOP
+			const bool envoi_mips_dxt = true;	// real GL takes the file's own DXT1 levels
+#else
+			const bool envoi_mips_dxt = false;
+#endif
+			if( envoi_mips_dxt && ( level > 0 ) && gl_tex && ( dxt > 0 ) && ( dxt != 5 ) && pot
 			   && ( data_size == taille_dxt1 )
 			   && ( NxVita::g_vita_mip > 0 ) && ( mip_w >= 4 ) && ( mip_h >= 4 )
 			   && ( mips_envoyes == (int)level - 1 ))
@@ -746,6 +755,24 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			if( chaine )
 			{
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, NxVita::filtre_min());
+#ifdef THUG_DESKTOP
+				// DXT chain from the file may stop above 1x1: cap it so GL
+				// doesn't treat the texture as incomplete. Plus 16x anisotropic.
+				if( mips_envoyes > 0 )
+					glTexParameteri( GL_TEXTURE_2D, 0x813D /* GL_TEXTURE_MAX_LEVEL */, mips_envoyes );
+				{
+					static float s_aniso = -1.0f;
+					if( s_aniso < 0.0f )
+					{
+						s_aniso = 0.0f;
+						glGetFloatv( 0x84FF /* GL_MAX_TEXTURE_MAX_ANISOTROPY */, &s_aniso );
+						while( glGetError() != GL_NO_ERROR ) {}
+						if( s_aniso > 16.0f ) s_aniso = 16.0f;
+					}
+					if( s_aniso > 1.0f )
+						glTexParameterf( GL_TEXTURE_2D, 0x84FE /* GL_TEXTURE_MAX_ANISOTROPY */, s_aniso );
+				}
+#endif
 				NxVita::retenir_tex_mip( gl_tex );
 			}
 		}

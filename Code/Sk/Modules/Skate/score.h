@@ -130,6 +130,9 @@ public:
 	void 							Bail( bool clearScoreText = false );
 
 	void 							Reset();
+#ifdef THUG_DESKTOP
+	void							desktop_detail( bool bail );	// practice readout
+#endif
 
 	Net::Conn* 						GetAssociatedNetworkConnection( void );
 	void 							LogTrickObject( int skater_id, int score, uint32 num_pending_tricks, uint32* p_pending_tricks, bool propagate );

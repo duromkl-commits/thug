@@ -58,7 +58,11 @@ class  CSkaterCareer  : public Spt::Class
 		enum
 		{
 			vVERSION_NUMBER = 0x00000001,
+#ifdef THUG_DESKTOP
+			vMAX_CAREER_LEVELS = 40, 		// room for imported levels (THPS4 College = 22)
+#else
 			vMAX_CAREER_LEVELS = 21, 		// changes in this are handled automatically, so don't change the version number
+#endif
 			vMAX_GLOBAL_FLAGS = 16,
 			vMAGIC_NUMBER = 0x84751129,		// magic terminator, for integrity check
 			vNUM_FLAG_BITS = 64,			// used for assertions

@@ -1,0 +1,35 @@
+name: Windows build
+
+on:
+  push:
+    branches: [ main, desktop-port ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install MinGW-w64 and Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mingw-w64 ninja-build cmake
+
+      - name: Get SDL2 for MinGW
+        run: |
+          curl -sSLf -o sdl.tgz https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-devel-2.30.9-mingw.tar.gz
+          tar xzf sdl.tgz -C "$RUNNER_TEMP"
+
+      - name: Build thug.exe
+        run: |
+          SDL2_MINGW="$RUNNER_TEMP/SDL2-2.30.9/i686-w64-mingw32" desktop/tools/build_mingw32.sh "$RUNNER_TEMP/build"
+          mkdir -p dist
+          cp "$RUNNER_TEMP/build/cmake/thug.exe" "$RUNNER_TEMP/build/cmake/SDL2.dll" dist/
+          cp desktop/README.md dist/README-desktop.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thug-windows
+          path: dist/

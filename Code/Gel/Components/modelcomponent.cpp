@@ -20,6 +20,7 @@
 #include <gel/components/animationcomponent.h>
 #include <gel/components/skeletoncomponent.h>
 #include <gel/components/suspendcomponent.h>
+#include <gel/components/lockobjcomponent.h>
 
 #include <gel/net/server/netserv.h>
 #include <gel/net/client/netclnt.h>
@@ -248,12 +249,17 @@ void CModelComponent::InitModel( Script::CStruct* pParams )
 			{
 				Nx::CGeom *p_orig_geom = p_src_model_comp->mp_model->GetGeom(geomName);
 				Dbg_MsgAssert(p_orig_geom, ("Couldn't find CGeom %s", Script::FindChecksumName(geomName)));
-
+#ifdef THUG_DESKTOP
+				// Playable peds have no "board" geom (their board is a ped part): nothing to clone
+				if (p_orig_geom)
+#endif
+				{
 				Nx::CGeom *p_new_geom = p_orig_geom->Clone(true, mp_model);
 				Dbg_MsgAssert(p_new_geom, ("Couldn't clone CGeom %s", Script::FindChecksumName(geomName)));
 
 				p_new_geom->SetActive(true);
 				mp_model->AddGeom(p_new_geom, geomName);
+				}
 			}
 			else if (pParams->GetArray(CRCD(0x44e31dff,"geoms"), &p_geom_array))
 			{
@@ -265,6 +271,10 @@ void CModelComponent::InitModel( Script::CStruct* pParams )
 					{
 						Nx::CGeom *p_orig_geom = p_src_model_comp->GetModel()->GetGeom(geomName);
 						Dbg_MsgAssert(p_orig_geom, ("Couldn't find CGeom %s", Script::FindChecksumName(geomName)));
+#ifdef THUG_DESKTOP
+						if (!p_orig_geom)
+							continue;
+#endif
 
 						Nx::CGeom *p_new_geom = p_orig_geom->Clone(true, mp_model);
 						Dbg_MsgAssert(p_new_geom, ("Couldn't clone CGeom %s", Script::FindChecksumName(geomName)));
@@ -753,6 +763,15 @@ void CModelComponent::Update()
 #ifdef __PLAT_VITA__
 		// Issue #18 : cout reel de CModel::Render dans la phase logique.
 		const SceUInt64 t0 = sceKernelGetProcessTimeWide();
+#endif
+#ifdef __PLAT_VITA__
+		// A locked object (trick props: guitar, pizza box, broken board) is
+		// drawn again by the locked-object manager once its parent has moved
+		// (lockobjcomponent.cpp, LockToObject). On Xbox the second Render just
+		// replaces the first transform; here each Render draws, so the prop
+		// showed twice. Leave the drawing to the lock.
+		Obj::CLockObjComponent *p_verrou = GetLockObjComponentFromObject( GetObject());
+		if( !( p_verrou && p_verrou->VitaDessineLeModele()))
 #endif
 		mp_model->Render( &theDisplayMatrix, !should_animate, pSkeleton );
 #ifdef __PLAT_VITA__

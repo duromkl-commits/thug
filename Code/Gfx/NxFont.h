@@ -158,8 +158,14 @@ public:
 
 private:
 	// Constants
+	// Desktop: the playlist menu builds three text elements (plus shadows) per
+	// song, and custom songs take it up to 512 songs.
 	enum {
+#ifdef THUG_DESKTOP
+		vMAX_TEXT_INSTANCES = 6144
+#else
 		vMAX_TEXT_INSTANCES = 512
+#endif
 	};
 
 	// Because it is static, it is declared here, but defined in p_NxFont.cpp

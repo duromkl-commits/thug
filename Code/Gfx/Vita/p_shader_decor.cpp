@@ -1639,6 +1639,8 @@ void ShaderRigideEclaireFin()
 
 
 
+static unsigned int s_fog_gen = 1;	// generation des uniformes de brouillard (aussi utilisee hors GXM)
+#ifndef THUG_DESKTOP
 // --- Chemin GXM direct pour les lots de decor (issue #18) --------------------
 //
 // [MESURE] Un lot par vitaGL coute ~15 us de CPU a 444 MHz (preparation ~6,
@@ -1939,7 +1941,6 @@ struct SGxmEtat
 };
 static SGxmEtat s_etat_princ;
 
-static unsigned int s_fog_gen = 1;
 static inline void poser_brouillard_vs( void *vb, const SceGxmProgramParameter *pP,
                                         const SceGxmProgramParameter *pC, bool noir )
 {
@@ -3022,6 +3023,9 @@ void GxmListeFin( void )
 	diff_fin_executer( &s_diff0 );
 }
 
+#else
+#include "p_gxm_desktop.inc"
+#endif // THUG_DESKTOP
 
 // --- Brouillard (issue #45) --------------------------------------------------
 //
