@@ -639,6 +639,78 @@ static void th4_chemin( uint32 checksum, char *p_out, size_t n )
 	          (unsigned)( checksum >> 28 ), (unsigned)checksum );
 }
 
+// Extra skaters' bail voices: WAV clips registered by checksum just before
+// they play (cfuncs.cpp ScriptPlayStream; custom_music.cpp picks the clip).
+static uint32	s_wav_crc[64];
+static char		s_wav_chemin[64][256];
+static int		s_wav_n;
+
+extern "C" void desktop_voice_wav( uint32 checksum, const char *p_vita_path )
+{
+	for( int i = 0; i < s_wav_n; ++i )
+		if( s_wav_crc[i] == checksum )
+			return;
+	const int k = s_wav_n < 64 ? s_wav_n++ : (int)( checksum % 64 );
+	s_wav_crc[k] = checksum;
+	snprintf( s_wav_chemin[k], sizeof( s_wav_chemin[k] ), "%s", p_vita_path );
+}
+
+static const char *wav_de( uint32 checksum )
+{
+	for( int i = 0; i < s_wav_n; ++i )
+		if( s_wav_crc[i] == checksum )
+			return s_wav_chemin[i];
+	return NULL;
+}
+
+// 16-bit PCM WAV -> stereo frames (malloc'd), its rate in *p_hz.
+static short *wav_charge( const char *chemin, int *p_n, int *p_hz )
+{
+	SceUID f = sceIoOpen( chemin, SCE_O_RDONLY, 0 );
+	if( f < 0 )
+		return NULL;
+	const int taille = (int)sceIoLseek( f, 0, SCE_SEEK_END );
+	sceIoLseek( f, 0, SCE_SEEK_SET );
+	unsigned char *b = ( taille > 44 && taille < 16 * 1024 * 1024 ) ? (unsigned char *)malloc( taille ) : NULL;
+	const bool lu = b && sceIoRead( f, b, taille ) == taille;
+	sceIoClose( f );
+	short *out = NULL;
+	if( lu && !memcmp( b, "RIFF", 4 ) && !memcmp( b + 8, "WAVE", 4 ))
+	{
+		int can = 0, hz = 0, bits = 0, tag = 0;
+		for( int k = 12; k + 8 <= taille; )
+		{
+			const int t = b[k + 4] | ( b[k + 5] << 8 ) | ( b[k + 6] << 16 ) | ( b[k + 7] << 24 );
+			if( t < 0 || k + 8 + t > taille )
+				break;
+			if( !memcmp( b + k, "fmt ", 4 ) && t >= 16 )
+			{
+				tag	 = b[k + 8] | ( b[k + 9] << 8 );
+				can	 = b[k + 10] | ( b[k + 11] << 8 );
+				hz	 = b[k + 12] | ( b[k + 13] << 8 ) | ( b[k + 14] << 16 ) | ( b[k + 15] << 24 );
+				bits = b[k + 22] | ( b[k + 23] << 8 );
+			}
+			else if( !memcmp( b + k, "data", 4 ) && tag == 1 && bits == 16 && ( can == 1 || can == 2 ) && hz >= 4000 && hz <= 96000 )
+			{
+				const int n = t / ( 2 * can );
+				out = (short *)malloc( n * 2 * sizeof( short ));
+				const short *src = (const short *)( b + k + 8 );
+				for( int i = 0; out && i < n; ++i )
+				{
+					out[i * 2]	   = src[i * can];
+					out[i * 2 + 1] = src[i * can + can - 1];
+				}
+				*p_n = n;
+				*p_hz = hz;
+				break;
+			}
+			k += 8 + t + ( t & 1 );
+		}
+	}
+	free( b );
+	return out;
+}
+
 static bool th4_existe( uint32 checksum )
 {
 	static uint32 s_vu[512];
@@ -846,6 +918,31 @@ static bool vdemarre( uint32 checksum, int s, bool ok )
 		return false;
 	const SEntree *p_e = vtrouve( checksum );
 #ifdef THUG_DESKTOP
+	if( !p_e && wav_de( checksum ))
+	{
+		int n = 0, hz = 0;
+		short *mem = wav_charge( wav_de( checksum ), &n, &hz );
+		if( !mem )
+		{
+			VLOG( "PCM", "bail voice %s: could not read it", wav_de( checksum ));
+			return false;
+		}
+		SFlux &F = s_flux[s];
+		sceKernelLockMutex( F.mutex, 1, NULL );
+		vlibere( F );
+		F.mem	 = mem;
+		F.mem_n	 = n;
+		F.canaux = 2;
+		F.hz	 = hz;
+		F.src[0] = F.src[1] = 0;
+		F.src_n	 = 1;
+		F.src_pos = 0.0;
+		F.joue	= true;
+		F.ok	= ok;
+		F.pause	= false;
+		sceKernelUnlockMutex( F.mutex, 1 );
+		return true;
+	}
 	if( !p_e && th4_existe( checksum ))
 	{
 		char chemin[256];

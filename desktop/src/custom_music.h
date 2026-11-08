@@ -42,6 +42,13 @@ void custom_music_playlist_set( const char *title, int off );
    checksum (desktop_ped_N), 0 if it is not one or has no voice. */
 int  custom_skater_voice_pitch( unsigned int name_checksum );
 
+/* A random bail voice clip (Vita path of a WAV in data/voices) for that
+   skater, never the same one twice running; 0 if it has no voice bank. */
+int  custom_skater_voice_clip( unsigned int name_checksum, char *out, int out_size );
+
+/* p_music.cpp: play the WAV at p_vita_path when the stream checksum is asked for. */
+void desktop_voice_wav( unsigned int checksum, const char *p_vita_path );
+
 #ifdef __cplusplus
 }
 #endif

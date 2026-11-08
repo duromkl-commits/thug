@@ -3582,13 +3582,39 @@ bool ScriptPlayStream( Script::CStruct *pParams, Script::CScript *pScript )
 		}
 		pParams->GetFloat( CHECKSUM_PITCH, &pitch );
 #ifdef THUG_DESKTOP
-		// An extra skater's bail vocals (THUG's create-a-skater ones) at its own pitch.
-		if ( !pParams->ContainsComponentNamed( CHECKSUM_PITCH ) && pScript && pScript->mpObject
-		  && pScript->mpObject->GetType() == SKATE_TYPE_SKATER )
+		// An extra skater's bail vocals at its own pitch; with a voice bank
+		// (data/voices/<skater>.txt) one of its own WAV clips replaces THUG's
+		// create-a-skater bail stream.
+		if ( pScript && pScript->mpObject && pScript->mpObject->GetType() == SKATE_TYPE_SKATER )
 		{
-			const int p = custom_skater_voice_pitch( ((Obj::CSkater *)pScript->mpObject.Convert())->m_skaterNameChecksum );
-			if ( p > 0 )
+			const uint32 nom = ((Obj::CSkater *)pScript->mpObject.Convert())->m_skaterNameChecksum;
+			const int p = custom_skater_voice_pitch( nom );
+			if ( p > 0 && !pParams->ContainsComponentNamed( CHECKSUM_PITCH ))
 				pitch = (float)p;
+			static uint32 s_bails[36];
+			if ( !s_bails[0] )
+			{
+				static const char *genres = "mf";
+				static const char *coups[3] = { "knee", "ankle", "kick" };
+				int k = 0;
+				for ( int g = 0; g < 2; ++g )
+					for ( int c = 0; c < 3; ++c )
+						for ( int n = 1; n <= 6; ++n )
+						{
+							char b[32];
+							sprintf( b, "custom%c_%s%02d", genres[g], coups[c], n );
+							s_bails[k++] = Crc::GenerateCRCFromString( b );
+						}
+			}
+			bool bail = false;
+			for ( int k = 0; k < 36 && !bail; ++k )
+				bail = ( s_bails[k] == streamNameChecksum );
+			char clip[256];
+			if ( bail && p > 0 && custom_skater_voice_clip( nom, clip, sizeof( clip )))
+			{
+				streamNameChecksum = Crc::GenerateCRCFromString( clip );
+				desktop_voice_wav( streamNameChecksum, clip );
+			}
 		}
 #endif
 		pParams->GetInteger( 0x9d5923d8, &priority ); // priority

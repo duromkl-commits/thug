@@ -1827,11 +1827,58 @@ static const MetaSkater *meta_de( const char *nom )
 // Profile name checksum (desktop_ped_N) -> bail vocal pitch.
 static std::vector<std::pair<uint32_t, int>> s_voix;
 
+// Bail voice clips (data/voices/<skater>.txt from voice_banks.py): "pitch N"
+// then one clip per line, relative to data/voices.
+struct BanqueVoix { uint32_t nom; int pitch; std::vector<std::string> clips; int dernier; };
+static std::vector<BanqueVoix> s_banques;
+
+static void charge_banque( uint32_t nom, const char *cle )
+{
+	char vita[256], chemin[1024];
+	snprintf( vita, sizeof( vita ), "ux0:data/thug/Data/voices/%s.txt", cle );
+	desktop_host_path( vita, chemin, sizeof( chemin ));
+	FILE *f = fopen( chemin, "rb" );
+	if( !f ) return;
+	BanqueVoix b = { nom, 100, {}, -1 };
+	char l[512];
+	while( fgets( l, sizeof( l ), f ))
+	{
+		size_t n = strlen( l );
+		while( n && ( l[n - 1] == '\n' || l[n - 1] == '\r' || l[n - 1] == ' ' )) l[--n] = 0;
+		if( !n || l[0] == '#' ) continue;
+		if( !strncmp( l, "pitch ", 6 )) { b.pitch = atoi( l + 6 ); continue; }
+		if( strchr( l, '"' ) || strstr( l, ".." )) continue;
+		b.clips.push_back( std::string( "ux0:data/thug/Data/voices/" ) + l );
+	}
+	fclose( f );
+	if( !b.clips.empty()) s_banques.push_back( b );
+}
+
+static BanqueVoix *banque_de( unsigned int nom )
+{
+	for( BanqueVoix &b : s_banques )
+		if( b.nom == nom ) return &b;
+	return NULL;
+}
+
 extern "C" int custom_skater_voice_pitch( unsigned int nom )
 {
+	if( const BanqueVoix *b = banque_de( nom )) return b->pitch > 0 ? b->pitch : 100;
 	for( const auto &v : s_voix )
 		if( v.first == nom ) return v.second;
 	return 0;
+}
+
+extern "C" int custom_skater_voice_clip( unsigned int nom, char *out, int taille )
+{
+	BanqueVoix *b = banque_de( nom );
+	if( !b || !out || taille <= 0 ) return 0;
+	const int n = (int)b->clips.size();
+	int k = rand() % n;
+	if( n > 1 && k == b->dernier ) k = ( k + 1 + rand() % ( n - 1 )) % n;	// never the same twice running
+	b->dernier = k;
+	snprintf( out, taille, "%s", b->clips[k].c_str());
+	return 1;
 }
 
 static std::string profil_pieton( int i, const PietonJouable &p, const MetaSkater *m )
@@ -1919,6 +1966,7 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 		Ecrit w1;
 		Ecrit w2; w2.eol();
 		s_voix.clear();
+		s_banques.clear();
 		int sans = 0;
 		for( size_t i = 0; i < tous.size(); ++i )
 		{
@@ -1931,10 +1979,13 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			if( me && me->tricks[0] == '{' )
 				t += "desktop_tricks_" + std::to_string( i ) + " = " + me->tricks + "\n";
 			compile_q( w2, t.c_str());
+			const uint32_t nom_crc = crc(( "desktop_ped_" + std::to_string( i )).c_str());
 			if( me && me->voix > 0 )
-				s_voix.push_back( std::make_pair( crc(( "desktop_ped_" + std::to_string( i )).c_str()), me->voix ));
+				s_voix.push_back( std::make_pair( nom_crc, me->voix ));
+			charge_banque( nom_crc, tous[i].nom );
 		}
 		if( sans ) VLOG( "MUS", "skaters: %d without a profile in skater_meta.inc", sans );
+		VLOG( "MUS", "skaters: %d with bail voice clips (data/voices)", (int)s_banques.size());
 		m.push_back( Modif{ j[a].pos, 0, w1.o } );
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
 		VLOG( "MUS", "skaters: %d peds + %d GTA added", nb, (int)g.size());
