@@ -48,6 +48,21 @@ namespace
 {
 static uint32 crc( const char *t ) { return Script::GenerateCRC( t ); }
 
+// Our own generator: the C library's rand() gets reseeded by other code
+// (two runs in a row were dealt the same skater). Seeded once from the
+// wall clock and the high-res timer, then never touched by anyone else.
+static uint32 hasard( uint32 n )
+{
+	static uint64 x = 0;
+	if( !x )
+	{
+		x = (uint64)time( NULL ) * 0x9E3779B97F4A7C15ull ^ (uint64)Tmr::GetTime() * 0xBF58476D1CE4E5B9ull ^ 0xD1B54A32D192ED03ull;
+		if( !x ) x = 1;
+	}
+	x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+	return n ? (uint32)( ( x >> 16 ) % n ) : 0;
+}
+
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, NB_MODS };
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend" };
 static bool s_arme[NB_MODS] = { false, false, true, false };
@@ -413,6 +428,25 @@ void DesktopDementedUpdate( Skate &mdl )
 	// Back at the main menu, or out of the story: the run is over.
 	if( menu || ( !histoire && !cas )) { fin_run(); return; }
 	if( cas ) return;
+	// diagnostics: what the goal manager holds 10 s into each level
+	{
+		static uint32 niv_log = 0;
+		static float t_niv = 0.0f;
+		if( niveau != niv_log ) { niv_log = niveau; t_niv = 0.0f; }
+		else if( t_niv >= 0.0f )
+		{
+			t_niv += Tmr::FrameLength();
+			if( t_niv > 10.0f )
+			{
+				t_niv = -1.0f;
+				Game::CGoalManager *gm = Game::GetGoalManager();
+				int n = gm ? gm->GetNumGoals() : -1, verr = 0;
+				for( int i = 0; gm && i < n; ++i ) { Game::CGoal *g = gm->GetGoalByIndex( i ); if( g && g->IsLocked()) ++verr; }
+				VLOG( "DSK", "demented: level %08x, %d goals (%d locked, %d active), skater %08x", niveau, n, verr,
+					gm ? gm->GetNumActiveGoals() : -1, s_run.skater );
+			}
+		}
+	}
 	const bool pause = Mdl::FrontEnd::Instance()->GamePaused();
 	// cutscenes and goal intro cams run through the movie managers: they don't
 	// count, and the clock is hidden while they play
@@ -557,9 +591,7 @@ bool ScriptDesktopDementedDeal( Script::CStruct *pParams, Script::CScript *pScri
 		v.push_back( p );
 	}
 	if( v.empty()) { VLOG( "DSK", "demented: no skater to deal" ); return false; }
-	static bool graine = false;
-	if( !graine ) { srand( (unsigned)time( NULL ) ^ (unsigned)Tmr::GetTime()); graine = true; }
-	Obj::CSkaterProfile *pro = v[rand() % v.size()];
+	Obj::CSkaterProfile *pro = v[hasard( (uint32)v.size())];
 	const char *d = "";
 	pro->GetInfo()->GetString( CRCD( 0x2ab66cb8, "display_name" ), &d, Script::NO_ASSERT );
 	snprintf( s_run.nom, sizeof( s_run.nom ), "%s", d ? d : "" );
@@ -666,7 +698,7 @@ bool ScriptDesktopDementedSlotTricks( Script::CStruct *pParams, Script::CScript 
 				if( !trick_a( map, c )) libres.push_back( c );
 			}
 			if( ok.empty()) continue;
-			const uint32 c = libres.empty() ? ok[rand() % ok.size()] : libres[rand() % libres.size()];
+			const uint32 c = libres.empty() ? ok[hasard( (uint32)ok.size())] : libres[hasard( (uint32)libres.size())];
 			map->RemoveComponent( c );
 			map->AddChecksum( c, trick );
 			pris.push_back( c );
@@ -685,7 +717,7 @@ bool ScriptDesktopDementedSlotTricks( Script::CStruct *pParams, Script::CScript 
 			if( p->GetSpecialTrickInfo( s ).IsUnassigned()) libres.push_back( s );
 		}
 		if( ok.empty()) continue;
-		const int s = libres.empty() ? ok[rand() % ok.size()] : libres[rand() % libres.size()];
+		const int s = libres.empty() ? ok[hasard( (uint32)ok.size())] : libres[hasard( (uint32)libres.size())];
 		// a key combo of its kind that no other special uses
 		Script::CStruct *st = Script::GetStructure( crc( s_sp_types[type_special( trick )] ), Script::NO_ASSERT );
 		uint32 combo = 0;

@@ -1487,6 +1487,26 @@ static const char *s_demented_scripts =
 	// after the intro cutscene: the deal, then the second intro
 	"script desktop_demented_deal\n"
 	"load_cas_textures_to_main_memory\n"
+	// no cheats in a run (their menu is hidden too)
+	"UnSetGlobalFlag flag = CHEAT_ALWAYS_SPECIAL\n"
+	"UnSetGlobalFlag flag = CHEAT_BIGHEAD\n"
+	"UnSetGlobalFlag flag = CHEAT_COOL_SPECIAL_TRICKS\n"
+	"UnSetGlobalFlag flag = CHEAT_DISCO\n"
+	"UnSetGlobalFlag flag = CHEAT_FLAME\n"
+	"UnSetGlobalFlag flag = CHEAT_GORILLA\n"
+	"UnSetGlobalFlag flag = CHEAT_HOVERBOARD\n"
+	"UnSetGlobalFlag flag = CHEAT_INLINE\n"
+	"UnSetGlobalFlag flag = CHEAT_INVISIBLE\n"
+	"UnSetGlobalFlag flag = CHEAT_KID\n"
+	"UnSetGlobalFlag flag = CHEAT_MATRIX\n"
+	"UnSetGlobalFlag flag = CHEAT_MOON\n"
+	"UnSetGlobalFlag flag = CHEAT_PERFECT_MANUAL\n"
+	"UnSetGlobalFlag flag = CHEAT_PERFECT_RAIL\n"
+	"UnSetGlobalFlag flag = CHEAT_PERFECT_SKITCH\n"
+	"UnSetGlobalFlag flag = CHEAT_SIM\n"
+	"UnSetGlobalFlag flag = CHEAT_SLOMO\n"
+	"UnSetGlobalFlag flag = CHEAT_STATS_13\n"
+	"UnSetGlobalFlag flag = CHEAT_SUPER_BLOOD\n"
 	"set_cas_cam wait_for_skater\n"
 	"DesktopDementedDeal\n"
 	"RefreshSkaterModel profile = 0 skater = 0\n"
@@ -1542,6 +1562,39 @@ static const char *s_demented_scripts =
 
 // Pause menu (create_pause_menu, gamemenu.qb): the item before Change Level,
 // and the mode's scripts at the end of the file.
+// Demented: single lines of a script wrapped in "if NOT DesktopDemented".
+// A line qualifies when it starts with 'debut' and (if 'id_' is set) names
+// id = id_ somewhere on it.
+static int wrap_lignes( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
+	const char *script, const char *debut, const char *id_ )
+{
+	const uint32_t n = crc( script ), d = crc( debut ), id = crc( "id" ), cible = id_ ? crc( id_ ) : 0;
+	int nb = 0;
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		for( size_t a = k + 2; a < j.size() && qb[j[a].pos] != T_ENDSCRIPT; ++a )
+		{
+			const unsigned char pre = qb[j[a - 1].pos];
+			if( !( pre == T_EOL || pre == T_EOLNUM ) || !est_nom( qb, j[a], d )) continue;
+			size_t f = a + 1;
+			bool ok = !cible;
+			for( ; f < j.size() && qb[j[f].pos] != T_EOL && qb[j[f].pos] != T_EOLNUM && qb[j[f].pos] != T_ENDSCRIPT; ++f )
+				if( cible && f + 2 < j.size() && est_nom( qb, j[f], id ) && qb[j[f + 1].pos] == T_EGAL && est_nom( qb, j[f + 2], cible )) ok = true;
+			if( !ok || f >= j.size() || qb[j[f].pos] == T_ENDSCRIPT ) continue;
+			Ecrit w1; compile_q( w1, "if NOT DesktopDemented\n" );
+			m.push_back( Modif{ j[a].pos, 0, w1.o } );
+			Ecrit w2; w2.eol(); compile_q( w2, "endif" );
+			m.push_back( Modif{ j[f].pos, 0, w2.o } );
+			++nb;
+			a = f;
+		}
+		break;
+	}
+	VLOG( "MUS", "%s: %d %s lines kept out of Demented", script, nb, debut );
+	return nb;
+}
+
 // Demented: the pause menu doesn't freeze the game (as in online play). In
 // handle_start_pressed the offline block from PauseGame down to its endif
 // (pause, goal pause, hiding the goal dialogs) is skipped; the skater
@@ -2494,6 +2547,11 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_quitter( qb, j, m );
 	patch_pause_extras( qb, j, m );
 	patch_pause_live( qb, j, m );
+	// Demented: the music plays on in the pause menu (the game doesn't
+	// freeze either), and no cheats in Options
+	wrap_lignes( qb, j, m, "create_pause_menu", "PauseMusicAndStreams", NULL );
+	wrap_lignes( qb, j, m, "create_options_menu", "make_theme_menu_item", "menu_real_cheats" );
+	wrap_lignes( qb, j, m, "create_options_menu", "make_theme_menu_item", "menu_cheats" );
 	patch_histoire( qb, j, m );
 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
 	patch_debut( qb, j, m, "create_career_options_menu", "DesktopZeroArm off\n" );
