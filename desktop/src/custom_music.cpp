@@ -1518,6 +1518,36 @@ static const char *s_demented_scripts =
 
 // Pause menu (create_pause_menu, gamemenu.qb): the item before Change Level,
 // and the mode's scripts at the end of the file.
+// Demented: the pause menu doesn't freeze the game (as in online play). In
+// handle_start_pressed the offline block from PauseGame down to its endif
+// (pause, goal pause, hiding the goal dialogs) is skipped; the skater
+// ignores the pad while menu_state is on, as online.
+static void patch_pause_live( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "handle_start_pressed" ), pause = crc( "PauseGame" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		size_t d = k + 2;
+		while( d < j.size() && qb[j[d].pos] != T_ENDSCRIPT && !est_nom( qb, j[d], pause )) ++d;
+		if( d >= j.size() || qb[j[d].pos] == T_ENDSCRIPT ) { VLOG( "MUS", "start pressed: PauseGame not found" ); return; }
+		int prof = 0;
+		size_t f = d;
+		for( ; f < j.size() && qb[j[f].pos] != T_ENDSCRIPT; ++f )
+		{
+			if( qb[j[f].pos] == 37 ) ++prof;
+			else if( qb[j[f].pos] == 40 ) { if( prof == 0 ) break; --prof; }
+		}
+		if( f >= j.size() || qb[j[f].pos] != 40 ) { VLOG( "MUS", "start pressed: layout not as expected" ); return; }
+		Ecrit w1; compile_q( w1, "if NOT DesktopDemented\n" );
+		m.push_back( Modif{ j[d].pos, 0, w1.o } );
+		Ecrit w2; compile_q( w2, "endif\n" );
+		m.push_back( Modif{ j[f].pos, 0, w2.o } );
+		VLOG( "MUS", "start pressed: no freeze in Demented" );
+		return;
+	}
+}
+
 static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
 {
 	const uint32_t n = crc( "create_pause_menu" ), item = crc( "make_sprite_menu_item" ), niveau = crc( "menu_level_select" ), id = crc( "id" );
@@ -2439,6 +2469,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_air_shuffle( qb, j, m );
 	patch_quitter( qb, j, m );
 	patch_pause_extras( qb, j, m );
+	patch_pause_live( qb, j, m );
 	patch_histoire( qb, j, m );
 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
 	patch_debut( qb, j, m, "create_career_options_menu", "DesktopZeroArm off\n" );
