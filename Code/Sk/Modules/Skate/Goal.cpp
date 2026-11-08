@@ -43,6 +43,7 @@
 extern "C" float desktop_goal_score_scale( void );
 extern "C" float desktop_goal_time_scale( void );
 void desktop_goal_won( uint32 goal, const char *nom );	// desktop_modes_glue.cpp: goal attack splits
+void desktop_demented_goal( bool won );	// desktop_demented.cpp: lives, run summary
 
 // Goals built around stops or a route (tours, H.O.R.S.E., per-spot score
 // clusters such as Muska's moving SUV) keep their figures: their limits and
@@ -866,6 +867,7 @@ bool CGoal::Win( void )
 			const char *p_nom = NULL;
 			GetViewGoalsText( &p_nom );
 			desktop_goal_won( GetGoalId(), p_nom );
+			desktop_demented_goal( true );
 		}
 #endif			
 
@@ -1023,6 +1025,9 @@ bool CGoal::Lose( void )
 	if ( IsActive() )
 	{
 		m_numTimesLost++;
+#ifdef THUG_DESKTOP
+		desktop_demented_goal( false );
+#endif
 		
 		RunCallbackScript( vFAIL );
         

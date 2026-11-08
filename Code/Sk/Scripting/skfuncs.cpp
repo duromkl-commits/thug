@@ -3557,6 +3557,12 @@ static bool desktop_switch_skater( uint32 profileName )
 	return true;
 }
 
+// Demented's dealt skater (desktop_demented.cpp).
+bool ScriptDesktopSelectSkaterLent( uint32 name )
+{
+	return desktop_switch_skater( name );
+}
+
 // @script | DesktopSelectSkater | desktop: switch to the named skater, keeping the created skater's stats
 bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScript)
 {
@@ -5645,6 +5651,7 @@ bool ScriptGetSkaterVelocity( Script::CStruct* pParams, Script::CScript* pScript
 #ifdef THUG_DESKTOP
 }	// namespace CFuncs
 bool DesktopThugZero( void );	// desktop_extras_glue.cpp
+bool desktop_demented_bind_ok( bool special, int index, uint32 key_combo );	// desktop_demented.cpp
 namespace CFuncs
 {
 #endif
@@ -6076,6 +6083,15 @@ bool ScriptBindTrickToKeyCombo( Script::CStruct* pParams, Script::CScript* pScri
 	Mdl::Skate * pSkate = Mdl::Skate::Instance();
 	Obj::CSkaterProfile* pSkaterProfile = pSkate->GetCurrentProfile();
 
+#ifdef THUG_DESKTOP
+	// Demented: a starter trick can't be replaced.
+	{
+		int index = -1;
+		pParams->GetInteger( "index", &index, Script::NO_ASSERT );
+		if ( !desktop_demented_bind_ok( pParams->ContainsFlag( "special" ), index, key_combo ) )
+			return false;
+	}
+#endif
 	// are we binding a special trick?
 	if ( pParams->ContainsFlag( "special" ) )
 	{

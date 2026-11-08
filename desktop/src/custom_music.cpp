@@ -1064,7 +1064,9 @@ static const char *s_menu_modele =
 
 static const char *s_item_modele =
 	"\nif GameModeEquals is_career\n"
+	"if NOT DesktopDemented\n"		// Demented: the dealt skater is final
 	"make_theme_menu_item { text = \"Change Player Model\" id = menu_desktop_model pad_choose_script = desktop_model_menu }\n"
+	"endif\n"
 	"endif\n";
 
 static void patch_player_model( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
@@ -1416,6 +1418,99 @@ static std::string scripts_extras( void )
 	return t;
 }
 
+// Demented's own scripts (appended to gamemenu.qb with the Extras ones).
+static const char *s_demented_scripts =
+	// the modifiers menu, laid out like the difficulty menu
+	"script desktop_demented_menu focus = 0\n"
+	"dialog_box_exit\n"
+	"make_new_menu { pos = (120,100) internal_just = [ center center ] menu_id = career_dif_menu vmenu_id = career_dif_vmenu menu_title = \"\" helper_text = generic_helper_text }\n"
+	"FormatText ChecksumName = title_icon \"%i_career_ops\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
+	"build_theme_sub_title title_icon = <title_icon> title = \"DEMENTED\"\n"
+	"build_top_and_bottom_blocks\n"
+	"make_mainmenu_3d_plane model = \"mainmenu_bg\\mainmenu_bg.mdl\" pos = (360,217) scale = (1.25,1.25)\n"
+	"CreateScreenElement { Type = SpriteElement parent = current_menu_anchor id = mm_building texture = mm_building just = [ left top ] pos = (0,62) scale = (1.2,1.25) z_priority = -3 alpha = 1 }\n"
+	"make_mainmenu_clouds\n"
+	"kill_start_key_binding\n"
+	"SetScreenElementProps { id = career_dif_vmenu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = career_options_menu_exit new_menu_script = create_career_difficulty_menu } } ] }\n"
+	"DesktopDementedText\n"
+	"make_main_menu_item { text = <text0> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 0 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 1 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Bail once and the run is over\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text1> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 1 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 2 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every stat locked at 0 for the whole run\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text2> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 2 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"3 lives. A failed goal costs one, each new chapter gives one\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = \"Start Run\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = set_career_difficulty dif = 1 desktop_demented } }\n"
+	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Normal goals. Your skater is dealt after the intro\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"FormatText ChecksumName = bar_color \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
+	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,310) just = [ center top ] }\n"
+	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = black scale = (70,15) just = [ center top ] rgba = [ 0 0 0 90 ] }\n"
+	"CreateScreenElement { Type = textBlockElement parent = diff_desc_box id = diff_desc_bg_text text = \"\" font = small pos = (0,6) dims = (250,0) line_spacing = 0.6 just = [ center center ] rgba = [ 80 80 80 50 ] not_focusable allow_expansion }\n"
+	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = white scale = (70,1) z_priority = 10 just = [ center top ] rgba = <bar_color> }\n"
+	"FireEvent Type = focus target = current_menu_anchor\n"
+	"if NOT ( <focus> = 0 )\n"
+	"change disable_menu_sounds = 1\n"
+	"begin\n"
+	"FireEvent Type = pad_down target = current_menu\n"
+	"repeat <focus>\n"
+	"change disable_menu_sounds = 0\n"
+	"endif\n"
+	"endscript\n"
+	"script desktop_demented_flip\n"
+	"DesktopDementedToggle i = <i>\n"
+	"career_options_menu_exit new_menu_script = desktop_demented_menu focus = <i>\n"
+	"endscript\n"
+	// after the intro cutscene: the deal, then the second intro
+	"script desktop_demented_deal\n"
+	"load_cas_textures_to_main_memory\n"
+	"DesktopDementedDeal\n"
+	"RefreshSkaterModel profile = 0 skater = 0\n"
+	"FormatText TextName = text \"You've been dealt:\\n\\n\\c2%s\\n\\n\\c0No changing skater, no editing your starter tricks, no saving.\" s = <dealt_name>\n"
+	"create_dialog_box { title = \"DEMENTED\" title_font = testtitle text = <text> pos = (320,240) just = [ center center ] "
+	"text_rgba = [ 88 105 112 128 ] text_dims = (330,0) line_spacing = 0.85 "
+	"buttons = [ { font = small text = \"OK\" pad_choose_script = desktop_demented_go } ] delay_input }\n"
+	"endscript\n"
+	"script desktop_demented_go\n"
+	"dialog_box_exit\n"
+	"show_intro_2\n"
+	"endscript\n"
+	"script desktop_demented_nosave\n"
+	"wait 2 frames\n"
+	"FireEvent type = goal_wait_for_save\n"
+	"endscript\n"
+	// run over (Perma Bail, out of lives): the summary, then the main menu
+	"script desktop_demented_end\n"
+	"wait 90 frames\n"
+	"if ObjectExists id = current_menu_anchor\n"
+	"DestroyScreenElement id = current_menu_anchor\n"
+	"endif\n"
+	"PauseGame\n"
+	"FormatText TextName = text2 \"\\c1%r\\n\\n%t\" r = <reason> t = <text>\n"
+	"create_dialog_box { title = <title> title_font = testtitle text = <text2> pos = (320,240) just = [ center center ] "
+	"text_rgba = [ 88 105 112 128 ] text_dims = (330,0) line_spacing = 0.85 "
+	"buttons = [ { font = small text = \"OK\" pad_choose_script = desktop_demented_quit } ] delay_input }\n"
+	"endscript\n"
+	"script desktop_demented_quit\n"
+	"dialog_box_exit\n"
+	"DesktopDementedEndRun\n"
+	"level_select_change_level_quit level = load_skateshop\n"
+	"endscript\n"
+	"script desktop_demented_msg\n"
+	"create_panel_message id = desktop_demented_msg text = <text> pos = (320,150) rgba = [ 128 60 40 128 ] time = 2500\n"
+	"endscript\n"
+	// the run clock, bottom right in the goal timer's font, lives above it
+	"script desktop_demented_hud_create\n"
+	"desktop_demented_hud_off\n"
+	"SetScreenElementLock id = root_window off\n"
+	"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_demented_hud pos = (0,0) just = [ left top ] }\n"
+	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_time font = newtimerfont text = \"0:00\" pos = (628,438) just = [ right bottom ] scale = 0.55 rgba = [ 128 128 128 70 ] z_priority = -1 }\n"
+	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_lives font = small text = \" \" pos = (628,414) just = [ right bottom ] scale = 0.6 rgba = [ 128 128 128 80 ] z_priority = -1 }\n"
+	"endscript\n"
+	"script desktop_demented_hud_off\n"
+	"if ScreenElementExists id = desktop_demented_hud\n"
+	"DestroyScreenElement id = desktop_demented_hud\n"
+	"endif\n"
+	"endscript\n";
+
 // Pause menu (create_pause_menu, gamemenu.qb): the item before Change Level,
 // and the mode's scripts at the end of the file.
 static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
@@ -1432,7 +1527,7 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 		if( b == k ) return;
 		Ecrit w1; compile_q( w1, s_item_pause );
 		m.push_back( Modif{ j[b].pos, 0, w1.o } );
-		Ecrit w2; w2.eol(); compile_q( w2, scripts_extras().c_str());
+		Ecrit w2; w2.eol(); compile_q( w2, ( scripts_extras() + s_demented_scripts ).c_str());
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
 		VLOG( "MUS", "pause menu: Extras added" );
 		return;
@@ -1507,33 +1602,6 @@ static void patch_histoire( const unsigned char *qb, const std::vector<Jeton> &j
 		m.push_back( Modif{ j[b].pos, 0, w.o } );
 		VLOG( "MUS", "story menu: Pro Skater 1-4 added" );
 
-		// THUG Zero (desktop): a new story with every stat at 0 and Sick
-		// goals, under Start New Story / Load Story (before the 'if cd' that
-		// places the menu).
-		{
-			Ecrit wz;
-			compile_q( wz,
-				"script desktop_zero_pick\n"
-				"DesktopZeroArm on\n"
-				"if GetGlobalFlag flag = CAREER_STARTED\n"
-				"career_overwrite_warning title = \"THUG Zero\"\n"
-				"else\n"
-				"career_options_menu_exit new_menu_script = create_career_difficulty_menu level = load_cas kill_all\n"
-				"endif\n"
-				"endscript\n" );
-			m.push_back( Modif{ j[k].pos, 0, wz.o } );
-			const uint32_t cd = crc( "cd" );
-			size_t c = b + 1;
-			for( ; c + 1 < j.size() && qb[j[c].pos] != T_ENDSCRIPT; ++c )
-				if( qb[j[c].pos] == 37 && est_nom( qb, j[c + 1], cd )) break;
-			if( c + 1 < j.size() && qb[j[c].pos] == 37 )
-			{
-				Ecrit wi;
-				compile_q( wi, "make_main_menu_item { text = \"THUG Zero\" pad_choose_script = desktop_zero_pick }\n" );
-				m.push_back( Modif{ j[c].pos, 0, wi.o } );
-				VLOG( "MUS", "story menu: THUG Zero added" );
-			}
-		}
 		return;
 	}
 }
@@ -2084,6 +2152,36 @@ static const char *s_debut_secrets =
 	"<first_name> = <desktop_headshot>\n"
 	"endif\n";
 
+// Difficulty menu (create_career_difficulty_menu): Twisted and Demented
+// after Sick, new stories only, before the description box is built.
+static const char *s_difficultes =
+	"if NOT GotParam from_ss_menu\n"
+	"if GameModeEquals is_career\n"
+	"make_main_menu_item { text = \"Twisted\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = set_career_difficulty dif = 2 desktop_twisted } }\n"
+	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals with every stat locked at 0 for the whole story\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = \"Demented\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu } }\n"
+	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"A random skater, starter tricks locked, no saving. One run to beat it\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"endif\n"
+	"endif\n";
+
+static void patch_difficultes( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "create_career_difficulty_menu" ), barre = crc( "bar_color" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		size_t b = k + 2;
+		for( ; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+			if( est_nom( qb, j[b], barre )) break;
+		if( b >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) { VLOG( "MUS", "difficulty menu: bar_color not found" ); return; }
+		while( b > k && qb[j[b].pos] != T_EOL && qb[j[b].pos] != T_EOLNUM ) --b;
+		Ecrit w; compile_q( w, s_difficultes );
+		m.push_back( Modif{ j[b].pos + j[b].taille, 0, w.o } );
+		VLOG( "MUS", "difficulty menu: Twisted and Demented added" );
+		return;
+	}
+}
+
 // Puts text at the start of script 'nom', after its header line.
 static void patch_debut( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
                          const char *nom, const char *texte )
@@ -2287,13 +2385,13 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
 	patch_debut( qb, j, m, "create_career_options_menu", "DesktopZeroArm off\n" );
 	patch_debut( qb, j, m, "cancel_new_career", "DesktopZeroArm off\n" );
-	patch_debut( qb, j, m, "create_career_difficulty_menu",
-		"if DesktopZeroArmed\n"
-		"set_career_difficulty dif = 2\n"
-		"return\n"
-		"endif\n" );
+	// Difficulty menu: Twisted (THUG Zero) and Demented after Sick.
+	patch_difficultes( qb, j, m );
 	patch_debut( qb, j, m, "set_career_difficulty",
 		"if NOT GotParam from_ss_menu\n"
+		"if GotParam desktop_twisted\n"
+		"DesktopZeroArm on\n"
+		"endif\n"
 		"if DesktopZeroArmed\n"
 		"<dif> = 2\n"
 		"SetGlobalFlag flag = 511\n"
@@ -2301,6 +2399,48 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		"UnSetGlobalFlag flag = 511\n"
 		"endif\n"
 		"DesktopZeroArm off\n"
+		"if GotParam desktop_demented\n"
+		"DesktopDementedStart\n"
+		"else\n"
+		"DesktopDementedStop\n"
+		"endif\n"
+		"endif\n" );
+	// Demented: dealt a skater instead of the create-a-skater, no saving,
+	// missing goal tricks slotted in, a life per chapter, its own ending.
+	patch_debut( qb, j, m, "launch_pre_cas_menu",
+		"if DesktopDementedNeedsDeal\n"
+		"if NOT ( goto_cad = 1 )\n"
+		"desktop_demented_deal\n"
+		"return\n"
+		"endif\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "goal_check_for_required_tricks",
+		"if DesktopDemented\n"
+		"GoalManager_GetGoalParams name = <goal_id>\n"
+		"if GotParam required_tricks\n"
+		"DesktopDementedSlotTricks required_tricks = <required_tricks>\n"
+		"endif\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "goal_want_to_save",
+		"if DesktopDemented\n"
+		"SpawnScript desktop_demented_nosave\n"
+		"return\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "launch_pause_menu_save_game_sequence", "if DesktopDemented\nreturn\nendif\n" );
+	patch_debut( qb, j, m, "launch_options_menu_save_game_sequence", "if DesktopDemented\nreturn\nendif\n" );
+	patch_debut( qb, j, m, "ShownChapterTitle_Spawned",
+		"GoalManager_GetCurrentChapterAndStage\n"
+		"DesktopDementedChapter chapter = <currentchapter>\n" );
+	patch_debut( qb, j, m, "HI_Endgame_show_messages_spawned",
+		"if DesktopDemented\n"
+		"pausegame\n"
+		"StopStream\n"
+		"PlayStream FoundAllGaps vol = 150\n"
+		"DesktopDementedWon\n"
+		"create_dialog_box { title = \"RUN COMPLETE\" title_font = testtitle text = <text> pos = (320,240) just = [ center center ] "
+		"text_rgba = [ 88 105 112 128 ] text_dims = (330,0) line_spacing = 0.85 "
+		"buttons = [ { font = small text = \"OK\" pad_choose_script = desktop_demented_quit } ] delay_input }\n"
+		"return\n"
 		"endif\n" );
 	patch_pietons( qb, j, m );
 	patch_gta_corps( qb, j, m );

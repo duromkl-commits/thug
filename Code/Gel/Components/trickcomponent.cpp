@@ -37,6 +37,9 @@
 #ifdef __PLAT_VITA__
 #include <sk/objects/skatercareer.h>
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+void desktop_demented_bail( void );	// desktop_demented.cpp: Perma Bail, run stats
+#endif
 // ISSUE PUBLIQUE #6 « Can't manual » : trace du chemin complet d'un manual,
 // muette par defaut, armee par la commande « trk 1 » (p_siodev.cpp).
 //   [TRK] +Up / +Down ...      evenements de direction ENREGISTRES (ou ignores)
@@ -3903,6 +3906,9 @@ CBaseComponent::EMemberFunctionResult CTrickComponent::CallMemberFunction( uint3
 				}
 				
 				GetScoreObject()->Bail();
+#ifdef THUG_DESKTOP
+				desktop_demented_bail();
+#endif
 			}
 
 			// tell any observers to balk if they want:

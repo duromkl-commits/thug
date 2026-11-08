@@ -152,6 +152,17 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopQuitGame(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopZeroArm(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDemented(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedToggle(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedText(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedStart(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedStop(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedNeedsDeal(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedDeal(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedChapter(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedWon(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedEndRun(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedSlotTricks(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopZeroArmed(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopExtraToggle(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopExtrasText(Script::CStruct *pParams, Script::CScript *pScript);
