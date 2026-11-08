@@ -5642,6 +5642,12 @@ bool ScriptGetSkaterVelocity( Script::CStruct* pParams, Script::CScript* pScript
 // @uparm STATS_AIR | global int value of the stat (defined in physics.q)
 // @parmopt name | skater | | the name of the profile you wish to get.  If you don't
 // provide a name, the current skater's profile will be returned
+#ifdef THUG_DESKTOP
+}	// namespace CFuncs
+bool DesktopThugZero( void );	// desktop_extras_glue.cpp
+namespace CFuncs
+{
+#endif
 bool ScriptGetStatValue( Script::CStruct* pParams, Script::CScript* pScript )
 {
 	uint32 stat;
@@ -5658,6 +5664,11 @@ bool ScriptGetStatValue( Script::CStruct* pParams, Script::CScript* pScript )
 	
 	Dbg_MsgAssert( pSkaterProfile, ( "Unable to get skater profile") );
 	int value = pSkaterProfile->GetStatValue( stat );
+#ifdef THUG_DESKTOP
+	// THUG Zero: the stats menu shows the 0 the skater actually plays with.
+	if ( DesktopThugZero() && !pParams->ContainsComponentNamed( CRCD(0x5b8ab877,"skater") ))
+		value = 0;
+#endif
 	pScript->GetParams()->AddInteger( "stat_value", value );
 
 	return true;

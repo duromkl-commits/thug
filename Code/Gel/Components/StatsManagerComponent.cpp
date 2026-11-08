@@ -37,6 +37,10 @@
 #include <sk/objects/playerprofilemanager.h>
 #ifdef THUG_DESKTOP
 bool DesktopThugZero( void );	// desktop_extras_glue.cpp: a THUG Zero story is running
+// THUG Zero: no stat goals at all (no popups, sounds or payouts).
+static inline bool desktop_zero( void ) { return DesktopThugZero(); }
+#else
+static inline bool desktop_zero( void ) { return false; }
 #endif
 
 
@@ -306,7 +310,7 @@ void CStatsManagerComponent::Update()
     }
     
     // Return if stat goals turned off
-    if ( !stat_goals_on )
+    if ( !stat_goals_on || desktop_zero() )
     {
         return;
     }
@@ -945,7 +949,7 @@ void CStatsManagerComponent::CheckTimedRecord( uint32 checksum, float time, bool
         return;
     }
 
-    if ( !stat_goals_on )
+    if ( !stat_goals_on || desktop_zero() )
     {
         return;
     }
@@ -1053,7 +1057,7 @@ void CStatsManagerComponent::Land()
         return;
     }
 
-    if ( !stat_goals_on )
+    if ( !stat_goals_on || desktop_zero() )
     {
         return;
     }

@@ -927,6 +927,9 @@ static bool vdemarre( uint32 checksum, int s, bool ok )
 			VLOG( "PCM", "bail voice %s: could not read it", wav_de( checksum ));
 			return false;
 		}
+		static int n_log;
+		if( n_log++ < 20 )
+			VLOG( "PCM", "bail voice %s: %d frames at %d Hz, pitch %d%%", wav_de( checksum ), n, hz, (int)( s_flux[s].vitesse * 100.0 ));
 		SFlux &F = s_flux[s];
 		sceKernelLockMutex( F.mutex, 1, NULL );
 		vlibere( F );

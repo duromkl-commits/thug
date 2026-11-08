@@ -3610,7 +3610,14 @@ bool ScriptPlayStream( Script::CStruct *pParams, Script::CScript *pScript )
 			for ( int k = 0; k < 36 && !bail; ++k )
 				bail = ( s_bails[k] == streamNameChecksum );
 			char clip[256];
-			if ( bail && p > 0 && custom_skater_voice_clip( nom, clip, sizeof( clip )))
+			const bool a_clip = bail && p > 0 && custom_skater_voice_clip( nom, clip, sizeof( clip ));
+			static int n_log;
+			if ( bail && n_log < 40 )
+			{
+				++n_log;
+				VLOG( "PCM", "bail stream for skater %08x: pitch %d, %s", nom, p, a_clip ? clip : "no clip (stock voice)" );
+			}
+			if ( a_clip )
 			{
 				streamNameChecksum = Crc::GenerateCRCFromString( clip );
 				desktop_voice_wav( streamNameChecksum, clip );

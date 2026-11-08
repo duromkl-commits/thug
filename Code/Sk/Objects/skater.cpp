@@ -156,6 +156,7 @@
 #include <gel/scripting/checksum.h>
 #ifdef THUG_DESKTOP
 #include "custom_music.h"
+#include "vita_log.h"
 #endif
 #include <sk/scripting/nodearray.h>
 #ifdef THUG_DESKTOP
@@ -2031,7 +2032,14 @@ bool CSkater::SkaterEquals( Script::CStruct* pStructure )
 	// (custom_music.cpp patches animevents.qb to ask this).
 	if ( pStructure->ContainsFlag( Crc::GenerateCRCFromString( "desktop_voiced" ) ) )
 	{
-		if ( m_isPro && !custom_skater_voice_pitch( m_skaterNameChecksum ) )
+		const bool voix = !m_isPro || custom_skater_voice_pitch( m_skaterNameChecksum );
+		static int n_log;
+		if ( n_log < 20 )
+		{
+			++n_log;
+			VLOG( "PCM", "bail vocals check: skater %08x %s, %s", m_skaterNameChecksum, m_isPro ? "pro" : "created", voix ? "voiced" : "silent" );
+		}
+		if ( !voix )
 			return false;
 	}
 #endif

@@ -1154,6 +1154,13 @@ static const char *s_air_shuffle =
 	"SetTrickName \"Air Shuffle\"\n"
 	"SetTrickScore 100\n"
 	"Display\n"
+	// the grind shuffle's bottom-left popup (grindscripts.qb Awardshuffle)
+	"if NOT InSplitscreenGame\n"
+	"Create_Panel_Message text = \"Shuffle Bonus\" id = perfect rgba = [ 50 120 200 128 ] pos = (110,340) style = perfect_style\n"
+	"Create_Panel_Message text = \"+100 Points\" id = perfect2 rgba = [ 50 120 200 100 ] pos = (110,360) style = perfect_style\n"
+	"else\n"
+	"PerfectSloppy_2p text = \"Shuffle!\" rgb = [ 50 120 50 128 ]\n"
+	"endif\n"
 	"PlayAnim Anim = Boneless BlendPeriod = 0.2\n"
 	"WaitAnimWhilstChecking\n"
 	"Goto Airborne\n"
@@ -1838,7 +1845,12 @@ static void charge_banque( uint32_t nom, const char *cle )
 	snprintf( vita, sizeof( vita ), "ux0:data/thug/Data/voices/%s.txt", cle );
 	desktop_host_path( vita, chemin, sizeof( chemin ));
 	FILE *f = fopen( chemin, "rb" );
-	if( !f ) return;
+	if( !f )
+	{
+		static int n_log;
+		if( n_log++ < 3 ) VLOG( "PCM", "bail voices: no %s", chemin );
+		return;
+	}
 	BanqueVoix b = { nom, 100, {}, -1 };
 	char l[512];
 	while( fgets( l, sizeof( l ), f ))
@@ -1985,7 +1997,7 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			charge_banque( nom_crc, tous[i].nom );
 		}
 		if( sans ) VLOG( "MUS", "skaters: %d without a profile in skater_meta.inc", sans );
-		VLOG( "MUS", "skaters: %d with bail voice clips (data/voices)", (int)s_banques.size());
+		VLOG( "PCM", "bail voices: %d skaters with clips in data/voices", (int)s_banques.size());
 		m.push_back( Modif{ j[a].pos, 0, w1.o } );
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
 		VLOG( "MUS", "skaters: %d peds + %d GTA added", nb, (int)g.size());
