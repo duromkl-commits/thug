@@ -1905,7 +1905,7 @@ static std::string profil_pieton( int i, const PietonJouable &p, const MetaSkate
 	snprintf( t, sizeof( t ),
 		"{ display_name = \"%s\" first_name = \"%s\" file_name = \"Unimplemented\" skater_index = %d\n"
 		"default_appearance = desktop_pedlook_%d name = desktop_ped_%d stance = %s pushstyle = %s trickstyle = %s\n"
-		"is_pro = 1 is_head_locked = 1 is_locked = 1 is_male = %d age = %d hometown = \"%s\" points_available = 0\n"
+		"is_pro = 1 is_head_locked = 1 is_locked = 1 is_male = %d age = %d hometown = \"%s\" points_available = 0 desktop_headshot = \"ped\"\n"
 		"%s\n"
 		"sponsors = [ ] trick_mapping = { } default_trick_mapping = %s no_edit no_edit_groups = [ secret_options ]\n"
 		"max_specials = 11 specials = { [\n"
@@ -2065,7 +2065,12 @@ static void patch_xbox( const unsigned char *qb, const std::vector<Jeton> &j, st
 static const char *s_debut_secrets =
 	"SetGlobalFlag flag = SKATER_UNLOCKED_IRONMAN\n"
 	"SetGlobalFlag flag = SKATER_UNLOCKED_KISSDUDE\n"
-	"SetGlobalFlag flag = SKATER_UNLOCKED_CREATURE\n";
+	"SetGlobalFlag flag = SKATER_UNLOCKED_CREATURE\n"
+	// Extra skaters' select-screen picture is SS_ped (headshot is "SS_" + first
+	// name, and their real first names have no picture, so the sprite was lost).
+	"if GotParam desktop_headshot\n"
+	"<first_name> = <desktop_headshot>\n"
+	"endif\n";
 
 // Puts text at the start of script 'nom', after its header line.
 static void patch_debut( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
