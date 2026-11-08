@@ -24,6 +24,10 @@
 
 #include <gel/objtrack.h>
 
+#ifdef THUG_DESKTOP
+bool DesktopDemented( void );	// desktop_demented.cpp
+#endif
+
 namespace Obj
 {
 	extern bool DebugSkaterScripts;
@@ -342,7 +346,12 @@ void CInputComponent::Debounce ( uint32 Checksum, float time, bool clear )
 bool CInputComponent::ignore_button_presses (   )
 {
 	// if any operable menus are up in net games, ignore input
+#ifdef THUG_DESKTOP
+	// Demented's pause menu doesn't freeze the game: same rule as online
+	if( !GameNet::Manager::Instance()->InNetGame() && !DesktopDemented()) return false;
+#else
 	if( !GameNet::Manager::Instance()->InNetGame()) return false;
+#endif
 	
 	if (Front::CScreenElementManager::Instance()->GetElement(CRCD(0x2edb780f, "controller_unplugged_dialog_anchor"))) return true;
 	

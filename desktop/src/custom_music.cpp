@@ -1187,8 +1187,10 @@ static void patch_air_shuffle( const unsigned char *qb, const std::vector<Jeton>
 // Pause menu: the "Extras" item.
 static const char *s_item_pause =
 	"if NOT IsObserving\n"
+	"if NOT DesktopDemented\n"
 	"make_sprite_menu_item text = \"Extras\" id = menu_desktop_extras pad_choose_script = desktop_extras_menu\n"
 	"make_text_sprite texture = <view_icon> parent = menu_desktop_extras\n"
+	"endif\n"
 	"endif\n";
 
 // Pause > Extras: the toggles (desktop_extras.cpp), and what they put on

@@ -378,7 +378,7 @@ void desktop_demented_goal( bool won, int goal_time )
 	--s_run.vies;
 	if( s_run.vies <= 0 ) { s_run.vies = 0; game_over( "Out of lives." ); return; }
 	char t[64];
-	snprintf( t, sizeof( t ), "-1 LIFE (%d left)", s_run.vies );
+	snprintf( t, sizeof( t ), "-1 LIFE" );
 	panneau( t, NULL, 0, 128, 50, 40 );
 }
 
@@ -432,7 +432,7 @@ void DesktopDementedUpdate( Skate &mdl )
 				--s_run.vies;
 				s_run.reste = TE_RECHARGE;
 				char t[64];
-				snprintf( t, sizeof( t ), "OUT OF TIME -1 LIFE (%d left)", s_run.vies );
+				snprintf( t, sizeof( t ), "OUT OF TIME -1 LIFE" );
 				panneau( t, "GoalFail", 0, 128, 50, 40 );
 			}
 			else { if( s_run.mods[MOD_LIVES] ) s_run.vies = 0; game_over( "Out of time." ); }
@@ -599,7 +599,7 @@ bool ScriptDesktopDementedChapter( Script::CStruct *pParams, Script::CScript *pS
 	{
 		++s_run.vies;
 		char t[64];
-		snprintf( t, sizeof( t ), "+1 LIFE EARNED (%d)", s_run.vies );
+		snprintf( t, sizeof( t ), "+1 LIFE EARNED" );
 		panneau( t, "GoalGood02", 0, 70, 128, 60 );
 	}
 	if( s_run.mods[MOD_TIME] && !s_run.fini )
