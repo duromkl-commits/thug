@@ -761,7 +761,7 @@ void DesktopModesUpdate( Skate &mdl )
 		if( ach_pop( nom, sizeof( nom ), desc, sizeof( desc )))
 		{
 			char t[200];
-			snprintf( t, sizeof( t ), "ACHIEVEMENT UNLOCKED\\n%s\\n\\c0%s", nom, desc );
+			snprintf( t, sizeof( t ), "Achievement: %s", nom );
 			panneau( "desktop_ach_toast", t );
 		}
 	}

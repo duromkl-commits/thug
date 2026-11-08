@@ -87,10 +87,17 @@ static Front::CScreenElement *element( uint32 id )
 	return p ? p.Convert() : NULL;
 }
 
-static void panneau( const char *t )
+// a small one-line notice top right (desktop_toast in gamemenu.qb)
+static void panneau( const char *t, const char *son = NULL, int delai = 0, int r = 128, int g = 128, int b = 128 )
 {
 	Script::CStruct p;
 	p.AddString( "text", t );
+	if( son ) p.AddChecksum( "sound", Script::GenerateCRC( son ));
+	if( delai ) p.AddInteger( "delay", delai );
+	Script::CArray *c = new Script::CArray;
+	c->SetSizeAndType( 4, ESYMBOLTYPE_INTEGER );
+	c->SetInteger( 0, r ); c->SetInteger( 1, g ); c->SetInteger( 2, b ); c->SetInteger( 3, 110 );
+	p.AddArrayPointer( "rgba", c );
 	Script::SpawnScript( "desktop_demented_msg", &p );
 }
 
@@ -327,8 +334,8 @@ static void temps_plus( float s, const char *quoi )
 	s_run.gagne_temps += s;
 	char t[64], c[32];
 	temps( c, sizeof( c ), s );
-	snprintf( t, sizeof( t ), "%s\\n+%s", quoi, c );
-	panneau( t );
+	snprintf( t, sizeof( t ), "+%s %s", c, quoi );
+	panneau( t, "HUD_jumpgap", 0, 70, 110, 128 );
 }
 
 } // namespace
@@ -371,8 +378,8 @@ void desktop_demented_goal( bool won, int goal_time )
 	--s_run.vies;
 	if( s_run.vies <= 0 ) { s_run.vies = 0; game_over( "Out of lives." ); return; }
 	char t[64];
-	snprintf( t, sizeof( t ), "LIFE LOST\\n%d %s left", s_run.vies, s_run.vies == 1 ? "life" : "lives" );
-	panneau( t );
+	snprintf( t, sizeof( t ), "-1 LIFE (%d left)", s_run.vies );
+	panneau( t, NULL, 0, 128, 50, 40 );
 }
 
 // Binding a trick in Demented: never over a starter trick.
@@ -425,8 +432,8 @@ void DesktopDementedUpdate( Skate &mdl )
 				--s_run.vies;
 				s_run.reste = TE_RECHARGE;
 				char t[64];
-				snprintf( t, sizeof( t ), "OUT OF TIME\\n%d %s left", s_run.vies, s_run.vies == 1 ? "life" : "lives" );
-				panneau( t );
+				snprintf( t, sizeof( t ), "OUT OF TIME -1 LIFE (%d left)", s_run.vies );
+				panneau( t, "GoalFail", 0, 128, 50, 40 );
 			}
 			else { if( s_run.mods[MOD_LIVES] ) s_run.vies = 0; game_over( "Out of time." ); }
 		}
@@ -592,21 +599,18 @@ bool ScriptDesktopDementedChapter( Script::CStruct *pParams, Script::CScript *pS
 	{
 		++s_run.vies;
 		char t[64];
-		snprintf( t, sizeof( t ), "NEW CHAPTER\\n+1 life (%d)", s_run.vies );
-		panneau( t );
+		snprintf( t, sizeof( t ), "+1 LIFE EARNED (%d)", s_run.vies );
+		panneau( t, "GoalGood02", 0, 70, 128, 60 );
 	}
 	if( s_run.mods[MOD_TIME] && !s_run.fini )
 	{
-		// after the lives panel, so the two don't land on top of each other
+		// after the life notice, so the two don't land on top of each other
 		s_run.reste += TE_CHAPITRE;
 		s_run.gagne_temps += TE_CHAPITRE;
-		Script::CStruct p;
 		char t[64], c[32];
 		temps( c, sizeof( c ), TE_CHAPITRE );
-		snprintf( t, sizeof( t ), "TIME EXTEND\\n+%s", c );
-		p.AddString( "text", t );
-		p.AddInteger( "delay", s_run.mods[MOD_LIVES] ? 150 : 0 );
-		Script::SpawnScript( "desktop_demented_msg", &p );
+		snprintf( t, sizeof( t ), "+%s TIME EXTEND", c );
+		panneau( t, "HUD_jumpgap", s_run.mods[MOD_LIVES] ? 200 : 0, 70, 110, 128 );
 	}
 	return true;
 }
