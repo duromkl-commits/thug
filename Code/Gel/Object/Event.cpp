@@ -684,6 +684,9 @@ void CEventHandlerTable::pass_event(CEvent *pEvent, Script::CScript *pScript, bo
 			Script::CScript *p_new_script = NULL;
 			Script::CStruct	*p_params = NULL;
 			Script::CStruct	*p_passed_params = NULL;
+#ifdef THUG_DESKTOP
+			const uint32 handled_script = p_entry->script;	// the handler may empty mp_tab
+#endif
 			
 			
 			
@@ -786,7 +789,17 @@ void CEventHandlerTable::pass_event(CEvent *pEvent, Script::CScript *pScript, bo
 
 			// do logging
 			//pEvent->MarkHandled(pObject->GetID(), p_entry->script);
+#ifdef THUG_DESKTOP
+			// The handler can remove handlers (mp_tab freed, NULL, or shorter):
+			// p_entry then points at nothing. Don't read it; stop walking.
+			pEvent->MarkHandled(0, handled_script);
+			if (!mp_tab || i >= m_num_entries)
+			{
+				m_changed = true;
+			}
+#else
 			pEvent->MarkHandled(0, p_entry->script);	// receiver id not important
+#endif
 		}
 
 		p_entry++;

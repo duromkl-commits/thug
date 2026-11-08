@@ -279,7 +279,7 @@ static void resume( char *o, int n, bool gagne )
 	char t[32], mods[64] = "";
 	temps( t, sizeof( t ), s_run.t );
 	for( int i = 0; i < NB_MODS; ++i )
-		if( s_run.mods[i] )
+		if( s_run.mods[i] && i != MOD_LIVES )
 		{
 			const size_t l = strlen( mods );
 			snprintf( mods + l, sizeof( mods ) - l, "%s%s", l ? ", " : "", s_mod_noms[i] );
@@ -474,7 +474,7 @@ bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pSc
 {
 	int i = -1;
 	pParams->GetInteger( crc( "i" ), &i, Script::NO_ASSERT );
-	if( i >= 0 && i < NB_MODS ) s_arme[i] = !s_arme[i];
+	if( i >= 0 && i < NB_MODS && i != MOD_LIVES ) s_arme[i] = !s_arme[i];	// lives are always on
 	return true;
 }
 
@@ -497,6 +497,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	fin_run();
 	s_run.actif = true;
 	for( int i = 0; i < NB_MODS; ++i ) s_run.mods[i] = s_arme[i];
+	s_run.mods[MOD_LIVES] = true;	// not a modifier (Marcus): every run has lives
 	s_run.skater = 0;
 	s_run.nom[0] = 0;
 	s_run.vies = 3;
