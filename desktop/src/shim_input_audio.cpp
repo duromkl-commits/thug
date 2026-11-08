@@ -43,6 +43,27 @@ extern "C" void desktop_request_quit( void )
 	SDL_PushEvent( &e );
 }
 
+// The game's two vibration motors (SIO/Vita/p_siodev.cpp), 0..1. Held for
+// 10 s per call; the game always switches them off itself. Only plain rumble:
+// the DualSense trigger effects were dropped (Marcus, 2026-11-08). The game's
+// own Vibration option (Control Setup) turns it off.
+extern "C" void desktop_pad_rumble( float low, float high )
+{
+	if( !s_pad ) return;
+	const Uint16 l = (Uint16)( low * 65535.0f ), h = (Uint16)( high * 65535.0f );
+	SDL_GameControllerRumble( s_pad, l, h, ( l || h ) ? 10000 : 0 );
+}
+
+// Quitting (Alt+F4 included) never leaves the pad buzzing: called by
+// sceKernelExitProcess before SDL_Quit.
+extern "C" void desktop_pad_close( void )
+{
+	if( !s_pad ) return;
+	SDL_GameControllerRumble( s_pad, 0, 0, 0 );
+	SDL_GameControllerClose( s_pad );
+	s_pad = NULL;
+}
+
 static void open_pad( void )
 {
 	if( s_pad )
@@ -114,6 +135,10 @@ extern "C" int sceCtrlSetSamplingMode( SceCtrlPadInputMode )
 	if( !s_init )
 	{
 		s_init = true;
+		// DualSense / DualShock 4 rumble over Bluetooth needs SDL's enhanced
+		// mode (USB works either way).
+		SDL_SetHint( SDL_HINT_JOYSTICK_HIDAPI_PS5_RUMBLE, "1" );
+		SDL_SetHint( SDL_HINT_JOYSTICK_HIDAPI_PS4_RUMBLE, "1" );
 		SDL_InitSubSystem( SDL_INIT_GAMECONTROLLER );
 		open_pad();
 	}

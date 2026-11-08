@@ -699,9 +699,11 @@ extern "C" int sceKernelTryLockLwMutex( SceKernelLwMutexWork *w, int ) { return 
 extern "C" int sceKernelUnlockLwMutex( SceKernelLwMutexWork *w, int n ) { for( int i = 0; i < n; ++i ) SDL_UnlockMutex( lw( w )); return 0; }
 
 extern "C" int sceKernelPowerTick( int ) { return 0; }
+extern "C" void desktop_pad_close( void );
 extern "C" int sceKernelExitProcess( int res )
 {
 	fflush( NULL );
+	desktop_pad_close();
 	SDL_Quit();
 	exit( res );
 	return 0;
