@@ -30,6 +30,7 @@
 #include <gfx/2D/ScreenElement2.h>
 #include <gfx/2D/TextElement.h>
 #include <sk/modules/skate/skate.h>
+#include <sk/objects/moviecam.h>
 #include <sk/modules/skate/gamemode.h>
 #include <sk/modules/skate/goalmanager.h>
 #include <sk/modules/frontend/frontend.h>
@@ -47,9 +48,14 @@ namespace
 {
 static uint32 crc( const char *t ) { return Script::GenerateCRC( t ); }
 
-enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, NB_MODS };
-static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives" };
-static bool s_arme[NB_MODS] = { false, false, true };	// the menu's choices
+enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, NB_MODS };
+static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend" };
+static bool s_arme[NB_MODS] = { false, false, true, false };
+
+// Time Extend: seconds on the clock at the start, per goal, per chapter, after a lost life.
+// Guesses, to tune once it has been played.
+static const float TE_DEPART = 300.0f, TE_CHAPITRE = 120.0f, TE_RECHARGE = 60.0f;
+static const float TE_GOAL_MIN = 45.0f, TE_GOAL_MAX = 120.0f, TE_GOAL_SANS = 60.0f;	// the menu's choices
 
 struct Run
 {
@@ -60,6 +66,8 @@ struct Run
 	int		vies;
 	int		chapitre_max;
 	float	t;				// skating time, pauses left out
+	float	reste;			// Time Extend: seconds left on the clock
+	float	gagne_temps;	// Time Extend: seconds earned
 	int		bails, gagnes, perdus;
 	bool	fini;			// summary shown, waiting to go back to the menu
 	bool	hud;
@@ -276,8 +284,14 @@ static void resume( char *o, int n, bool gagne )
 			const size_t l = strlen( mods );
 			snprintf( mods + l, sizeof( mods ) - l, "%s%s", l ? ", " : "", s_mod_noms[i] );
 		}
-	char vies[32] = "";
+	char vies[96] = "";
 	if( s_run.mods[MOD_LIVES] ) snprintf( vies, sizeof( vies ), "\\c0Lives left: \\c2%d\\n", s_run.vies );
+	if( s_run.mods[MOD_TIME] )
+	{
+		char g[32]; temps( g, sizeof( g ), s_run.gagne_temps );
+		const size_t l = strlen( vies );
+		snprintf( vies + l, sizeof( vies ) - l, "\\c0Time extended: \\c2%s\\n", g );
+	}
 	snprintf( o, n,
 		"\\c0Skater: \\c2%s\\n"
 		"\\c0Time: \\c2%s\\n"
@@ -306,6 +320,17 @@ static void game_over( const char *pourquoi )
 	VLOG( "DSK", "demented: run over (%s), %.0f s, %d goals", pourquoi, s_run.t, s_run.gagnes );
 }
 
+static void temps_plus( float s, const char *quoi )
+{
+	if( !s_run.mods[MOD_TIME] || s_run.fini ) return;
+	s_run.reste += s;
+	s_run.gagne_temps += s;
+	char t[64], c[32];
+	temps( c, sizeof( c ), s );
+	snprintf( t, sizeof( t ), "%s\\n+%s", quoi, c );
+	panneau( t );
+}
+
 } // namespace
 
 // --- engine hooks --------------------------------------------------------------------
@@ -324,10 +349,23 @@ void desktop_demented_bail( void )
 	if( s_run.mods[MOD_PERMA] ) game_over( "You bailed." );
 }
 
-void desktop_demented_goal( bool won )
+// goal_time: the goal's own time limit in seconds, 0 when it has none
+void desktop_demented_goal( bool won, int goal_time )
 {
 	if( !s_run.actif || s_run.fini ) return;
-	if( won ) { ++s_run.gagnes; return; }
+	if( won )
+	{
+		++s_run.gagnes;
+		float s = TE_GOAL_SANS;
+		if( goal_time > 0 )
+		{
+			s = 30.0f + goal_time * 0.5f;
+			if( s < TE_GOAL_MIN ) s = TE_GOAL_MIN;
+			if( s > TE_GOAL_MAX ) s = TE_GOAL_MAX;
+		}
+		temps_plus( (float)(int)s, "TIME EXTEND" );
+		return;
+	}
 	++s_run.perdus;
 	if( !s_run.mods[MOD_LIVES] ) return;
 	--s_run.vies;
@@ -369,7 +407,31 @@ void DesktopDementedUpdate( Skate &mdl )
 	if( menu || ( !histoire && !cas )) { fin_run(); return; }
 	if( cas ) return;
 	const bool pause = Mdl::FrontEnd::Instance()->GamePaused();
-	if( !pause && !s_run.fini ) s_run.t += Tmr::FrameLength();
+	// cutscenes and goal intro cams run through the movie managers: they don't
+	// count, and the clock is hidden while they play
+	const bool film = ( mdl.GetMovieManager() && mdl.GetMovieManager()->IsRolling())
+		|| ( mdl.GetObjectAnimManager() && mdl.GetObjectAnimManager()->IsRolling());
+	float dt = Tmr::FrameLength();
+	if( dt > 0.1f ) dt = 0.1f;	// a load or hitch is not skating time
+	if( !pause && !s_run.fini ) s_run.t += dt;
+	if( !pause && !film && !s_run.fini && s_run.mods[MOD_TIME] )
+	{
+		s_run.reste -= dt;
+		if( s_run.reste <= 0.0f )
+		{
+			s_run.reste = 0.0f;
+			if( s_run.mods[MOD_LIVES] && s_run.vies > 1 )
+			{
+				--s_run.vies;
+				s_run.reste = TE_RECHARGE;
+				char t[64];
+				snprintf( t, sizeof( t ), "OUT OF TIME\\n%d %s left", s_run.vies, s_run.vies == 1 ? "life" : "lives" );
+				panneau( t );
+			}
+			else { if( s_run.mods[MOD_LIVES] ) s_run.vies = 0; game_over( "Out of time." ); }
+		}
+	}
+	if( film ) { hud_off(); return; }
 
 	// Run clock bottom right, with lives when they're on.
 	if( !element( crc( "desktop_demented_hud" )))
@@ -378,9 +440,17 @@ void DesktopDementedUpdate( Skate &mdl )
 		s_run.hud = element( crc( "desktop_demented_hud" )) != NULL;
 	}
 	char t[48], c[32];
-	temps( c, sizeof( c ), s_run.t );
+	const bool compte = s_run.mods[MOD_TIME];
+	temps( c, sizeof( c ), compte ? s_run.reste + 0.999f : s_run.t );
 	Front::CTextElement *e = (Front::CTextElement *)element( crc( "desktop_demented_time" ));
-	if( e ) e->SetText( c );
+	if( e )
+	{
+		e->SetText( c );
+		// Time Extend: brighter, then red over the last 15 seconds
+		Image::RGBA col( 128, 128, 128, compte ? 100 : 70 );
+		if( compte && s_run.reste < 15.0f ) col = Image::RGBA( 128, 24, 16, 120 );
+		e->SetRGBA( col );
+	}
 	if( s_run.mods[MOD_LIVES] ) snprintf( t, sizeof( t ), "LIVES %d", s_run.vies );
 	else snprintf( t, sizeof( t ), " " );
 	e = (Front::CTextElement *)element( crc( "desktop_demented_lives" ));
@@ -399,7 +469,7 @@ bool ScriptDesktopDemented( Script::CStruct *pParams, Script::CScript *pScript )
 	return s_run.actif;
 }
 
-// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives)
+// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives, 3 Time Extend)
 bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	int i = -1;
@@ -408,7 +478,7 @@ bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pSc
 	return true;
 }
 
-// @script | DesktopDementedText | desktop: adds text0..text2 ("Perma Bail: Off" ...)
+// @script | DesktopDementedText | desktop: adds text0..text3 ("Perma Bail: Off" ...)
 bool ScriptDesktopDementedText( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	for( int i = 0; i < NB_MODS; ++i )
@@ -432,6 +502,8 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.vies = 3;
 	s_run.chapitre_max = -1;
 	s_run.t = 0.0f;
+	s_run.reste = TE_DEPART;
+	s_run.gagne_temps = 0.0f;
 	s_run.bails = s_run.gagnes = s_run.perdus = 0;
 	s_run.fini = false;
 	s_run.depart_cles.clear(); s_run.depart_tricks.clear();
@@ -440,7 +512,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	{
 		if( s_run.mods[MOD_ZERO] ) car->SetGlobalFlag( 511 ); else car->UnSetGlobalFlag( 511 );
 	}
-	VLOG( "DSK", "demented: new run, perma bail %d, zero %d, lives %d", s_run.mods[0], s_run.mods[1], s_run.mods[2] );
+	VLOG( "DSK", "demented: new run, perma bail %d, zero %d, lives %d, time extend %d", s_run.mods[0], s_run.mods[1], s_run.mods[2], s_run.mods[3] );
 	return true;
 }
 
@@ -521,6 +593,19 @@ bool ScriptDesktopDementedChapter( Script::CStruct *pParams, Script::CScript *pS
 		char t[64];
 		snprintf( t, sizeof( t ), "NEW CHAPTER\\n+1 life (%d)", s_run.vies );
 		panneau( t );
+	}
+	if( s_run.mods[MOD_TIME] && !s_run.fini )
+	{
+		// after the lives panel, so the two don't land on top of each other
+		s_run.reste += TE_CHAPITRE;
+		s_run.gagne_temps += TE_CHAPITRE;
+		Script::CStruct p;
+		char t[64], c[32];
+		temps( c, sizeof( c ), TE_CHAPITRE );
+		snprintf( t, sizeof( t ), "TIME EXTEND\\n+%s", c );
+		p.AddString( "text", t );
+		p.AddInteger( "delay", s_run.mods[MOD_LIVES] ? 150 : 0 );
+		Script::SpawnScript( "desktop_demented_msg", &p );
 	}
 	return true;
 }

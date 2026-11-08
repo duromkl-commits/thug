@@ -43,7 +43,16 @@
 extern "C" float desktop_goal_score_scale( void );
 extern "C" float desktop_goal_time_scale( void );
 void desktop_goal_won( uint32 goal, const char *nom );	// desktop_modes_glue.cpp: goal attack splits
-void desktop_demented_goal( bool won );	// desktop_demented.cpp: lives, run summary
+void desktop_demented_goal( bool won, int goal_time );	// desktop_demented.cpp: lives, Time Extend, run summary
+// the goal's own time limit in seconds, 0 for an untimed goal
+static int desktop_goal_seconds( Script::CStruct *p )
+{
+	int u = 0, t = 120;
+	p->GetInteger( CRCD(0xf0e712d2,"unlimited_time"), &u, Script::NO_ASSERT );
+	if ( u == 1 ) return 0;
+	p->GetInteger( CRCD(0x906b67ba,"time"), &t, Script::NO_ASSERT );
+	return t;
+}
 
 // Goals built around stops or a route (tours, H.O.R.S.E., per-spot score
 // clusters such as Muska's moving SUV) keep their figures: their limits and
@@ -867,7 +876,7 @@ bool CGoal::Win( void )
 			const char *p_nom = NULL;
 			GetViewGoalsText( &p_nom );
 			desktop_goal_won( GetGoalId(), p_nom );
-			desktop_demented_goal( true );
+			desktop_demented_goal( true, desktop_goal_seconds( mp_params ) );
 		}
 #endif			
 
@@ -1026,7 +1035,7 @@ bool CGoal::Lose( void )
 	{
 		m_numTimesLost++;
 #ifdef THUG_DESKTOP
-		desktop_demented_goal( false );
+		desktop_demented_goal( false, 0 );
 #endif
 		
 		RunCallbackScript( vFAIL );
