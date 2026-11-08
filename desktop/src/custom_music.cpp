@@ -1532,6 +1532,33 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 		if( b == k ) return;
 		Ecrit w1; compile_q( w1, s_item_pause );
 		m.push_back( Modif{ j[b].pos, 0, w1.o } );
+		// Demented: no Edit Skater/Tricks item (offline; its "if NOT InNetGame"
+		// block gets an "if NOT DesktopDemented" inside it). Modifs must stay in
+		// file order, so this goes in after the Extras item.
+		{
+			const uint32_t edit = crc( "edit_skater_options_menu" );
+			size_t e = b;
+			for( ; e < j.size() && qb[j[e].pos] != T_ENDSCRIPT; ++e ) if( est_nom( qb, j[e], edit )) break;
+			if( e < j.size() && qb[j[e].pos] != T_ENDSCRIPT )
+			{
+				while( e > b && !est_nom( qb, j[e], item )) --e;
+				size_t f = e;
+				int prof = 0;
+				for( ; f < j.size() && qb[j[f].pos] != T_ENDSCRIPT; ++f )
+				{
+					if( qb[j[f].pos] == 37 ) ++prof;
+					else if( qb[j[f].pos] == 40 ) { if( prof == 0 ) break; --prof; }
+				}
+				if( e > b && f < j.size() && qb[j[f].pos] == 40 )
+				{
+					Ecrit w3; compile_q( w3, "if NOT DesktopDemented\n" );
+					m.push_back( Modif{ j[e].pos, 0, w3.o } );
+					Ecrit w4; compile_q( w4, "endif\n" );
+					m.push_back( Modif{ j[f].pos, 0, w4.o } );
+					VLOG( "MUS", "pause menu: Edit Skater/Tricks hidden in Demented" );
+				}
+			}
+		}
 		Ecrit w2; w2.eol(); compile_q( w2, ( scripts_extras() + s_demented_scripts ).c_str());
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
 		VLOG( "MUS", "pause menu: Extras added" );
