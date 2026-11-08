@@ -38,6 +38,10 @@ int  custom_music_playlist_known( void );	/* the file exists */
 int  custom_music_playlist_off( const char *title );
 void custom_music_playlist_set( const char *title, int off );
 
+/* Bail vocal pitch (percent) of an extra skater by its profile name
+   checksum (desktop_ped_N), 0 if it is not one or has no voice. */
+int  custom_skater_voice_pitch( unsigned int name_checksum );
+
 #ifdef __cplusplus
 }
 #endif

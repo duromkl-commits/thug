@@ -165,6 +165,9 @@
 #endif
 
 #include <sk/language.h>
+#ifdef THUG_DESKTOP
+#include "custom_music.h"
+#endif
 
 bool DumpFunctionTimesTrigger=false;
 
@@ -3578,6 +3581,16 @@ bool ScriptPlayStream( Script::CStruct *pParams, Script::CScript *pScript )
 			volR = volume;
 		}
 		pParams->GetFloat( CHECKSUM_PITCH, &pitch );
+#ifdef THUG_DESKTOP
+		// An extra skater's bail vocals (THUG's create-a-skater ones) at its own pitch.
+		if ( !pParams->ContainsComponentNamed( CHECKSUM_PITCH ) && pScript && pScript->mpObject
+		  && pScript->mpObject->GetType() == SKATE_TYPE_SKATER )
+		{
+			const int p = custom_skater_voice_pitch( ((Obj::CSkater *)pScript->mpObject.Convert())->m_skaterNameChecksum );
+			if ( p > 0 )
+				pitch = (float)p;
+		}
+#endif
 		pParams->GetInteger( 0x9d5923d8, &priority ); // priority
 		pParams->GetChecksum( 0x40c698af, &id ); // id
 		pParams->GetInteger( CRCD(0xf5c3922b,"lipsync") , &lipsync );

@@ -1804,27 +1804,84 @@ static void patch_gta_corps( const unsigned char *qb, const std::vector<Jeton> &
 	}
 }
 
-static std::string profil_pieton( int i, const PietonJouable &p )
+// Pro-style profile for each extra skater (gen_skater_meta.py from
+// skater_roster.py): own name, stats, trick list, specials, deck and voice.
+struct MetaSkater
 {
-	char t[2048];
+	const char *nom, *affiche, *prenom;
+	int age;
+	const char *ville, *stance, *pousse, *style;
+	int stats[10];
+	const char *tricks, *specials, *planche;
+	int voix;		// bail vocal pitch in percent, 0 = silent like the real pros
+};
+#include "skater_meta.inc"
+
+static const MetaSkater *meta_de( const char *nom )
+{
+	for( const MetaSkater &m : s_meta )
+		if( !strcmp( m.nom, nom )) return &m;
+	return NULL;
+}
+
+// Profile name checksum (desktop_ped_N) -> bail vocal pitch.
+static std::vector<std::pair<uint32_t, int>> s_voix;
+
+extern "C" int custom_skater_voice_pitch( unsigned int nom )
+{
+	for( const auto &v : s_voix )
+		if( v.first == nom ) return v.second;
+	return 0;
+}
+
+static std::string profil_pieton( int i, const PietonJouable &p, const MetaSkater *m )
+{
+	static const char *noms[10] = { "air", "run", "ollie", "speed", "spin", "switch",
+		"flip_speed", "rail_balance", "lip_balance", "manual_balance" };
+	static const MetaSkater defaut = { "", "", "Ped", -1, "", "regular", "mongo_when_switch", "street",
+		{ 6, 6, 6, 6, 6, 6, 6, 6, 6, 6 }, "WolverineTricks",
+		"{ trickslot = SpAir_L_D_Circle trickname = Trick_1234 } { trickslot = SpAir_R_U_Circle trickname = Trick_The900 } "
+		"{ trickslot = SpGrind_U_D_Triangle trickname = Trick_FlipKickDad } { trickslot = SpMan_L_R_Triangle trickname = Trick_OneFootOneWheel }",
+		"", 0 };
+	const MetaSkater &d = m ? *m : defaut;
+	std::string stats;
+	for( int k = 0; k < 10; ++k )
+	{
+		char t[40];
+		snprintf( t, sizeof( t ), "%s = %d ", noms[k], d.stats[k] );
+		stats += t;
+	}
+	char tricks[64];
+	if( d.tricks[0] == '{' ) snprintf( tricks, sizeof( tricks ), "desktop_tricks_%d", i );
+	else snprintf( tricks, sizeof( tricks ), "%s", d.tricks );
+	char t[4096];
 	snprintf( t, sizeof( t ),
-		"{ display_name = \"%s\" first_name = \"Ped\" file_name = \"Unimplemented\" skater_index = %d\n"
-		"default_appearance = desktop_pedlook_%d name = desktop_ped_%d stance = regular pushstyle = mongo_when_switch trickstyle = street\n"
-		"is_pro = 1 is_head_locked = 1 is_locked = 1 is_male = %d age = -1 hometown = \"\" points_available = 0\n"
-		"air = 6 run = 6 ollie = 6 speed = 6 spin = 6 switch = 6 flip_speed = 6 rail_balance = 6 lip_balance = 6 manual_balance = 6\n"
-		"sponsors = [ ] trick_mapping = { } default_trick_mapping = WolverineTricks no_edit no_edit_groups = [ secret_options ]\n"
+		"{ display_name = \"%s\" first_name = \"%s\" file_name = \"Unimplemented\" skater_index = %d\n"
+		"default_appearance = desktop_pedlook_%d name = desktop_ped_%d stance = %s pushstyle = %s trickstyle = %s\n"
+		"is_pro = 1 is_head_locked = 1 is_locked = 1 is_male = %d age = %d hometown = \"%s\" points_available = 0\n"
+		"%s\n"
+		"sponsors = [ ] trick_mapping = { } default_trick_mapping = %s no_edit no_edit_groups = [ secret_options ]\n"
 		"max_specials = 11 specials = { [\n"
-		"{ trickslot = SpAir_L_D_Circle trickname = Trick_1234 }\n"
-		"{ trickslot = SpAir_R_U_Circle trickname = Trick_The900 }\n"
-		"{ trickslot = SpGrind_U_D_Triangle trickname = Trick_FlipKickDad }\n"
-		"{ trickslot = SpMan_L_R_Triangle trickname = Trick_OneFootOneWheel }\n"
+		"%s\n"
 		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
 		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
 		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
 		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
 		"] } }\n",
-		p.affiche, 100 + i, i, i, p.femme ? 0 : 1 );
+		m ? d.affiche : p.affiche, d.prenom, 100 + i, i, i, d.stance, d.pousse, d.style,
+		p.femme ? 0 : 1, d.age, d.ville, stats.c_str(), tricks, d.specials );
 	return t;
+}
+
+// A real board (deck graphic + griptape) in place of the ped prop board.
+static std::string avec_planche( std::string a, const MetaSkater *m )
+{
+	if( !m || !m->planche[0] ) return a;
+	static const char *prop = "ped_board = { desc_id = Skateboard }";
+	const size_t k = a.find( prop );
+	if( k != std::string::npos ) a.replace( k, strlen( prop ), m->planche );
+	else a += std::string( " " ) + m->planche;
+	return a;
 }
 
 static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
@@ -1860,21 +1917,53 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			looks.push_back( t );
 		}
 		Ecrit w1;
-		for( size_t i = 0; i < tous.size(); ++i )
-			compile_q( w1, profil_pieton( (int)i, tous[i] ).c_str());
-		m.push_back( Modif{ j[a].pos, 0, w1.o } );
 		Ecrit w2; w2.eol();
-		for( size_t i = 0; i < looks.size(); ++i )
+		s_voix.clear();
+		int sans = 0;
+		for( size_t i = 0; i < tous.size(); ++i )
 		{
-			char t[1536];
+			const MetaSkater *me = meta_de( tous[i].nom );
+			if( !me ) ++sans;
+			compile_q( w1, profil_pieton( (int)i, tous[i], me ).c_str());
 			// Not named like the profile: the select screen uses the profile name as a
 			// screen element id, and a global struct of that name would replace it.
-			snprintf( t, sizeof( t ), "desktop_pedlook_%d = { %s }\n", (int)i, looks[i].c_str());
-			compile_q( w2, t );
+			std::string t = "desktop_pedlook_" + std::to_string( i ) + " = { " + avec_planche( looks[i], me ) + " }\n";
+			if( me && me->tricks[0] == '{' )
+				t += "desktop_tricks_" + std::to_string( i ) + " = " + me->tricks + "\n";
+			compile_q( w2, t.c_str());
+			if( me && me->voix > 0 )
+				s_voix.push_back( std::make_pair( crc(( "desktop_ped_" + std::to_string( i )).c_str()), me->voix ));
 		}
+		if( sans ) VLOG( "MUS", "skaters: %d without a profile in skater_meta.inc", sans );
+		m.push_back( Modif{ j[a].pos, 0, w1.o } );
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
 		VLOG( "MUS", "skaters: %d peds + %d GTA added", nb, (int)g.size());
 		return;
+	}
+}
+
+// Bail vocals (animevents.qb): THUG only gives them to the create-a-skater
+// ("ProfileEquals is_custom"). desktop_voiced also takes the extra skaters
+// that have a voice (skater.cpp, pitched per skater in ScriptPlayStream).
+static void patch_voix( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	static const char *scripts[] = { "HandleBailKneeStream", "HandleBailAnkleStream", "HandleBailKickStream" };
+	const uint32_t c = crc( "is_custom" );
+	for( const char *nom : scripts )
+	{
+		const uint32_t n = crc( nom );
+		for( size_t k = 0; k + 1 < j.size(); ++k )
+			if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+			{
+				for( size_t b = k + 2; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+					if( est_nom( qb, j[b], c ))
+					{
+						Ecrit w; w.nom( "desktop_voiced" );
+						m.push_back( Modif{ j[b].pos, j[b].taille, w.o } );
+						VLOG( "MUS", "%s: bail vocals for the extra skaters", nom );
+					}
+				break;
+			}
 	}
 }
 
@@ -2147,6 +2236,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		"endif\n" );
 	patch_pietons( qb, j, m );
 	patch_gta_corps( qb, j, m );
+	patch_voix( qb, j, m );
 	patch_xbox( qb, j, m );
 	patch_debut( qb, j, m, "select_skater_menu_add_hmenu_items", s_debut_secrets );
 	// Pro Skater 4 career (desktop_th4_glue.cpp): the level select lists only

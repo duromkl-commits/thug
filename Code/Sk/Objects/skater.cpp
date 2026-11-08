@@ -154,6 +154,9 @@
 #include <gel/scripting/component.h>
 #include <gel/scripting/vecpair.h>
 #include <gel/scripting/checksum.h>
+#ifdef THUG_DESKTOP
+#include "custom_music.h"
+#endif
 #include <sk/scripting/nodearray.h>
 #ifdef THUG_DESKTOP
 bool DesktopThugZero( void );	// desktop_extras_glue.cpp: a THUG Zero story is running
@@ -2022,6 +2025,16 @@ bool CSkater::SkaterEquals( Script::CStruct* pStructure )
 		if ( m_isPro )
 			return false;
 	}
+
+#ifdef THUG_DESKTOP
+	// Bail vocals: the create-a-skater and the extra skaters that have a voice
+	// (custom_music.cpp patches animevents.qb to ask this).
+	if ( pStructure->ContainsFlag( Crc::GenerateCRCFromString( "desktop_voiced" ) ) )
+	{
+		if ( m_isPro && !custom_skater_voice_pitch( m_skaterNameChecksum ) )
+			return false;
+	}
+#endif
 
 	if ( pStructure->ContainsFlag( CRCD(0x3f813177,"is_male") ) )
 	{

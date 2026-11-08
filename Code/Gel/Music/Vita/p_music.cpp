@@ -531,6 +531,7 @@ struct SFlux
 	short	src[VOIX_MAX_ECH * 2];
 	int		src_n;
 	double	src_pos;
+	double	vitesse;	// PlayStream's pitch (1 = as recorded)
 
 	unsigned char lecture[VOIX_BLOCS_LECTURE * 72];
 	short	tmp[64 * 2];
@@ -730,7 +731,7 @@ static int thread_voix( SceSize, void *p_arg )
 			sceKernelDelayThread( 5000 );
 			continue;
 		}
-		const double pas = (double)F.hz / AUDIO_HZ;
+		const double pas = (double)F.hz / AUDIO_HZ * ( F.vitesse > 0.0 ? F.vitesse : 1.0 );
 		int i = 0;
 		bool fini = false;
 		for( ; i < GRAIN; ++i )
@@ -1063,15 +1064,24 @@ bool	PCMAudio_PlayMusicTrack( const char *p_nom, bool )
 bool	PCMAudio_PlaySoundtrackMusicTrack( int, int )		{ return true; }
 
 
-bool	PCMAudio_PlayStream( uint32 checksum, int s, float l, float r, float, bool preload )
+// Pitch in percent, as the scripts give it (100 = as recorded).
+static void vvitesse( int s, float pitch )
 {
+	if( vflux_ok( s ))
+		s_flux[s].vitesse = ( pitch >= 25.0f && pitch <= 400.0f ) ? pitch / 100.0 : 1.0;
+}
+
+bool	PCMAudio_PlayStream( uint32 checksum, int s, float l, float r, float pitch, bool preload )
+{
+	vvitesse( s, pitch );
 	if( !vdemarre( checksum, s, !preload ))
 		return false;
 	vvolume( s, l, r );
 	return true;
 }
-bool	PCMAudio_PlayStream( uint32 checksum, int s, Sfx::sVolume *p_volume, float, bool preload )
+bool	PCMAudio_PlayStream( uint32 checksum, int s, Sfx::sVolume *p_volume, float pitch, bool preload )
 {
+	vvitesse( s, pitch );
 	if( !vdemarre( checksum, s, !preload ))
 		return false;
 	vvolume( s, p_volume );
@@ -1090,6 +1100,7 @@ void	PCMAudio_StopStreams( void )
 
 bool	PCMAudio_PreLoadStream( uint32 checksum, int s )
 {
+	vvitesse( s, 100.0f );
 	return vdemarre( checksum, s, false );
 }
 // Nothing to load ahead: the stream reads as it plays.
