@@ -668,7 +668,7 @@ static bool par_pos( const Modif &a, const Modif &b ) { return a.pos < b.pos; }
 
 static unsigned char *applique( const unsigned char *qb, size_t taille, std::vector<Modif> &m )
 {
-	std::sort( m.begin(), m.end(), par_pos );
+	std::stable_sort( m.begin(), m.end(), par_pos );
 	std::vector<unsigned char> o;
 	size_t i = 0;
 	for( size_t k = 0; k < m.size(); ++k )
@@ -1530,35 +1530,61 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 		if( b + 2 >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) { VLOG( "MUS", "pause menu: Change Level not found" ); return; }
 		while( b > k && !est_nom( qb, j[b], item )) --b;
 		if( b == k ) return;
-		Ecrit w1; compile_q( w1, s_item_pause );
-		m.push_back( Modif{ j[b].pos, 0, w1.o } );
-		// Demented: no Edit Skater/Tricks item (offline; its "if NOT InNetGame"
-		// block gets an "if NOT DesktopDemented" inside it). Modifs must stay in
-		// file order, so this goes in after the Extras item.
+		// Demented: no Change Level, Edit Skater/Tricks, Retry Last Goal, End
+		// Current Goal or View Goals: each item and its SetScreenElementProps
+		// get an "if NOT DesktopDemented" around them. Change
+		// Level's opening goes in with the Extras item: the two share a position.
+		size_t fin_ = b;
+		while( fin_ < j.size() && qb[j[fin_].pos] != T_ENDSCRIPT ) ++fin_;
+		struct Local { static size_t endif_apres( const unsigned char *qb, const std::vector<Jeton> &j, size_t e, size_t fin )
 		{
-			const uint32_t edit = crc( "edit_skater_options_menu" );
-			size_t e = b;
-			for( ; e < j.size() && qb[j[e].pos] != T_ENDSCRIPT; ++e ) if( est_nom( qb, j[e], edit )) break;
-			if( e < j.size() && qb[j[e].pos] != T_ENDSCRIPT )
+			int prof = 0;
+			for( size_t f = e; f < fin; ++f )
 			{
-				while( e > b && !est_nom( qb, j[e], item )) --e;
-				size_t f = e;
-				int prof = 0;
-				for( ; f < j.size() && qb[j[f].pos] != T_ENDSCRIPT; ++f )
-				{
-					if( qb[j[f].pos] == 37 ) ++prof;
-					else if( qb[j[f].pos] == 40 ) { if( prof == 0 ) break; --prof; }
-				}
-				if( e > b && f < j.size() && qb[j[f].pos] == 40 )
-				{
-					Ecrit w3; compile_q( w3, "if NOT DesktopDemented\n" );
-					m.push_back( Modif{ j[e].pos, 0, w3.o } );
-					Ecrit w4; compile_q( w4, "endif\n" );
-					m.push_back( Modif{ j[f].pos, 0, w4.o } );
-					VLOG( "MUS", "pause menu: Edit Skater/Tricks hidden in Demented" );
-				}
+				if( qb[j[f].pos] == 37 ) ++prof;
+				else if( qb[j[f].pos] == 40 ) { if( prof == 0 ) return f; --prof; }
 			}
+			return 0;
+		} };
+		{
+			const size_t f = Local::endif_apres( qb, j, b, fin_ );
+			std::string t = s_item_pause;
+			if( f ) t += "\nif NOT DesktopDemented\n";
+			Ecrit w1; compile_q( w1, t.c_str());
+			m.push_back( Modif{ j[b].pos, 0, w1.o } );
+			if( f ) { Ecrit w4; compile_q( w4, "endif\n" ); m.push_back( Modif{ j[f].pos, 0, w4.o } ); }
 		}
+		const uint32_t caches[] = { crc( "menu_cas" ), crc( "menu_retry_goal" ), crc( "menu_end_current_goal" ), crc( "menu_chapters" ) };
+		const uint32_t props = crc( "SetScreenElementProps" );
+		int nb = 0;
+		for( size_t e = k + 2; e + 2 < fin_; ++e )
+		{
+			if( !( est_nom( qb, j[e], id ) && qb[j[e + 1].pos] == T_EGAL )) continue;
+			bool ok = false;
+			for( int c = 0; c < 4; ++c ) ok |= est_nom( qb, j[e + 2], caches[c] );
+			if( !ok ) continue;
+			size_t d = e;
+			while( d > k && !est_nom( qb, j[d], item ) && qb[j[d].pos] != T_EOL && qb[j[d].pos] != T_EOLNUM ) --d;	// this line's item
+			if( !est_nom( qb, j[d], item )) continue;	// "id = menu_cas" inside SetScreenElementProps
+			// the item's lines end with its SetScreenElementProps { ... }
+			size_t g = d;
+			while( g < fin_ && !est_nom( qb, j[g], props )) ++g;
+			while( g < fin_ && qb[j[g].pos] != T_STRUCT ) ++g;
+			int n = 0;
+			size_t f = 0;
+			for( ; g < fin_; ++g )
+			{
+				if( qb[j[g].pos] == T_STRUCT ) ++n;
+				else if( qb[j[g].pos] == T_FSTRUCT && --n == 0 ) { f = g + 1; break; }
+			}
+			if( !f || f >= fin_ ) continue;
+			Ecrit w3; compile_q( w3, "if NOT DesktopDemented\n" );
+			m.push_back( Modif{ j[d].pos, 0, w3.o } );
+			Ecrit w4; w4.eol(); compile_q( w4, "endif" );
+			m.push_back( Modif{ j[f].pos, 0, w4.o } );
+			++nb;
+		}
+		VLOG( "MUS", "pause menu: %d items hidden in Demented", nb );
 		Ecrit w2; w2.eol(); compile_q( w2, ( scripts_extras() + s_demented_scripts ).c_str());
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
 		VLOG( "MUS", "pause menu: Extras added" );
@@ -2459,6 +2485,9 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		"return\n"
 		"endif\n" );
 	patch_debut( qb, j, m, "launch_pause_menu_save_game_sequence", "if DesktopDemented\nreturn\nendif\n" );
+	// no goal retries in Demented (pause menu items are hidden; this also
+	// covers retry-on-Select)
+	patch_debut( qb, j, m, "RetryCurrentGoal", "if DesktopDemented\nreturn\nendif\n" );
 	patch_debut( qb, j, m, "launch_options_menu_save_game_sequence", "if DesktopDemented\nreturn\nendif\n" );
 	patch_debut( qb, j, m, "ShownChapterTitle_Spawned",
 		"GoalManager_GetCurrentChapterAndStage\n"
