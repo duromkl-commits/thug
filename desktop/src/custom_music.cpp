@@ -1654,7 +1654,7 @@ static const PietonJouable s_pietons[] = {
 // data/models/gta/<name>/. Each one, when its files are there, becomes a
 // ped_body part (cas_ped_m.qb) and a pro skater after THUG's peds. GTA's
 // women are converted at a man's height and shrunk by female_scale_info.
-struct PersoGTA { const char *nom, *affiche; int femme; };
+struct PersoGTA { const char *nom, *affiche; int femme; const char *dossier; };
 static const PersoGTA s_gta[] = {
 	{ "andre", "Andre", 0 },
 	{ "male01", "GTA MALE01", 0 },
@@ -1699,13 +1699,47 @@ static const PersoGTA s_gta[] = {
 	{ "hmyst", "GTA HMYST", 0 },
 	{ "omokung", "GTA OMOKUNG", 0 },
 	{ "wmymech", "GTA WMYMECH", 0 },
+	// THPS2 skaters (Marcus's own DAE rips, desktop/tools/dae_to_thug.py),
+	// data/models/thps2/<name>/.
+	{ "andrewreynolds", "THPS2 Andrew Reynolds", 0, "thps2" },
+	{ "andrewreynolds_styleb", "THPS2 Andrew Reynolds B", 0, "thps2" },
+	{ "bobburnquist", "THPS2 Bob Burnquist", 0, "thps2" },
+	{ "bobburnquist_styleb", "THPS2 Bob Burnquist B", 0, "thps2" },
+	{ "buckylasek", "THPS2 Bucky Lasek", 0, "thps2" },
+	{ "buckylasek_styleb", "THPS2 Bucky Lasek B", 0, "thps2" },
+	{ "chadmuska", "THPS2 Chad Muska", 0, "thps2" },
+	{ "chadmuska_styleb", "THPS2 Chad Muska B", 0, "thps2" },
+	{ "erickoston", "THPS2 Eric Koston", 0, "thps2" },
+	{ "erickoston_styleb", "THPS2 Eric Koston B", 0, "thps2" },
+	{ "jamiethomas", "THPS2 Jamie Thomas", 0, "thps2" },
+	{ "jamiethomas_styleb", "THPS2 Jamie Thomas B", 0, "thps2" },
+	{ "kareemcampbell", "THPS2 Kareem Campbell", 0, "thps2" },
+	{ "kareemcampbell_styleb", "THPS2 Kareem Campbell B", 0, "thps2" },
+	{ "rodneymullen", "THPS2 Rodney Mullen", 0, "thps2" },
+	{ "rodneymullen_styleb", "THPS2 Rodney Mullen B", 0, "thps2" },
+	{ "runeglifberg", "THPS2 Rune Glifberg", 0, "thps2" },
+	{ "runeglifberg_styleb", "THPS2 Rune Glifberg B", 0, "thps2" },
+	{ "stevecaballero", "THPS2 Steve Caballero", 0, "thps2" },
+	{ "stevecaballero_styleb", "THPS2 Steve Caballero B", 0, "thps2" },
+	{ "hawk2", "THPS2 Tony Hawk", 0, "thps2" },
+	{ "hawk2b", "THPS2 Tony Hawk B", 0, "thps2" },
+	{ "secret4", "THPS2 Tony Hawk C", 0, "thps2" },
+	{ "officerdick", "THPS2 Officer Dick", 0, "thps2" },
+	{ "officerdick_styleb", "THPS2 Officer Dick B", 0, "thps2" },
+	{ "privatecarrera", "THPS2 Private Carrera", 1, "thps2" },
+	{ "privatecarrera_styleb", "THPS2 Private Carrera B", 1, "thps2" },
+	{ "spiderman", "THPS2 Spider-Man", 0, "thps2" },
+	{ "spiderman_styleb", "THPS2 Spider-Man B", 0, "thps2" },
+	{ "spiderman_stylec", "THPS2 Spider-Man C", 0, "thps2" },
+	{ "spiderman_styled", "THPS2 Spider-Man D", 0, "thps2" },
 };
+static const char *gta_dossier( const PersoGTA &g ) { return g.dossier ? g.dossier : "gta"; }
 enum { NB_GTA = sizeof( s_gta ) / sizeof( s_gta[0] ) };
 
 static bool gta_installe( const PersoGTA &g )
 {
 	char vita[256], chemin[1024];
-	snprintf( vita, sizeof( vita ), "ux0:data/thug/Data/models/gta/%s/%s.skin.xbx", g.nom, g.nom );
+	snprintf( vita, sizeof( vita ), "ux0:data/thug/Data/models/%s/%s/%s.skin.xbx", gta_dossier( g ), g.nom, g.nom );
 	desktop_host_path( vita, chemin, sizeof( chemin ));
 	FILE *f = fopen( chemin, "rb" );
 	if( f ) fclose( f );
@@ -1741,8 +1775,8 @@ static void patch_gta_corps( const unsigned char *qb, const std::vector<Jeton> &
 		for( size_t i = 0; i < g.size(); ++i )
 		{
 			char t[256];
-			snprintf( t, sizeof( t ), "{ desc_id = desktop_gta_%s mesh = \"models/gta/%s/%s.skin\" no_random }\n",
-			          s_gta[g[i]].nom, s_gta[g[i]].nom, s_gta[g[i]].nom );
+			snprintf( t, sizeof( t ), "{ desc_id = desktop_gta_%s mesh = \"models/%s/%s/%s.skin\" no_random }\n",
+			          s_gta[g[i]].nom, gta_dossier( s_gta[g[i]] ), s_gta[g[i]].nom, s_gta[g[i]].nom );
 			compile_q( w, t );
 		}
 		m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
