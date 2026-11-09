@@ -92,6 +92,7 @@ static float s_flip_t = 0.0f, s_flip_suivant = 90.0f;
 static bool  s_flip = false;		// Chaos: the world is mirrored right now
 static bool  s_inverse = false;		// Chaos: steering reversed (world as it is)
 static bool  s_menu = false;		// a menu or dialog is up (Mirror leaves the pad alone)
+static bool  s_menu_seul = false;	// a menu (pause, View Tricks...), not a dialog box
 
 // Chaos: names that get swapped for each other, the same way all run
 static const char *s_noms_chaos[] = { "Eric", "Mindy", "Kyle", "Paulie", "Chad", "Tony", "Bob", "Andrew",
@@ -109,7 +110,7 @@ static uint32 s_graine_chaos = 1;
 
 // Time Extend: seconds on the clock at the start, per goal, per chapter, after a lost life.
 // Guesses, to tune once it has been played.
-static const float TE_DEPART = 60.0f, TE_CHAPITRE = 120.0f, TE_RECHARGE = 60.0f;
+static const float TE_DEPART = 120.0f, TE_CHAPITRE = 120.0f, TE_RECHARGE = 60.0f;
 static const float TE_GOAL_MIN = 45.0f, TE_GOAL_MAX = 120.0f, TE_GOAL_SANS = 60.0f;	// the menu's choices
 
 struct Run
@@ -867,6 +868,63 @@ static int salade( char *t, uint32 graine )
 	return 1;
 }
 
+// Word Salad (Marcus: "a schizo ramble", the shuffled words could still be
+// pieced together): every word becomes one from this list, picked from the
+// word itself, where it sits and the chapter's seed, so a redrawn text
+// rambles the same way every frame. Case kept (CAPS, Capital, lower).
+static const char *s_babil[] = { "skate", "board", "grind", "rail", "ledge", "bail", "combo", "trick", "deck", "wheels",
+	"truck", "bearing", "griptape", "kickflip", "manual", "revert", "special", "gap", "spine", "vert", "street", "park",
+	"pool", "bowl", "ramp", "quarter", "pipe", "stair", "curb", "bench", "fountain", "roof", "subway", "tunnel", "bridge",
+	"warehouse", "factory", "garage", "alley", "dumpster", "hydrant", "cop", "taxi", "pigeon", "rat", "hotdog", "pizza",
+	"burrito", "soda", "sneaker", "hoodie", "beanie", "mom", "dad", "brother", "dog", "cat", "goat", "alligator", "shark",
+	"moon", "sun", "rain", "jersey", "sponsor", "contest", "trophy", "video", "camera", "tape", "magazine", "photo", "money",
+	"wallet", "keys", "phone", "pager", "radio", "tv", "remote", "toaster", "spoon", "fork", "sock", "sandwich", "pickle",
+	"mustard", "ketchup", "gravy", "bacon", "pancake", "cereal", "milk", "cheese", "teeth", "elbow", "knee", "ankle",
+	"brain", "ghost", "angel", "devil", "wizard", "king", "queen", "clown", "robot", "alien", "cowboy", "pirate", "ninja",
+	"they", "we", "you", "he", "she", "it", "nobody", "everybody", "somebody", "always", "never", "maybe", "again", "tomorrow",
+	"yesterday", "forever", "now", "later", "inside", "outside", "under", "over", "behind", "around", "through", "backwards",
+	"is", "was", "will", "can't", "won't", "should", "must", "might", "did", "does", "knows", "wants", "needs", "hates",
+	"loves", "eats", "watches", "follows", "steals", "breaks", "builds", "burns", "sings", "screams", "whispers", "counts",
+	"dreams", "remembers", "forgets", "listens", "lies", "runs", "jumps", "falls", "floats", "spins", "melts", "glows",
+	"the", "a", "my", "your", "their", "every", "no", "one", "two", "seven", "hundred", "million", "last", "first", "only",
+	"big", "small", "loud", "quiet", "wet", "dry", "hot", "cold", "red", "green", "blue", "yellow", "purple", "golden",
+	"rotten", "frozen", "broken", "sticky", "invisible", "secret", "holy", "evil", "lucky", "cursed", "electric", "plastic",
+	"wooden", "nervous", "sleepy", "hungry", "angry", "happy", "sorry", "crazy", "real", "fake", "true", "wrong", "right",
+	"and", "but", "or", "because", "so", "if", "when", "then", "until", "unless", "while", "and then", "listen", "look",
+	"wait", "stop", "go", "yes", "no", "why", "how", "what", "who", "where", "dude", "man", "bro", "sir", "ma'am", "buddy" };
+static const int NB_BABIL = (int)( sizeof( s_babil ) / sizeof( s_babil[0] ));
+
+static int babil( char *t, int cap, uint32 graine )
+{
+	std::string o;
+	int mot = 0, change = 0;
+	for( const char *p = t; *p; )
+	{
+		if( *p == '\\' ) { for( int k = 0; k < 3 && *p; ++k ) o += *p++; continue; }
+		if( !(( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' ))) { o += *p++; continue; }
+		const char *d = p;
+		while(( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' ) || ( *p == '\'' && p[1] >= 'a' )) ++p;
+		const int l = (int)( p - d );
+		bool caps = l > 1, maj = d[0] >= 'A' && d[0] <= 'Z';
+		for( int k = 0; k < l; ++k ) if( d[k] >= 'a' && d[k] <= 'z' ) caps = false;
+		uint32 h = graine ^ (uint32)mot * 0x9E3779B1u;
+		for( int k = 0; k < l; ++k ) h = ( h ^ (uint8)( d[k] | 0x20 )) * 16777619u;
+		const char *w = s_babil[melanger( h ) % (uint32)NB_BABIL];
+		for( int k = 0; w[k]; ++k )
+		{
+			char c = w[k];
+			if(( caps || ( maj && k == 0 )) && c >= 'a' && c <= 'z' ) c = (char)( c - 'a' + 'A' );
+			o += c;
+		}
+		++mot; change = 1;
+	}
+	if( !change ) return 0;
+	const int n = (int)o.size() < cap - 1 ? (int)o.size() : cap - 1;
+	memcpy( t, o.c_str(), n );
+	t[n] = 0;
+	return 1;
+}
+
 // SkaterCorePhysicsComponent: air gravity multiplier
 extern "C" float desktop_demented_gravity( void )
 {
@@ -907,21 +965,26 @@ static const int NB_NOMS_FAMILLE = (int)( sizeof( s_noms_famille ) / sizeof( s_n
 extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 {
 	if( !in || n < 2 ) return 0;
+	// Demented's own notices stay readable (lives, time, the red banners)
+	static const char *s_propres[] = { "-1 LIFE", "+1 LIFE", "OUT OF TIME", "TIME EXTEND", "FRAGILE", "PERMA BAIL", "Missing trick" };
+	for( int i = 0; i < (int)( sizeof( s_propres ) / sizeof( s_propres[0] )); ++i )
+		if( strstr( in, s_propres[i] )) return 0;
 	// Word Salad randomizer: words shuffled, one seed per chapter, in play
 	// only (a paused menu is built while the game is paused, and stays plain)
-	const bool mots = rando_on( MOD_R_MOTS ) && !Mdl::FrontEnd::Instance()->GamePaused();
+	const bool mots = rando_on( MOD_R_MOTS ) && !Mdl::FrontEnd::Instance()->GamePaused() && !s_menu_seul;
 	// ... and every known name becomes one from the pool (the stock list +
 	// data\custom\names.txt), one seed per chapter, menus included
 	const bool noms = rando_on( MOD_R_MOTS );
 	const bool chaos = chaos_on();
 	// Obscure modifier: button icons blanked in play (menus keep theirs)
-	const bool obscur = rando_on( MOD_OBSCURE ) && !Mdl::FrontEnd::Instance()->GamePaused();
+	// (Demented's pause doesn't pause: a menu on screen counts too)
+	const bool obscur = rando_on( MOD_OBSCURE ) && !Mdl::FrontEnd::Instance()->GamePaused() && !s_menu_seul;
 	if( !chaos && !noms && !obscur )
 	{
 		if( !mots ) return 0;
 		strncpy( out, in, n - 1 );
 		out[n - 1] = 0;
-		return salade( out, melanger( s_rando_graine ^ 0x3c6e1a5bu ) | 1 );
+		return babil( out, n, melanger( s_rando_graine ^ 0x3c6e1a5bu ) | 1 );
 	}
 	int o = 0, change = 0;
 	const char *p = in;
@@ -938,6 +1001,11 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 				continue;
 			}
 			for( int k = 0; k < 3 && *p && o < n - 1; ++k ) out[o++] = *p++;
+			continue;
+		}
+		if( obscur && ( *p == '[' || *p == ']' ))	// the brackets round the buttons go too
+		{
+			out[o++] = ' '; ++p; change = 1;
 			continue;
 		}
 		if( !(( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' )))
@@ -1021,7 +1089,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 	}
 	out[o] = 0;
 	if( s_ev_reste[EV_SCRAMBLE] > 0.0f ) { if( salade( out, s_salade_graine )) change = 1; }
-	else if( mots && salade( out, melanger( s_rando_graine ^ 0x3c6e1a5bu ) | 1 )) change = 1;
+	else if( mots && babil( out, n, melanger( s_rando_graine ^ 0x3c6e1a5bu ) | 1 )) change = 1;
 	return change;
 }
 
@@ -1183,6 +1251,7 @@ void DesktopDementedUpdate( Skate &mdl )
 		}
 	}
 	if( !pause ) s_reve_t += dt;
+	s_menu_seul = pause || element( crc( "current_menu_anchor" ));
 	s_menu = pause || element( crc( "current_menu_anchor" )) || element( crc( "dialog_box_anchor" ))
 		|| element( crc( "goal_start_dialog" )) || element( crc( "speech_box_anchor" ));
 	// Chaos: curveballs at random times
