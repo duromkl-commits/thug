@@ -373,6 +373,7 @@ static float  s_gamma_k[3] = { 1.0f, 1.0f, 1.0f };
 static GLuint s_gamma_prog = 0;
 static GLint  s_gamma_loc_reve = -1;
 extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte );	// desktop_demented.cpp
+extern "C" float desktop_chaos_ghost( void );	// desktop_demented.cpp: Chaos Heavy Ghosting, 0 = off
 static GLint  s_gamma_loc_k = -1, s_gamma_loc_zoom = -1, s_gamma_loc_tram = -1, s_gamma_loc_grille = -1, s_gamma_loc_taille = -1, s_gamma_loc_tv = -1, s_gamma_loc_sat = -1;
 static bool   s_gamma_echec = false;
 
@@ -644,7 +645,7 @@ extern "C" void vglSwapBuffers( GLboolean )
 	glClear( GL_COLOR_BUFFER_BIT );
 	const DesktopConfig &cfg = desktop_config();
 	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
-	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f
+	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f || desktop_chaos_ghost() > 0.0f
 	                     || cfg.tv_levels || cfg.saturation != 1.0f || desktop_chaos_dream( &s_reve_tmp[0], &s_reve_tmp[1], &s_reve_tmp[2] ))
 	                   && gamma_prog();
 	if( gamma )
@@ -1934,7 +1935,8 @@ extern "C" void desktop_post( void )
 // frame shown. Called with s_tex_resolve holding this frame.
 static GLuint desktop_fantome( void )
 {
-	const float a = desktop_config().ghosting;
+	const float chaos = desktop_chaos_ghost();
+	const float a = chaos > desktop_config().ghosting ? chaos : desktop_config().ghosting;
 	if( a <= 0.0f || s_fant_etat < 0 )
 		return s_tex_resolve;
 	if( !s_fant_etat )
@@ -1984,7 +1986,7 @@ static GLuint desktop_fantome( void )
 	pp_vers( s_fant_fbo[dst], s_rt_w, s_rt_h );
 	glUseProgram( s_fant_p );
 	// Capped well short of 1 so trails always die out.
-	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f ? 0.8f : a );
+	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f ? 0.8f : a );
 	glActiveTexture( GL_TEXTURE1 );
 	glBindTexture( GL_TEXTURE_2D, s_fant_tex[s_fant_cur] );
 	glActiveTexture( GL_TEXTURE0 );

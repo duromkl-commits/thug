@@ -618,13 +618,13 @@ extern "C" unsigned int desktop_rando_voix( void )
 // the body ones need the real flags, put back when they end.
 enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_STATS_MAX, EV_STATS_RND,
        EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, EV_SONS,
-       EV_BOUTONS, EV_FRAGILE, EV_PERMA, NB_EV };
+       EV_BOUTONS, EV_FRAGILE, EV_PERMA, EV_FANTOME, NB_EV };
 static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
 	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
 	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD", "SOUND SALAD",
-	"NO BUTTON HINTS", "FRAGILE", "PERMA BAIL" };
+	"NO BUTTON HINTS", "FRAGILE", "PERMA BAIL", "HEAVY GHOSTING" };
 // 0: never (Marcus: no moon gravity, and nothing that just helps the player: maxed stats, always special, perfect balance)
-static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3 };
+static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3, 6 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
 static float s_ev_prochain = 20.0f;
 static float s_ev_stat = 0.0f;
@@ -818,6 +818,13 @@ bool desktop_demented_cheat( uint32 cheat )
 }
 
 extern "C" int desktop_chaos_gen( void ) { return s_txt_gen; }
+
+// Heavy Ghosting event (Marcus): the frame blend turned way up, 0 = off.
+// 0.9 keeps about a tenth of a second of trail: hard to read, still playable.
+extern "C" float desktop_chaos_ghost( void )
+{
+	return ( chaos_on() && s_ev_reste[EV_FANTOME] > 0.0f && !s_menu ) ? 0.9f : 0.0f;
+}
 
 // soundfx.cpp PlaySound: Sound Salad's swap seed, 0 when off
 extern "C" unsigned int desktop_chaos_son_graine( void )
