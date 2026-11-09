@@ -688,7 +688,10 @@ bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pSc
 {
 	int i = -1;
 	pParams->GetInteger( crc( "i" ), &i, Script::NO_ASSERT );
-	if( i >= 0 && i < NB_MODS && i != MOD_LIVES ) s_arme[i] = !s_arme[i];	// lives are always on
+	int v = -1;
+	if( pParams->GetInteger( crc( "set" ), &v, Script::NO_ASSERT ) && i >= 0 && i < NB_MODS && i != MOD_LIVES )
+		s_arme[i] = v != 0;		// SURPRISE ME! / Start Run
+	else if( i >= 0 && i < NB_MODS && i != MOD_LIVES ) s_arme[i] = !s_arme[i];	// lives are always on
 	return true;
 }
 

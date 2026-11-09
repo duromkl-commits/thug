@@ -68,6 +68,11 @@ void VitaDessineEcranChargementSiActif( void );
 // mis de cote pendant la phase logique et rejoues une fois le decor pose.
 void VitaDessinerModelesReportes( void );
 int VitaDessinsEnAttente( void );
+#ifdef THUG_DESKTOP
+}
+extern "C" void desktop_portrait_grab( void );
+namespace Nx {
+#endif
 void VitaLibererDifferes( void );
 extern bool g_vita_image_ouverte;
 }
@@ -909,6 +914,9 @@ void	CEngine::s_plat_render_world()
 	// besoin d'ecrire la profondeur pour ne pas etre recouvert, donc il ne
 	// masque plus le decor la ou il est transparent.
 	VitaDessinerModelesReportes();
+#ifdef THUG_DESKTOP
+	desktop_portrait_grab();	// shim_gl.cpp: only while a portrait is asked for
+#endif
 	NxVita::VitaMondeFin();
 	ACC( ACC_MONDE );
 }

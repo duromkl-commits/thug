@@ -6918,8 +6918,10 @@ void RenderWorld( void )
 		// down: roads, grass and decals are blended "opaques" drawn in the
 		// translucent passes, and after the opaque pass they missed it.
 		desktop_ssao();
-		desktop_portrait_grab();
-		desktop_post();
+		// Building portraits: no bloom/haze; the grab comes after the
+		// models' translucent pieces (p_nx.cpp), which some heads are.
+		if( !g_desktop_portrait_cam )
+			desktop_post();
 #endif
 	}
 	if( pass == RANG_CIEL )

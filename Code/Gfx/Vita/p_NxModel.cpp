@@ -24,7 +24,8 @@
 namespace NxVita { extern int g_vita_gp_reutil[2]; }
 namespace Nx { class CVitaGeom; }
 namespace NxVita { extern bool g_vita_sprite_dump; }
-namespace NxVita { extern bool g_vita_uvw; }	// "uvw" (#43), p_world_render.cpp
+namespace NxVita { extern bool g_vita_uvw; }
+namespace NxVita { extern bool g_desktop_portrait_cam; }	// p_world_render.cpp	// "uvw" (#43), p_world_render.cpp
 namespace NxVita { void EnregistrerInstance( Nx::CVitaGeom * ); void OublierInstance( Nx::CVitaGeom * ); }
 #include "p_world_render.h"		// sommets de rendu des secteurs (#5)
 #include "p_NxTexture.h"
@@ -2347,6 +2348,13 @@ cpu:
 // l'etat de melange du morceau, et on dessine.
 // Morceaux translucides SKINNES reportes (#46) : rejoues apres le decor avec
 // leurs propres matrices d'os, comme ils l'auraient ete pendant game_logic.
+// Building portraits: glasses, hair cards and the like must be in the
+// depth, it's what tells the skater from the backdrop.
+#ifdef THUG_DESKTOP
+static inline bool desktop_profondeur_portrait( void ) { return ::NxVita::g_desktop_portrait_cam; }
+#else
+static inline bool desktop_profondeur_portrait( void ) { return false; }
+#endif
 static void dessiner_peau_reportee( void )
 {
 	if( s_num_peau_reportees <= 0 )
@@ -2679,7 +2687,7 @@ void VitaDessinerModelesReportes( void )
 	if( mro )
 	{
 		glEnable( GL_BLEND );
-		glDepthMask( GL_FALSE );
+		glDepthMask( desktop_profondeur_portrait() ? GL_TRUE : GL_FALSE );
 	}
 
 	for( int i = 0; i < s_num_reportes; ++i )
@@ -2714,7 +2722,7 @@ void VitaDessinerModelesReportes( void )
 		// masquer, et ne doit pas ecrire la profondeur -- c'est tout l'interet
 		// de l'avoir reporte. Il se compose simplement par-dessus.
 		if( !mro )
-			glDepthMask( GL_FALSE );
+			glDepthMask( desktop_profondeur_portrait() ? GL_TRUE : GL_FALSE );
 
 		if( p->cbo )
 		{

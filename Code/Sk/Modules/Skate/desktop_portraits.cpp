@@ -78,6 +78,7 @@ struct Etat
 	uint32 avant;
 	int faits, rates;
 	float cible[3], dir[3];
+	float os_tete;		// Bone_Head height, -1e9 when the model has none
 } s;
 
 std::map<uint32, int> s_charge;		// 1 in the sprite dictionary, -1 no file
@@ -303,8 +304,11 @@ bool viser( void )
 	if( !p ) return false;
 	Obj::CSkeletonComponent *sq = GetSkeletonComponentFromObject( p );
 	Mth::Vector pied = p->GetPos(), tete = pied;
+	s.os_tete = -1e9f;
 	if( !sq || !sq->GetBoneWorldPosition( crc( "Bone_Head" ), &tete ) || tete[Y] - pied[Y] < 20.0f )
 		tete = pied + Mth::Vector( 0.0f, 62.0f, 0.0f, 0.0f );
+	else
+		s.os_tete = tete[Y];
 	Mth::Vector avant = p->GetMatrix()[Z];
 	avant[Y] = 0.0f; avant[W] = 0.0f;
 	if( avant.Length() < 0.01f ) avant.Set( 0.0f, 0.0f, 1.0f, 0.0f );
@@ -341,6 +345,14 @@ void recadrer( const float *dep )
 	const float demi = DIST * tanf( VFOV_LARGE * 0.5f * 3.14159265f / 180.0f );
 	const float dy = ( 1.0f - 2.0f * ( haut + 0.5f ) / CH ) * demi;
 	s.cible[1] += dy - SOUS_CRANE;
+	// A tall hat (the chef's) is not the top of the head: never aim more
+	// than a few inches over the head bone.
+	if( s.os_tete > -1e8f && s.cible[1] > s.os_tete + 5.0f )
+	{
+		VLOG( "DSK", "portraits: %08x, hat or hair %.0f in over the head, aimed at the head bone",
+		      (unsigned)s.liste[s.i], s.cible[1] - s.os_tete );
+		s.cible[1] = s.os_tete + 3.0f;
+	}
 	poser_camera( VFOV );
 }
 
@@ -388,9 +400,13 @@ void DesktopPortraitsUpdate( Skate &mdl )
 		return;
 	}
 	++s.frames;
-	// Frozen in the first standing frame of the idle: no sway, no turning
-	// between the wide look and the portrait.
-	if( s.passe == 1 || s.frames >= 4 )
+	// Everyone in the plain standing idle (Gene, Iron Man and THUD have
+	// their own entrance in SkateshopAI, the others a random pose)...
+	if( s.passe == 0 && s.frames == 3 )
+		lancer( "desktop_portrait_idle" );
+	// ...frozen in its first frames: no sway, no turning between the wide
+	// look and the portrait.
+	if( s.passe == 1 || s.frames >= 6 )
 	{
 		Obj::CAnimationComponent *an = GetAnimationComponentFromObject( skater());
 		if( an ) an->SetAnimSpeed( 0.0f, false, true );

@@ -363,53 +363,53 @@ static const MetaSkater s_meta[] = {
 	  "{ Air_SquareL = Trick_Kickflip Air_SquareR = Trick_Heelflip Air_CircleU = Trick_Nosegrab Air_CircleL = Trick_Melon Air_SquareUL = Trick_VarialHeelflip Air_SquareUR = Trick_BSBigSpin Air_SquareDL = Trick_PopShoveIt Air_SquareDR = Trick_OllieNorth Air_SquareU = Trick_180Varial Air_SquareD = Trick_SalFlip Air_U_U_Square = Trick_Hardflip Air_D_D_Square = Trick_BackfootShoveIt Air_CircleUL = Trick_Mute Air_CircleUR = Trick_Madonna Air_CircleDL = Trick_Crossbone Air_CircleDR = Trick_Japan Air_CircleD = Trick_Stalefish Air_CircleR = Trick_IndyNosebone Lip_TriangleUL = Trick_Switcheroo Lip_TriangleUR = Trick_OneFootInvert Lip_TriangleDL = Trick_BSFootplant Lip_TriangleDR = Trick_MuteInvert Lip_TriangleL = Trick_GymnastPlant Lip_TriangleR = Trick_Invert Lip_TriangleD = Trick_AndrectInvert Lip_TriangleU = Trick_Eggplant ExtraSlot1 = Trick_Revert ExtraSlot2 = Trick_Revert JumpSlot = Trick_Fastplant }",
 	  "{ trickslot = SpAir_U_D_Circle trickname = Trick_FlyingSquirrel } { trickslot = SpAir_D_U_Circle trickname = Trick_2KickMadonnaFlip } { trickslot = SpLip_R_L_Triangle trickname = Trick_HeelflipFSInvert } { trickslot = SpGrind_U_L_Triangle trickname = Trick_FlipKickDad }",
 	  "board = { desc_id = Default } cad_graphic = { desc_id = #685cf22b } griptape = { desc_id = #e8b10bcf }", 101 },
-	// Tony Hawk (Casual): BH Deck 3, griptape Hawk 1
-	{ "PedPro_Hawk", "Tony Hawk (Casual)", "Tony", 35, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
+	// Tony Hawk: BH Deck 3, griptape Hawk 1
+	{ "PedPro_Hawk", "Tony Hawk", "Tony", 35, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
 	  "HawkTricks",
 	  "{ trickslot = SpAir_R_L_Circle trickname = Trick_360VarialMcTwist } { trickslot = SpGrind_L_D_Triangle trickname = Trick_360ShovitNoseGrind } { trickslot = SpAir_R_D_Circle trickname = Trick_Indy900 } { trickslot = SpAir_L_D_Circle trickname = Trick_540varielheelfliplien }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #22224c08 } griptape = { desc_id = #78f815ea }", 0 },
-	// Eric Koston (Casual): GR Deck 3, griptape Koston 1
-	{ "PedPro_Koston", "Eric Koston (Casual)", "Eric", 29, "Los Angeles, CA", "goofy", "mongo_when_switch", "street", { 7, 8, 9, 8, 7, 11, 8, 11, 6, 10 },
+	// Eric Koston: GR Deck 3, griptape Koston 1
+	{ "PedPro_Koston", "Eric Koston", "Eric", 29, "Los Angeles, CA", "goofy", "mongo_when_switch", "street", { 7, 8, 9, 8, 7, 11, 8, 11, 6, 10 },
 	  "KostonTricks",
 	  "{ trickslot = SpGrind_U_R_Triangle trickname = Trick_Fandangle } { trickslot = SpMan_R_L_Triangle trickname = Trick_YeahRight } { trickslot = SpAir_L_R_Circle trickname = Trick_FlyingSquirrel } { trickslot = SpAir_R_U_Circle trickname = Trick_ChompOnThis }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #85ce24a4 } griptape = { desc_id = #0e10bcf0 }", 0 },
-	// Bob Burnquist (Casual): PR Deck 11, griptape Generic 2
-	{ "PedPro_Burnquist", "Bob Burnquist (Casual)", "Bob", 27, "Sao Paulo, Brazil", "regular", "never_mongo", "vert", { 8, 7, 7, 10, 9, 11, 8, 9, 9, 7 },
+	// Bob Burnquist: PR Deck 11, griptape Generic 2
+	{ "PedPro_Burnquist", "Bob Burnquist", "Bob", 27, "Sao Paulo, Brazil", "regular", "never_mongo", "vert", { 8, 7, 7, 10, 9, 11, 8, 9, 9, 7 },
 	  "BurnquistTricks",
 	  "{ trickslot = SpMan_L_R_Triangle trickname = Trick_HandStandCasper } { trickslot = SpGrind_L_D_Triangle trickname = Trick_Thinkaboutitgrind } { trickslot = SpAir_U_D_Circle trickname = Trick_Shifty360ShovitBSShifty } { trickslot = SpAir_L_R_Circle trickname = Trick_SambaFlip }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #77a451fc } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Bucky Lasek (Casual): BH Deck 7, griptape Generic 2
-	{ "PedPro_Lasek", "Bucky Lasek (Casual)", "Bucky", 30, "Baltimore, MD", "regular", "never_mongo", "vert", { 10, 7, 7, 9, 11, 8, 8, 8, 10, 7 },
+	// Bucky Lasek: BH Deck 7, griptape Generic 2
+	{ "PedPro_Lasek", "Bucky Lasek", "Bucky", 30, "Baltimore, MD", "regular", "never_mongo", "vert", { 10, 7, 7, 9, 11, 8, 8, 8, 10, 7 },
 	  "LasekTricks",
 	  "{ trickslot = SpLip_L_D_Triangle trickname = Trick_1990Invert } { trickslot = SpLip_R_L_Triangle trickname = Trick_HeelflipFSInvert } { trickslot = SpAir_R_D_Circle trickname = Trick_BreakIn } { trickslot = SpGrind_U_L_Triangle trickname = Trick_BigHitter }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #254f8811 } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Rodney Mullen (Casual): PR Deck 2, griptape Mullen 1
-	{ "PedPro_Mullen", "Rodney Mullen (Casual)", "Rodney", 37, "Gainesville, FL", "regular", "never_mongo", "street", { 7, 7, 8, 8, 9, 8, 10, 10, 7, 11 },
+	// Rodney Mullen: PR Deck 2, griptape Mullen 1
+	{ "PedPro_Mullen", "Rodney Mullen", "Rodney", 37, "Gainesville, FL", "regular", "never_mongo", "street", { 7, 7, 8, 8, 9, 8, 10, 10, 7, 11 },
 	  "MullenTricks",
 	  "{ trickslot = SpAir_U_D_Square trickname = Trick_Gazelle } { trickslot = SpGrind_L_R_Triangle trickname = Trick_HCNHDF } { trickslot = SpGrind_R_L_Triangle trickname = Trick_50Fingerflip } { trickslot = SpGrind_R_D_Triangle trickname = Trick_RodneyGrind }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #3a683b8a } griptape = { desc_id = #c67cfa9e }", 0 },
-	// Chad Muska (Casual): PR Deck 17, griptape Muska 1
-	{ "PedPro_Muska", "Chad Muska (Casual)", "Chad", 26, "Los Angeles, CA", "regular", "never_mongo", "street", { 7, 8, 11, 8, 8, 8, 9, 10, 7, 9 },
+	// Chad Muska: PR Deck 17, griptape Muska 1
+	{ "PedPro_Muska", "Chad Muska", "Chad", 26, "Los Angeles, CA", "regular", "never_mongo", "street", { 7, 8, 11, 8, 8, 8, 9, 10, 7, 9 },
 	  "MuskaTricks",
 	  "{ trickslot = SpGrind_R_D_Triangle trickname = Trick_MoonwalkGrind } { trickslot = SpMan_R_L_Triangle trickname = Trick_MuskaManual } { trickslot = SpGrind_L_D_Triangle trickname = Trick_SprayPaintGrind } { trickslot = SpMan_L_R_Triangle trickname = Trick_RustySlide }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #9ec7f4c9 } griptape = { desc_id = #0c07fe44 }", 0 },
-	// Bam Margera (Casual): EL Deck 10, griptape Generic 2
-	{ "PedPro_Margera", "Bam Margera (Casual)", "Bam", 24, "West Chester, PA", "goofy", "never_mongo", "street", { 8, 10, 8, 10, 8, 8, 8, 9, 8, 8 },
+	// Bam Margera: EL Deck 10, griptape Generic 2
+	{ "PedPro_Margera", "Bam Margera", "Bam", 24, "West Chester, PA", "goofy", "never_mongo", "street", { 8, 10, 8, 10, 8, 8, 8, 9, 8, 8 },
 	  "MargeraTricks",
 	  "{ trickslot = SpAir_U_R_circle trickname = Trick_BamBendAir } { trickslot = SpAir_D_U_Square trickname = Trick_Jackass } { trickslot = SpGrind_D_U_Triangle trickname = Trick_Shortbus } { trickslot = SpGrind_L_R_Triangle trickname = Trick_GrindNBarf }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #a526b225 } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Paul Rodriguez (Casual): GR Deck 7, griptape Generic 1
-	{ "PedPro_Rodrigez", "Paul Rodriguez (Casual)", "Paul", 19, "Los Angeles, CA", "goofy", "never_mongo", "street", { 6, 8, 8, 8, 8, 9, 10, 10, 8, 10 },
+	// Paul Rodriguez: GR Deck 7, griptape Generic 1
+	{ "PedPro_Rodrigez", "Paul Rodriguez", "Paul", 19, "Los Angeles, CA", "goofy", "never_mongo", "street", { 6, 8, 8, 8, 8, 9, 10, 10, 8, 10 },
 	  "RodriguezTricks",
 	  "{ trickslot = SpGrind_L_D_Triangle trickname = Trick_FSNollie360FlipCrook } { trickslot = SpGrind_D_U_Triangle trickname = Trick_YeaRightSlide } { trickslot = SpAir_R_D_Circle trickname = Trick_NollieFlipUnderflip } { trickslot = SpLip_U_D_Triangle trickname = Trick_Russian }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #82a3e0bd } griptape = { desc_id = #71b85a75 }", 0 },
-	// Andrew Reynolds (Casual): PR Deck 4, griptape Generic 2
-	{ "PedPro_Reynolds", "Andrew Reynolds (Casual)", "Andrew", 25, "Lakeland, FL", "regular", "never_mongo", "street", { 7, 7, 11, 8, 8, 9, 8, 10, 8, 9 },
+	// Andrew Reynolds: PR Deck 4, griptape Generic 2
+	{ "PedPro_Reynolds", "Andrew Reynolds", "Andrew", 25, "Lakeland, FL", "regular", "never_mongo", "street", { 7, 7, 11, 8, 8, 9, 8, 10, 8, 9 },
 	  "ReynoldsTricks",
 	  "{ trickslot = SpGrind_L_R_Triangle trickname = Trick_FiftyfiftySwitcheroo } { trickslot = SpAir_L_R_Circle trickname = Trick_BigSpinShifty } { trickslot = SpAir_R_D_Circle trickname = Trick_KFBackflip } { trickslot = SpAir_U_D_Circle trickname = Trick_FSFlipOneFootTailGrab }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #d30b9ebf } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Mike Vallely (Casual): EL Deck 9, griptape Generic 1
-	{ "PedPro_Vallely", "Mike Vallely (Casual)", "Mike", 33, "Edison, NJ", "regular", "never_mongo", "street", { 8, 11, 9, 10, 8, 7, 8, 8, 8, 8 },
+	// Mike Vallely: EL Deck 9, griptape Generic 1
+	{ "PedPro_Vallely", "Mike Vallely", "Mike", 33, "Edison, NJ", "regular", "never_mongo", "street", { 8, 11, 9, 10, 8, 7, 8, 8, 8, 8 },
 	  "VallelyTricks",
 	  "{ trickslot = SpGrind_L_R_Triangle trickname = Trick_ElbowSmash } { trickslot = SpMan_D_U_Triangle trickname = Trick_KickflipSwitch } { trickslot = SpAir_D_R_Circle trickname = Trick_Flamingo } { trickslot = SpMan_L_R_Triangle trickname = Trick_SlamSpinner }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #22dcc625 } griptape = { desc_id = #71b85a75 }", 0 },
@@ -603,118 +603,118 @@ static const MetaSkater s_meta[] = {
 	  "{ Air_SquareL = Trick_Kickflip Air_SquareR = Trick_Heelflip Air_CircleU = Trick_Nosegrab Air_CircleL = Trick_Melon Air_SquareUL = Trick_VarialKickflip Air_SquareUR = Trick_FSShoveIt Air_SquareDL = Trick_HFVarialLien Air_SquareDR = Trick_OllieNorth Air_SquareU = Trick_BSBigSpin Air_SquareD = Trick_BackfootKickflip Air_U_U_Square = Trick_180Varial Air_D_D_Square = Trick_Fingerflip Air_CircleUL = Trick_Airwalk Air_CircleUR = Trick_Stalefish Air_CircleDL = Trick_Indy Air_CircleDR = Trick_Mute Air_CircleD = Trick_Crail Air_CircleR = Trick_SaranWrap Lip_TriangleUL = Trick_BSFootplant Lip_TriangleUR = Trick_Switcheroo Lip_TriangleDL = Trick_MuteInvert Lip_TriangleDR = Trick_Nosepick Lip_TriangleL = Trick_OneFootInvert Lip_TriangleR = Trick_Disaster Lip_TriangleD = Trick_GymnastPlant Lip_TriangleU = Trick_RockToFakie ExtraSlot1 = Trick_Revert ExtraSlot2 = Trick_Revert JumpSlot = Trick_Boneless }",
 	  "{ trickslot = SpGrind_D_U_Triangle trickname = Trick_Fandangle } { trickslot = SpGrind_U_D_Triangle trickname = Trick_BigHitter } { trickslot = SpMan_U_D_Triangle trickname = Trick_YeahRight } { trickslot = SpAir_U_R_Circle trickname = Trick_540varielheelfliplien }",
 	  "board = { desc_id = Default } cad_graphic = { desc_id = #6f313632 } griptape = { desc_id = #9fb63b59 }", 99 },
-	// Andrew Reynolds (2000): PR Deck 4, griptape Generic 2
-	{ "andrewreynolds", "Andrew Reynolds (2000)", "Andrew", 22, "Lakeland, FL", "regular", "never_mongo", "street", { 7, 7, 11, 8, 8, 9, 8, 10, 8, 9 },
+	// Andrew Reynolds PSX A: PR Deck 4, griptape Generic 2
+	{ "andrewreynolds", "Andrew Reynolds PSX A", "Andrew", 22, "Lakeland, FL", "regular", "never_mongo", "street", { 7, 7, 11, 8, 8, 9, 8, 10, 8, 9 },
 	  "ReynoldsTricks",
 	  "{ trickslot = SpGrind_L_R_Triangle trickname = Trick_FiftyfiftySwitcheroo } { trickslot = SpAir_L_R_Circle trickname = Trick_BigSpinShifty } { trickslot = SpAir_R_D_Circle trickname = Trick_KFBackflip } { trickslot = SpAir_U_D_Circle trickname = Trick_FSFlipOneFootTailGrab }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #d30b9ebf } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Andrew Reynolds (2000 Alt): PR Deck 4, griptape Generic 2
-	{ "andrewreynolds_styleb", "Andrew Reynolds (2000 Alt)", "Andrew", 22, "Lakeland, FL", "regular", "never_mongo", "street", { 7, 7, 11, 8, 8, 9, 8, 10, 8, 9 },
+	// Andrew Reynolds PSX B: PR Deck 4, griptape Generic 2
+	{ "andrewreynolds_styleb", "Andrew Reynolds PSX B", "Andrew", 22, "Lakeland, FL", "regular", "never_mongo", "street", { 7, 7, 11, 8, 8, 9, 8, 10, 8, 9 },
 	  "ReynoldsTricks",
 	  "{ trickslot = SpGrind_L_R_Triangle trickname = Trick_FiftyfiftySwitcheroo } { trickslot = SpAir_L_R_Circle trickname = Trick_BigSpinShifty } { trickslot = SpAir_R_D_Circle trickname = Trick_KFBackflip } { trickslot = SpAir_U_D_Circle trickname = Trick_FSFlipOneFootTailGrab }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #d30b9ebf } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Bob Burnquist (2000): PR Deck 11, griptape Generic 2
-	{ "bobburnquist", "Bob Burnquist (2000)", "Bob", 23, "Sao Paulo, Brazil", "regular", "never_mongo", "vert", { 8, 7, 7, 10, 9, 11, 8, 9, 9, 7 },
+	// Bob Burnquist PSX A: PR Deck 11, griptape Generic 2
+	{ "bobburnquist", "Bob Burnquist PSX A", "Bob", 23, "Sao Paulo, Brazil", "regular", "never_mongo", "vert", { 8, 7, 7, 10, 9, 11, 8, 9, 9, 7 },
 	  "BurnquistTricks",
 	  "{ trickslot = SpMan_L_R_Triangle trickname = Trick_HandStandCasper } { trickslot = SpGrind_L_D_Triangle trickname = Trick_Thinkaboutitgrind } { trickslot = SpAir_U_D_Circle trickname = Trick_Shifty360ShovitBSShifty } { trickslot = SpAir_L_R_Circle trickname = Trick_SambaFlip }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #77a451fc } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Bob Burnquist (2000 Alt): PR Deck 11, griptape Generic 2
-	{ "bobburnquist_styleb", "Bob Burnquist (2000 Alt)", "Bob", 23, "Sao Paulo, Brazil", "regular", "never_mongo", "vert", { 8, 7, 7, 10, 9, 11, 8, 9, 9, 7 },
+	// Bob Burnquist PSX B: PR Deck 11, griptape Generic 2
+	{ "bobburnquist_styleb", "Bob Burnquist PSX B", "Bob", 23, "Sao Paulo, Brazil", "regular", "never_mongo", "vert", { 8, 7, 7, 10, 9, 11, 8, 9, 9, 7 },
 	  "BurnquistTricks",
 	  "{ trickslot = SpMan_L_R_Triangle trickname = Trick_HandStandCasper } { trickslot = SpGrind_L_D_Triangle trickname = Trick_Thinkaboutitgrind } { trickslot = SpAir_U_D_Circle trickname = Trick_Shifty360ShovitBSShifty } { trickslot = SpAir_L_R_Circle trickname = Trick_SambaFlip }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #77a451fc } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Bucky Lasek (2000): BH Deck 7, griptape Generic 2
-	{ "buckylasek", "Bucky Lasek (2000)", "Bucky", 27, "Baltimore, MD", "regular", "never_mongo", "vert", { 10, 7, 7, 9, 11, 8, 8, 8, 10, 7 },
+	// Bucky Lasek PSX A: BH Deck 7, griptape Generic 2
+	{ "buckylasek", "Bucky Lasek PSX A", "Bucky", 27, "Baltimore, MD", "regular", "never_mongo", "vert", { 10, 7, 7, 9, 11, 8, 8, 8, 10, 7 },
 	  "LasekTricks",
 	  "{ trickslot = SpLip_L_D_Triangle trickname = Trick_1990Invert } { trickslot = SpLip_R_L_Triangle trickname = Trick_HeelflipFSInvert } { trickslot = SpAir_R_D_Circle trickname = Trick_BreakIn } { trickslot = SpGrind_U_L_Triangle trickname = Trick_BigHitter }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #254f8811 } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Bucky Lasek (2000 Alt): BH Deck 7, griptape Generic 2
-	{ "buckylasek_styleb", "Bucky Lasek (2000 Alt)", "Bucky", 27, "Baltimore, MD", "regular", "never_mongo", "vert", { 10, 7, 7, 9, 11, 8, 8, 8, 10, 7 },
+	// Bucky Lasek PSX B: BH Deck 7, griptape Generic 2
+	{ "buckylasek_styleb", "Bucky Lasek PSX B", "Bucky", 27, "Baltimore, MD", "regular", "never_mongo", "vert", { 10, 7, 7, 9, 11, 8, 8, 8, 10, 7 },
 	  "LasekTricks",
 	  "{ trickslot = SpLip_L_D_Triangle trickname = Trick_1990Invert } { trickslot = SpLip_R_L_Triangle trickname = Trick_HeelflipFSInvert } { trickslot = SpAir_R_D_Circle trickname = Trick_BreakIn } { trickslot = SpGrind_U_L_Triangle trickname = Trick_BigHitter }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #254f8811 } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Chad Muska (2000): PR Deck 17, griptape Muska 1
-	{ "chadmuska", "Chad Muska (2000)", "Chad", 23, "Los Angeles, CA", "regular", "never_mongo", "street", { 7, 8, 11, 8, 8, 8, 9, 10, 7, 9 },
+	// Chad Muska PSX A: PR Deck 17, griptape Muska 1
+	{ "chadmuska", "Chad Muska PSX A", "Chad", 23, "Los Angeles, CA", "regular", "never_mongo", "street", { 7, 8, 11, 8, 8, 8, 9, 10, 7, 9 },
 	  "MuskaTricks",
 	  "{ trickslot = SpGrind_R_D_Triangle trickname = Trick_MoonwalkGrind } { trickslot = SpMan_R_L_Triangle trickname = Trick_MuskaManual } { trickslot = SpGrind_L_D_Triangle trickname = Trick_SprayPaintGrind } { trickslot = SpMan_L_R_Triangle trickname = Trick_RustySlide }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #9ec7f4c9 } griptape = { desc_id = #0c07fe44 }", 0 },
-	// Chad Muska (2000 Alt): PR Deck 17, griptape Muska 1
-	{ "chadmuska_styleb", "Chad Muska (2000 Alt)", "Chad", 23, "Los Angeles, CA", "regular", "never_mongo", "street", { 7, 8, 11, 8, 8, 8, 9, 10, 7, 9 },
+	// Chad Muska PSX B: PR Deck 17, griptape Muska 1
+	{ "chadmuska_styleb", "Chad Muska PSX B", "Chad", 23, "Los Angeles, CA", "regular", "never_mongo", "street", { 7, 8, 11, 8, 8, 8, 9, 10, 7, 9 },
 	  "MuskaTricks",
 	  "{ trickslot = SpGrind_R_D_Triangle trickname = Trick_MoonwalkGrind } { trickslot = SpMan_R_L_Triangle trickname = Trick_MuskaManual } { trickslot = SpGrind_L_D_Triangle trickname = Trick_SprayPaintGrind } { trickslot = SpMan_L_R_Triangle trickname = Trick_RustySlide }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #9ec7f4c9 } griptape = { desc_id = #0c07fe44 }", 0 },
-	// Eric Koston (2000): GR Deck 3, griptape Koston 1
-	{ "erickoston", "Eric Koston (2000)", "Eric", 25, "Los Angeles, CA", "goofy", "mongo_when_switch", "street", { 7, 8, 9, 8, 7, 11, 8, 11, 6, 10 },
+	// Eric Koston PSX A: GR Deck 3, griptape Koston 1
+	{ "erickoston", "Eric Koston PSX A", "Eric", 25, "Los Angeles, CA", "goofy", "mongo_when_switch", "street", { 7, 8, 9, 8, 7, 11, 8, 11, 6, 10 },
 	  "KostonTricks",
 	  "{ trickslot = SpGrind_U_R_Triangle trickname = Trick_Fandangle } { trickslot = SpMan_R_L_Triangle trickname = Trick_YeahRight } { trickslot = SpAir_L_R_Circle trickname = Trick_FlyingSquirrel } { trickslot = SpAir_R_U_Circle trickname = Trick_ChompOnThis }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #85ce24a4 } griptape = { desc_id = #0e10bcf0 }", 0 },
-	// Eric Koston (2000 Alt): GR Deck 3, griptape Koston 1
-	{ "erickoston_styleb", "Eric Koston (2000 Alt)", "Eric", 25, "Los Angeles, CA", "goofy", "mongo_when_switch", "street", { 7, 8, 9, 8, 7, 11, 8, 11, 6, 10 },
+	// Eric Koston PSX B: GR Deck 3, griptape Koston 1
+	{ "erickoston_styleb", "Eric Koston PSX B", "Eric", 25, "Los Angeles, CA", "goofy", "mongo_when_switch", "street", { 7, 8, 9, 8, 7, 11, 8, 11, 6, 10 },
 	  "KostonTricks",
 	  "{ trickslot = SpGrind_U_R_Triangle trickname = Trick_Fandangle } { trickslot = SpMan_R_L_Triangle trickname = Trick_YeahRight } { trickslot = SpAir_L_R_Circle trickname = Trick_FlyingSquirrel } { trickslot = SpAir_R_U_Circle trickname = Trick_ChompOnThis }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #85ce24a4 } griptape = { desc_id = #0e10bcf0 }", 0 },
-	// Jamie Thomas (2000): ZR Deck 8, griptape Thomas 1
-	{ "jamiethomas", "Jamie Thomas (2000)", "Jamie", 25, "Dothan, AL", "regular", "never_mongo", "street", { 8, 10, 8, 10, 8, 8, 8, 11, 7, 7 },
+	// Jamie Thomas PSX A: ZR Deck 8, griptape Thomas 1
+	{ "jamiethomas", "Jamie Thomas PSX A", "Jamie", 25, "Dothan, AL", "regular", "never_mongo", "street", { 8, 10, 8, 10, 8, 8, 8, 11, 7, 7 },
 	  "ThomasTricks",
 	  "{ trickslot = SpGrind_R_D_Triangle trickname = Trick_CrookedBigSpinFlip } { trickslot = SpGrind_D_U_Triangle trickname = Trick_PrimoHandStand } { trickslot = SpGrind_L_D_Triangle trickname = Trick_AmericanHeroGrind } { trickslot = SpGrind_U_D_Triangle trickname = Trick_CrookedSkull }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #4f93580a } griptape = { desc_id = #83e9d1fa }", 0 },
-	// Jamie Thomas (2000 Alt): ZR Deck 8, griptape Thomas 1
-	{ "jamiethomas_styleb", "Jamie Thomas (2000 Alt)", "Jamie", 25, "Dothan, AL", "regular", "never_mongo", "street", { 8, 10, 8, 10, 8, 8, 8, 11, 7, 7 },
+	// Jamie Thomas PSX B: ZR Deck 8, griptape Thomas 1
+	{ "jamiethomas_styleb", "Jamie Thomas PSX B", "Jamie", 25, "Dothan, AL", "regular", "never_mongo", "street", { 8, 10, 8, 10, 8, 8, 8, 11, 7, 7 },
 	  "ThomasTricks",
 	  "{ trickslot = SpGrind_R_D_Triangle trickname = Trick_CrookedBigSpinFlip } { trickslot = SpGrind_D_U_Triangle trickname = Trick_PrimoHandStand } { trickslot = SpGrind_L_D_Triangle trickname = Trick_AmericanHeroGrind } { trickslot = SpGrind_U_D_Triangle trickname = Trick_CrookedSkull }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #4f93580a } griptape = { desc_id = #83e9d1fa }", 0 },
-	// Kareem Campbell (2000): CAS 12, griptape Generic 2
-	{ "kareemcampbell", "Kareem Campbell (2000)", "Kareem", 26, "New York, NY", "regular", "never_mongo", "street", { 7, 8, 9, 8, 9, 8, 9, 9, 8, 10 },
+	// Kareem Campbell PSX A: CAS 12, griptape Generic 2
+	{ "kareemcampbell", "Kareem Campbell PSX A", "Kareem", 26, "New York, NY", "regular", "never_mongo", "street", { 7, 8, 9, 8, 9, 8, 9, 9, 8, 10 },
 	  "CampbellTricks",
 	  "{ trickslot = SpAir_U_R_Square trickname = Trick_GhettoBird } { trickslot = SpAir_L_D_Circle trickname = Trick_KFBackflip } { trickslot = SpAir_R_D_Square trickname = Trick_QuadrupleHeelFlip } { trickslot = SpAir_D_U_Circle trickname = Trick_SitDownAir }",
 	  "board = { desc_id = Default } cad_graphic = { desc_id = #2b4262f5 } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Kareem Campbell (2000 Alt): CAS 12, griptape Generic 2
-	{ "kareemcampbell_styleb", "Kareem Campbell (2000 Alt)", "Kareem", 26, "New York, NY", "regular", "never_mongo", "street", { 7, 8, 9, 8, 9, 8, 9, 9, 8, 10 },
+	// Kareem Campbell PSX B: CAS 12, griptape Generic 2
+	{ "kareemcampbell_styleb", "Kareem Campbell PSX B", "Kareem", 26, "New York, NY", "regular", "never_mongo", "street", { 7, 8, 9, 8, 9, 8, 9, 9, 8, 10 },
 	  "CampbellTricks",
 	  "{ trickslot = SpAir_U_R_Square trickname = Trick_GhettoBird } { trickslot = SpAir_L_D_Circle trickname = Trick_KFBackflip } { trickslot = SpAir_R_D_Square trickname = Trick_QuadrupleHeelFlip } { trickslot = SpAir_D_U_Circle trickname = Trick_SitDownAir }",
 	  "board = { desc_id = Default } cad_graphic = { desc_id = #2b4262f5 } griptape = { desc_id = #e8b10bcf }", 0 },
-	// Rodney Mullen (2000): PR Deck 2, griptape Mullen 1
-	{ "rodneymullen", "Rodney Mullen (2000)", "Rodney", 33, "Gainesville, FL", "regular", "never_mongo", "street", { 7, 7, 8, 8, 9, 8, 10, 10, 7, 11 },
+	// Rodney Mullen PSX A: PR Deck 2, griptape Mullen 1
+	{ "rodneymullen", "Rodney Mullen PSX A", "Rodney", 33, "Gainesville, FL", "regular", "never_mongo", "street", { 7, 7, 8, 8, 9, 8, 10, 10, 7, 11 },
 	  "MullenTricks",
 	  "{ trickslot = SpAir_U_D_Square trickname = Trick_Gazelle } { trickslot = SpGrind_L_R_Triangle trickname = Trick_HCNHDF } { trickslot = SpGrind_R_L_Triangle trickname = Trick_50Fingerflip } { trickslot = SpGrind_R_D_Triangle trickname = Trick_RodneyGrind }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #3a683b8a } griptape = { desc_id = #c67cfa9e }", 0 },
-	// Rodney Mullen (2000 Alt): PR Deck 2, griptape Mullen 1
-	{ "rodneymullen_styleb", "Rodney Mullen (2000 Alt)", "Rodney", 33, "Gainesville, FL", "regular", "never_mongo", "street", { 7, 7, 8, 8, 9, 8, 10, 10, 7, 11 },
+	// Rodney Mullen PSX B: PR Deck 2, griptape Mullen 1
+	{ "rodneymullen_styleb", "Rodney Mullen PSX B", "Rodney", 33, "Gainesville, FL", "regular", "never_mongo", "street", { 7, 7, 8, 8, 9, 8, 10, 10, 7, 11 },
 	  "MullenTricks",
 	  "{ trickslot = SpAir_U_D_Square trickname = Trick_Gazelle } { trickslot = SpGrind_L_R_Triangle trickname = Trick_HCNHDF } { trickslot = SpGrind_R_L_Triangle trickname = Trick_50Fingerflip } { trickslot = SpGrind_R_D_Triangle trickname = Trick_RodneyGrind }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #3a683b8a } griptape = { desc_id = #c67cfa9e }", 0 },
-	// Rune Glifberg (2000): FL Deck 10, griptape Glifberg 1
-	{ "runeglifberg", "Rune Glifberg (2000)", "Rune", 25, "Copenhagen, Denmark", "regular", "never_mongo", "vert", { 11, 7, 7, 9, 9, 8, 8, 9, 9, 8 },
+	// Rune Glifberg PSX A: FL Deck 10, griptape Glifberg 1
+	{ "runeglifberg", "Rune Glifberg PSX A", "Rune", 25, "Copenhagen, Denmark", "regular", "never_mongo", "vert", { 11, 7, 7, 9, 9, 8, 8, 9, 9, 8 },
 	  "GlifbergTricks",
 	  "{ trickslot = SpAir_R_U_Circle trickname = Trick_DoubleKFindy } { trickslot = SpAir_L_R_Circle trickname = Trick_FingerFlipAirwalk } { trickslot = SpAir_R_D_Circle trickname = Trick_540TailWhip } { trickslot = SpAir_L_D_Circle trickname = Trick_2KickMadonnaFlip }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #4e110926 } griptape = { desc_id = #eec1ff39 }", 0 },
-	// Rune Glifberg (2000 Alt): FL Deck 10, griptape Glifberg 1
-	{ "runeglifberg_styleb", "Rune Glifberg (2000 Alt)", "Rune", 25, "Copenhagen, Denmark", "regular", "never_mongo", "vert", { 11, 7, 7, 9, 9, 8, 8, 9, 9, 8 },
+	// Rune Glifberg PSX B: FL Deck 10, griptape Glifberg 1
+	{ "runeglifberg_styleb", "Rune Glifberg PSX B", "Rune", 25, "Copenhagen, Denmark", "regular", "never_mongo", "vert", { 11, 7, 7, 9, 9, 8, 8, 9, 9, 8 },
 	  "GlifbergTricks",
 	  "{ trickslot = SpAir_R_U_Circle trickname = Trick_DoubleKFindy } { trickslot = SpAir_L_R_Circle trickname = Trick_FingerFlipAirwalk } { trickslot = SpAir_R_D_Circle trickname = Trick_540TailWhip } { trickslot = SpAir_L_D_Circle trickname = Trick_2KickMadonnaFlip }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #4e110926 } griptape = { desc_id = #eec1ff39 }", 0 },
-	// Steve Caballero (2000): PR Deck 16, griptape Caballero 1
-	{ "stevecaballero", "Steve Caballero (2000)", "Steve", 35, "San Jose, CA", "goofy", "never_mongo", "street", { 10, 8, 8, 8, 9, 8, 8, 9, 9, 8 },
+	// Steve Caballero PSX A: PR Deck 16, griptape Caballero 1
+	{ "stevecaballero", "Steve Caballero PSX A", "Steve", 35, "San Jose, CA", "goofy", "never_mongo", "street", { 10, 8, 8, 8, 9, 8, 8, 9, 9, 8 },
 	  "CaballeroTricks",
 	  "{ trickslot = SpLip_R_U_Triangle trickname = Trick_HoHoSadplant } { trickslot = SpAir_L_D_Circle trickname = Trick_FS540 } { trickslot = SpGrind_D_U_Triangle trickname = Trick_GuitarSlide } { trickslot = SpGrind_U_D_Triangle trickname = Trick_DaffyBrokenGrind }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #e9c0c45f } griptape = { desc_id = #29aa097c }", 0 },
-	// Steve Caballero (2000 Alt): PR Deck 16, griptape Caballero 1
-	{ "stevecaballero_styleb", "Steve Caballero (2000 Alt)", "Steve", 35, "San Jose, CA", "goofy", "never_mongo", "street", { 10, 8, 8, 8, 9, 8, 8, 9, 9, 8 },
+	// Steve Caballero PSX B: PR Deck 16, griptape Caballero 1
+	{ "stevecaballero_styleb", "Steve Caballero PSX B", "Steve", 35, "San Jose, CA", "goofy", "never_mongo", "street", { 10, 8, 8, 8, 9, 8, 8, 9, 9, 8 },
 	  "CaballeroTricks",
 	  "{ trickslot = SpLip_R_U_Triangle trickname = Trick_HoHoSadplant } { trickslot = SpAir_L_D_Circle trickname = Trick_FS540 } { trickslot = SpGrind_D_U_Triangle trickname = Trick_GuitarSlide } { trickslot = SpGrind_U_D_Triangle trickname = Trick_DaffyBrokenGrind }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #e9c0c45f } griptape = { desc_id = #29aa097c }", 0 },
-	// Tony Hawk (2000): BH Deck 3, griptape Hawk 1
-	{ "hawk2", "Tony Hawk (2000)", "Tony", 32, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
+	// Tony Hawk PSX A: BH Deck 3, griptape Hawk 1
+	{ "hawk2", "Tony Hawk PSX A", "Tony", 32, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
 	  "HawkTricks",
 	  "{ trickslot = SpAir_R_L_Circle trickname = Trick_360VarialMcTwist } { trickslot = SpGrind_L_D_Triangle trickname = Trick_360ShovitNoseGrind } { trickslot = SpAir_R_D_Circle trickname = Trick_Indy900 } { trickslot = SpAir_L_D_Circle trickname = Trick_540varielheelfliplien }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #22224c08 } griptape = { desc_id = #78f815ea }", 0 },
-	// Tony Hawk (2000 Alt): BH Deck 3, griptape Hawk 1
-	{ "hawk2b", "Tony Hawk (2000 Alt)", "Tony", 32, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
+	// Tony Hawk PSX B: BH Deck 3, griptape Hawk 1
+	{ "hawk2b", "Tony Hawk PSX B", "Tony", 32, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
 	  "HawkTricks",
 	  "{ trickslot = SpAir_R_L_Circle trickname = Trick_360VarialMcTwist } { trickslot = SpGrind_L_D_Triangle trickname = Trick_360ShovitNoseGrind } { trickslot = SpAir_R_D_Circle trickname = Trick_Indy900 } { trickslot = SpAir_L_D_Circle trickname = Trick_540varielheelfliplien }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #22224c08 } griptape = { desc_id = #78f815ea }", 0 },
-	// Tony Hawk (2000 Retro): BH Deck 3, griptape Hawk 1
-	{ "secret4", "Tony Hawk (2000 Retro)", "Tony", 32, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
+	// Tony Hawk PSX Retro: BH Deck 3, griptape Hawk 1
+	{ "secret4", "Tony Hawk PSX Retro", "Tony", 32, "Carlsbad, CA", "goofy", "never_mongo", "vert", { 11, 6, 7, 10, 11, 8, 7, 9, 9, 7 },
 	  "HawkTricks",
 	  "{ trickslot = SpAir_R_L_Circle trickname = Trick_360VarialMcTwist } { trickslot = SpGrind_L_D_Triangle trickname = Trick_360ShovitNoseGrind } { trickslot = SpAir_R_D_Circle trickname = Trick_Indy900 } { trickslot = SpAir_L_D_Circle trickname = Trick_540varielheelfliplien }",
 	  "board = { desc_id = Default } deck_graphic = { desc_id = #22224c08 } griptape = { desc_id = #78f815ea }", 0 },
