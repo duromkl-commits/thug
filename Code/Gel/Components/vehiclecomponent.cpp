@@ -5,6 +5,9 @@
 //* CREATION DATE:  1/31/3
 //****************************************************************************
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );	// desktop_demented.cpp
+#endif
 #include <core/defines.h>
 #include <core/allmath.h>
 
@@ -3086,6 +3089,9 @@ void CVehicleComponent::get_input (   )
 			m_controls.steering = 1.0f;
 		}
 	}
+	#ifdef THUG_DESKTOP
+	if (desktop_mirror_steer()) m_controls.steering = -m_controls.steering;	// Demented Mirror / reversed steering
+#endif
 	
 	m_controls.throttle = control_pad.m_x.GetPressed();
 	m_controls.handbrake = control_pad.m_R1.GetPressed() && !m_no_handbrake;
