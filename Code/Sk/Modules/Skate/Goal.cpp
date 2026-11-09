@@ -43,7 +43,8 @@
 extern "C" float desktop_goal_score_scale( void );
 extern "C" float desktop_goal_time_scale( void );
 void desktop_goal_won( uint32 goal, const char *nom );	// desktop_modes_glue.cpp: goal attack splits
-void desktop_demented_goal( bool won, int goal_time );	// desktop_demented.cpp: lives, Time Extend, run summary
+void desktop_demented_goal( bool won, int goal_time );
+void desktop_demented_goal_lost( uint32 id );	// desktop_demented.cpp: chapter 26 retries	// desktop_demented.cpp: lives, Time Extend, run summary
 // the goal's own time limit in seconds, 0 for an untimed goal
 static int desktop_goal_seconds( Script::CStruct *p )
 {
@@ -1035,6 +1036,7 @@ bool CGoal::Lose( void )
 	{
 		m_numTimesLost++;
 #ifdef THUG_DESKTOP
+		desktop_demented_goal_lost( GetGoalId());
 		desktop_demented_goal( false, 0 );
 #endif
 		

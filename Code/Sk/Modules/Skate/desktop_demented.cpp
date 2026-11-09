@@ -89,7 +89,7 @@ static uint32 hasard( uint32 n )
 
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
        MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
-static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
+static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Countdown", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
                                            "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
 static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
@@ -156,6 +156,9 @@ struct Run
 	uint64	graine;			// from the code
 	bool	nouveau;		// a life was lost: a new skater is dealt once it's safe
 	int		primes;			// Chaos bounties beaten (they scale up)
+	uint32	pro[5];			// chapter 26: the pro challenges dealt, in order
+	int		pro_n;
+	float	pro_retry;		// chapter 26: a dealt challenge was failed, back to it after this
 };
 static Run s_run;
 
@@ -462,6 +465,63 @@ static bool chaos_on( void ) { return s_run.actif && s_run.skater && !s_run.fini
 // --- Randomizers ---------------------------------------------------------------------
 
 static bool rando_on( int m ) { return s_run.actif && !s_run.fini && s_run.mods[m]; }
+
+// Marcus merged some: Word Salad brings Obscure, Sound Salad brings Random
+// Voices, Random World brings Random Colours and Random Models; Perma Bail
+// and Fragile never both
+static bool mod_cache( int i )	// folded into another, not listed
+{
+	return i == MOD_OBSCURE || i == MOD_R_VOIX || i == MOD_R_COULEURS || i == MOD_R_DONNEURS;
+}
+static void lier_mods( bool *m, int change )
+{
+	m[MOD_OBSCURE] = m[MOD_R_MOTS];
+	m[MOD_R_VOIX] = m[MOD_R_SONS];
+	m[MOD_R_COULEURS] = m[MOD_R_DONNEURS] = m[MOD_R_MONDE];
+	if( m[MOD_PERMA] && m[MOD_FRAGILE] ) { if( change == MOD_FRAGILE ) m[MOD_PERMA] = false; else m[MOD_FRAGILE] = false; }
+	m[MOD_R_NOMS] = m[MOD_R_ANIMS] = false;
+}
+
+// Chapter 26 (Marcus): 5 of the 8 pro challenges, dealt in a random order;
+// only the one up is offered, and a failed one has to be done again
+static const char *s_pro_ids[8] = { "NJ_Goal_Tetris5", "NY_Goal_Collect3", "FL_Goal_Horse2", "SD_Goal_Gaps13",
+                                    "HI_Goal_Gaps5", "VC_Goal_Gaps8", "SJ_Goal_Collect", "RU_goal_Collect2" };
+static bool est_pro( uint32 id )
+{
+	for( int i = 0; i < 8; ++i ) if( crc( s_pro_ids[i] ) == id ) return true;
+	return false;
+}
+static uint32 pro_courant( void )
+{
+	if( !s_run.pro_n )
+	{
+		uint64 x = s_run.graine ^ 0x26c4a11e9b3f5d07ull;
+		int o[8] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+		for( int i = 7; i > 0; --i )
+		{
+			x ^= x << 13; x ^= x >> 7; x ^= x << 17;
+			const int k = (int)(( x >> 16 ) % (uint64)( i + 1 )), t = o[i]; o[i] = o[k]; o[k] = t;
+		}
+		for( int i = 0; i < 5; ++i ) s_run.pro[i] = crc( s_pro_ids[o[i]] );
+		s_run.pro_n = 5;
+		VLOG( "DSK", "demented: chapter 26 dealt %s, %s, %s, %s, %s", s_pro_ids[o[0]], s_pro_ids[o[1]], s_pro_ids[o[2]], s_pro_ids[o[3]], s_pro_ids[o[4]] );
+	}
+	Game::CGoalManager *gm = Game::GetGoalManager();
+	for( int i = 0; i < s_run.pro_n; ++i )
+		if( !gm || !gm->HasWonGoal( s_run.pro[i] )) return s_run.pro[i];
+	return 0;
+}
+static bool chapitre_pros( void )
+{
+	Game::CGoalManager *gm = Game::GetGoalManager();
+	return s_run.actif && !s_run.fini && gm && gm->GetCurrentChapter() == 25 && gm->GetCurrentStage() == 0;
+}
+
+// Goal.cpp CGoal::Lose: which goal was lost (chapter 26 sends you back to it)
+void desktop_demented_goal_lost( uint32 id )
+{
+	if( chapitre_pros() && est_pro( id ) && id == pro_courant()) s_run.pro_retry = 4.0f;
+}
 
 // Random Colours (p_NxSprite.cpp, p_NxFont.cpp): text and coloured HUD
 // pieces get another hue, same brightness, so dark stays dark and nothing
@@ -1708,6 +1768,17 @@ void DesktopDementedUpdate( Skate &mdl )
 			donne_skater( true );
 		}
 	}
+	// chapter 26: a failed pro challenge comes straight back (its menu, only it on it)
+	if( s_run.pro_retry > 0.0f && !s_run.fini && !s_run.nouveau && !pause && !film && !s_menu )
+	{
+		Game::CGoalManager *gm = Game::GetGoalManager();
+		if( !gm || gm->GetNumActiveGoals() == 0 ) s_run.pro_retry -= dt;
+		if( s_run.pro_retry <= 0.0f )
+		{
+			s_run.pro_retry = 0.0f;
+			if( chapitre_pros() && pro_courant()) Script::SpawnScript( "desktop_demented_pro_retry" );
+		}
+	}
 	if( film ) { hud_off(); return; }
 
 	// Run clock bottom right, with lives when they're on.
@@ -1793,7 +1864,7 @@ bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pSc
 	if( pParams->GetInteger( crc( "set" ), &v, Script::NO_ASSERT ) && i >= 0 && i < NB_MODS && i != MOD_LIVES )
 		s_arme[i] = v != 0;		// SURPRISE ME! / Start Run
 	else if( i >= 0 && i < NB_MODS && i != MOD_LIVES ) s_arme[i] = !s_arme[i];	// lives are always on
-	s_arme[MOD_R_NOMS] = s_arme[MOD_R_ANIMS] = false;
+	lier_mods( s_arme, i );
 	return true;
 }
 
@@ -1804,7 +1875,7 @@ bool ScriptDesktopDementedText( Script::CStruct *pParams, Script::CScript *pScri
 	{
 		char n[16], t[64];
 		snprintf( n, sizeof( n ), "text%d", i );
-		snprintf( t, sizeof( t ), "%s: %s", s_mod_noms[i], s_arme[i] ? "On" : "Off" );
+		snprintf( t, sizeof( t ), "%s", s_mod_noms[i] );	// on/off shown by colour (Marcus)
 		pScript->GetParams()->AddString( n, t );
 	}
 	char t[48];
@@ -1872,9 +1943,9 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 25, 30, 30, 0, 50, 40, 40, 35, 25, 0, 0, 0 };	// Random Models (experimental) never
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
-		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;
 	}
-	s_run.mods[MOD_R_NOMS] = s_run.mods[MOD_R_ANIMS] = false;
+	lier_mods( s_run.mods, -1 );
+	s_run.pro_n = 0; s_run.pro_retry = 0.0f;
 	s_reve_t = 0.0f; s_flip_t = 0.0f; s_flip_suivant = 60.0f + hasard( 90 ); s_flip = false;
 	chaos_tout_finir();
 	s_ev_prochain = 15.0f + hasard( 30 );
@@ -1916,6 +1987,35 @@ bool ScriptDesktopDementedStop( Script::CStruct *pParams, Script::CScript *pScri
 {
 	fin_run();
 	return true;
+}
+
+// @script | DesktopDementedHidesGoal | desktop: true for a chapter 26 pro
+// challenge that isn't the one dealt up now (goal_id, or pad_choose_params.goal_id)
+bool ScriptDesktopDementedHidesGoal( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	if( !chapitre_pros()) return false;
+	uint32 id = 0;
+	if( !pParams->GetChecksum( crc( "goal_id" ), &id, Script::NO_ASSERT ))
+	{
+		Script::CStruct *pc = NULL;
+		if( !pParams->GetStructure( crc( "pad_choose_params" ), &pc, Script::NO_ASSERT ) || !pc
+		 || !pc->GetChecksum( crc( "goal_id" ), &id, Script::NO_ASSERT )) return false;
+	}
+	return est_pro( id ) && id != pro_courant();
+}
+
+// @script | DesktopDementedIsOn | desktop: menu item id desktop_mod_<i>: is that modifier on
+bool ScriptDesktopDementedIsOn( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	uint32 id = 0;
+	pParams->GetChecksum( crc( "id" ), &id, Script::NO_ASSERT );
+	for( int i = 0; i < NB_MODS; ++i )
+	{
+		char n[24];
+		snprintf( n, sizeof( n ), "desktop_mod_%d", i );
+		if( crc( n ) == id ) return s_arme[i];
+	}
+	return false;
 }
 
 // @script | DesktopDementedNeedsDeal | desktop: true until the run's skater is dealt
@@ -2024,7 +2124,7 @@ static void liste_mods( char *o, int n )
 {
 	o[0] = 0;
 	for( int i = 0; i < NB_MODS; ++i )
-		if( s_run.mods[i] && i != MOD_LIVES )
+		if( s_run.mods[i] && i != MOD_LIVES && !mod_cache( i ))
 		{
 			const size_t l = strlen( o );
 			snprintf( o + l, n - l, "%s%s", l ? ", " : "", s_mod_noms[i] );
@@ -2085,7 +2185,7 @@ bool ScriptDesktopDementedStatRows( Script::CStruct *pParams, Script::CScript *p
 	L::ligne( NULL, NULL );
 	int n = 0;
 	for( int i = 0; i < NB_MODS; ++i )
-		if( s_run.mods[i] && i != MOD_LIVES && i != MOD_SURPRISE )
+		if( s_run.mods[i] && i != MOD_LIVES && i != MOD_SURPRISE && !mod_cache( i ))
 		{
 			L::ligne( n ? " " : " MODIFIERS:", s_mod_noms[i] );
 			++n;

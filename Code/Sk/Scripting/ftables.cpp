@@ -691,6 +691,8 @@ SCFunction CFunctionLookupTable[]=
 	{"DesktopDementedStart",	CFuncs::ScriptDesktopDementedStart},
 	{"DesktopDementedStop",	CFuncs::ScriptDesktopDementedStop},
 	{"DesktopDementedNeedsDeal",	CFuncs::ScriptDesktopDementedNeedsDeal},
+	{"DesktopDementedHidesGoal",	CFuncs::ScriptDesktopDementedHidesGoal},
+	{"DesktopDementedIsOn",	CFuncs::ScriptDesktopDementedIsOn},
 	{"DesktopDementedNeedsDialog",	CFuncs::ScriptDesktopDementedNeedsDialog},
 	{"DesktopDementedDialogShown",	CFuncs::ScriptDesktopDementedDialogShown},
 	{"DesktopDementedName",	CFuncs::ScriptDesktopDementedName},

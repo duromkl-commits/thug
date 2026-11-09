@@ -1238,13 +1238,18 @@ static const char *s_demented_scripts =
 	"kill_start_key_binding\n"
 	"SetScreenElementProps { id = career_dif_vmenu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = career_options_menu_exit new_menu_script = desktop_demented_menu focus = 0 } } ] }\n"
 	"DesktopDementedText\n"
-	"make_main_menu_item { text = <text0> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 0 focus = 0 } }\n"
-	"make_main_menu_item { text = <text4> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 4 focus = 1 } }\n"
-	"make_main_menu_item { text = <text1> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 1 focus = 2 } }\n"
-	"make_main_menu_item { text = <text3> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 3 focus = 3 } }\n"
-	"make_main_menu_item { text = <text6> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 6 focus = 4 } }\n"
-	"make_main_menu_item { text = <text5> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 5 focus = 5 } }\n"
-	"make_main_menu_item { text = <text7> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 7 focus = 6 } }\n"
+	"make_main_menu_item { text = <text0> id = desktop_mod_0 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 0 focus = 0 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_0\n"
+	"make_main_menu_item { text = <text4> id = desktop_mod_4 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 4 focus = 1 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_4\n"
+	"make_main_menu_item { text = <text1> id = desktop_mod_1 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 1 focus = 2 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_1\n"
+	"make_main_menu_item { text = <text3> id = desktop_mod_3 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 3 focus = 3 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_3\n"
+	"make_main_menu_item { text = <text6> id = desktop_mod_6 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 6 focus = 4 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_6\n"
+	"make_main_menu_item { text = <text7> id = desktop_mod_7 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 7 focus = 5 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_7\n"
 	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 0 } }\n"
 	"FireEvent Type = focus target = current_menu_anchor\n"
 	"if NOT ( <focus> = 0 )\n"
@@ -1254,6 +1259,41 @@ static const char *s_demented_scripts =
 	"repeat <focus>\n"
 	"change disable_menu_sounds = 0\n"
 	"endif\n"
+	"endscript\n"
+	// on = the theme's colour, off = grey (Marcus), on the modifier pages
+	"script desktop_tog_focus\n"
+	"GetTags\n"
+	"theme_item_focus <...>\n"
+	"desktop_tog_color id = <id> focus\n"
+	"endscript\n"
+	"script desktop_tog_unfocus\n"
+	"GetTags\n"
+	"theme_item_unfocus <...>\n"
+	"desktop_tog_color id = <id>\n"
+	"endscript\n"
+	"script desktop_tog_color\n"
+	"if NOT ScreenElementExists id = { <id> child = 0 }\n"
+	"return\n"
+	"endif\n"
+	"if DesktopDementedIsOn id = <id>\n"
+	"FormatText ChecksumName = c \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_COLOR_PREFIXES [ current_theme_prefix ] )\n"
+	"SetScreenElementProps id = { <id> child = 0 } rgba = <c>\n"
+	"else\n"
+	"if GotParam focus\n"
+	"SetScreenElementProps id = { <id> child = 0 } rgba = [ 105 105 105 128 ]\n"
+	"else\n"
+	"SetScreenElementProps id = { <id> child = 0 } rgba = [ 55 55 55 100 ]\n"
+	"endif\n"
+	"endif\n"
+	"endscript\n"
+	// chapter 26 in Demented: a failed pro challenge, its menu back up (only it on it)
+	"script desktop_demented_pro_retry\n"
+	"if ScreenElementExists id = current_menu_anchor\n"
+	"return\n"
+	"endif\n"
+	"kill_start_key_binding\n"
+	"restore_skater_camera\n"
+	"launch_chapter_menu\n"
 	"endscript\n"
 	"script desktop_demented_seed_kb\n"
 	"DesktopDementedText\n"
@@ -1289,12 +1329,12 @@ static const char *s_demented_scripts =
 	"kill_start_key_binding\n"
 	"SetScreenElementProps { id = career_dif_vmenu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = career_options_menu_exit new_menu_script = desktop_demented_menu focus = 1 } } ] }\n"
 	"DesktopDementedText\n"
-	"make_main_menu_item { text = <text9> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 9 focus = 0 } }\n"
-	"make_main_menu_item { text = <text10> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 10 focus = 1 } }\n"
-	"make_main_menu_item { text = <text11> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 11 focus = 2 } }\n"
-	"make_main_menu_item { text = <text12> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 12 focus = 3 } }\n"
-	"make_main_menu_item { text = <text13> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 13 focus = 4 } }\n"
-	"make_main_menu_item { text = <text15> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 15 focus = 5 } }\n"
+	"make_main_menu_item { text = <text9> id = desktop_mod_9 pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 9 focus = 0 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_9\n"
+	"make_main_menu_item { text = <text12> id = desktop_mod_12 pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 12 focus = 1 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_12\n"
+	"make_main_menu_item { text = <text13> id = desktop_mod_13 pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 13 focus = 2 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
+	"desktop_tog_color id = desktop_mod_13\n"
 	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 1 } }\n"
 	"FireEvent Type = focus target = current_menu_anchor\n"
 	"if NOT ( <focus> = 0 )\n"
@@ -2761,6 +2801,14 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_debut( qb, j, m, "RetryCurrentGoal", "if DesktopDemented\nreturn\nendif\n" );
 	// one goal at a time in Demented: no new goal offers while one runs
 	patch_debut( qb, j, m, "goal_got_trigger", "if DesktopDemented\nif GoalManager_HasActiveGoals\nreturn\nendif\nendif\n" );
+	// chapter 26 in Demented (Marcus): only the pro challenge dealt up now is
+	// offered, in the chapter menu and by its pro
+	patch_debut( qb, j, m, "goal_got_trigger", "if DesktopDementedHidesGoal goal_id = <goal_id>\nreturn\nendif\n" );
+	patch_debut( qb, j, m, "chapter_goal_add_item", "if DesktopDementedHidesGoal <...>\nreturn\nendif\n" );
+	// the Big Apple / San Diego / Moscow filmers stand with the photographer's
+	// anims (Photographer_goal_wait) but their levels only load the video
+	// guy's: they T-posed. The video set brings the photo set along.
+	patch_debut( qb, j, m, "animload_Ped_Video", "animload_Ped_Photo LoadFunction = <LoadFunction>\n" );
 	// Demented (Marcus): no Set Restart / Goto Cust Restart in the pause options,
 	// and coming back from Watch Cutscenes doesn't freeze the game
 	patch_debut( qb, j, m, "create_options_menu", "if DesktopDemented\nNoCustomRestarts = 1\nendif\n" );

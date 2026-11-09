@@ -159,6 +159,8 @@ bool ScriptDesktopDementedText(Script::CStruct *pParams, Script::CScript *pScrip
 bool ScriptDesktopDementedStart(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedStop(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedNeedsDeal(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedHidesGoal(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedIsOn(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedNeedsDialog(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedDialogShown(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedName(Script::CStruct *pParams, Script::CScript *pScript);
