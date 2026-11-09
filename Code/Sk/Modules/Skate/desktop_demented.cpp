@@ -1482,6 +1482,51 @@ static bool invite( const char *q )
 	return false;
 }
 
+// Obscure / No Button Hints (Marcus: no leftover "[ + ]"): a run of button
+// icons joined by + / , - goes whole, with the ( ) round it (the font draws
+// them as brackets) and the space before it. Prompts ("\m0 = Accept", "to
+// talk"...) keep theirs.
+static bool est_icone( const char *q )
+{
+	return q[0] == '\\' && ( q[1] == 'b' || q[1] == 'B' || q[1] == 'm' || q[1] == 'M' ) && q[2];
+}
+static void sans_icones( const char *in, std::string &o )
+{
+	o.clear();
+	for( const char *p = in; *p; )
+	{
+		if( *p == '\\' && !est_icone( p )) { for( int k = 0; k < 3 && *p; ++k ) o += *p++; continue; }
+		// a run starts at an icon, or at "(" whose content is a run
+		const char *d = p, *q = p;
+		bool paren = false;
+		if( *q == '(' ) { paren = true; ++q; while( *q == ' ' ) ++q; }
+		if( !est_icone( q )) { o += *p++; continue; }
+		const char *fin = q;
+		int icones = 0;
+		while( est_icone( q ))
+		{
+			++icones;
+			q += 3;
+			fin = q;
+			const char *r = q;
+			while( *r == ' ' ) ++r;
+			if( *r == '+' || *r == '/' || *r == ',' || *r == '-' ) { ++r; while( *r == ' ' ) ++r; if( est_icone( r )) { q = r; continue; } }
+			break;
+		}
+		if( invite( fin )) { o.append( d, fin - d ); p = fin; continue; }
+		const char *apres = fin;
+		if( paren )
+		{
+			const char *r = fin;
+			while( *r == ' ' ) ++r;
+			if( *r != ')' ) { o += *p++; continue; }	// "(" with more than buttons in it: left alone
+			apres = r + 1;
+		}
+		while( !o.empty() && o[o.size() - 1] == ' ' && ( *apres == ' ' || *apres == 0 || *apres == '.' || *apres == ',' || *apres == '!' || *apres == '\\' )) o.erase( o.size() - 1 );
+		p = apres;
+	}
+}
+
 // Chaos: people's names swapped for each other (the same swap all run), and
 // now and then a word with two letters traded. Same input, same output, so
 // text redrawn every frame doesn't flicker.
@@ -1514,6 +1559,12 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 	}
 	int o = 0, change = 0;
 	const char *p = in;
+	std::string net;
+	if( obscur || ( chaos && s_ev_reste[EV_BOUTONS] > 0.0f ))
+	{
+		sans_icones( in, net );
+		if( net != in ) { change = 1; p = net.c_str(); }
+	}
 	while( *p && o < n - 1 )
 	{
 		if( *p == '\\' )
