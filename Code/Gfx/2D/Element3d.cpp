@@ -37,6 +37,7 @@ namespace NxVita { bool GetDisplayedCamera( Mth::Matrix *p_mat, Mth::Vector *p_p
 namespace NxVita { bool GetProjectionFocal( float *m0, float *m5 ); }
 namespace Nx { void DesktopTeinterModele( CModel *p_model, unsigned char r, unsigned char g, unsigned char b ); }
 extern "C" unsigned int desktop_rando_etoile( unsigned char *r, unsigned char *g, unsigned char *b );	// desktop_demented.cpp
+extern "C" const char *desktop_rando_marqueur( const char *p_nom, unsigned int id );
 #endif
 
 namespace Front
@@ -370,6 +371,14 @@ void CElement3d::AddModel(const char *p_model_name, uint32 skeleton_name, Mth::V
 
 	if ( p_model_name )
 	{
+#ifdef THUG_DESKTOP
+		// Demented's Random Goal Givers (experimental): the goal markers too
+		if (!m_desktop_propre)
+		{
+			const char *p_autre = desktop_rando_marqueur(p_model_name, GetID());
+			if (p_autre) p_model_name = p_autre;
+		}
+#endif
 		// loads a geom, if one was specified
 		Str::String fullModelName;
 		fullModelName = Gfx::GetModelFileName(p_model_name, ".mdl");

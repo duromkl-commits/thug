@@ -70,9 +70,9 @@ static uint32 hasard( uint32 n )
 }
 
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_AUTO, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
-       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, NB_MODS };
+       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Auto", "Mirror", "Chaos", "Surprise",
-                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names" };
+                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Goal Givers", "Random Animations" };
 static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
@@ -482,6 +482,110 @@ extern "C" unsigned int desktop_rando_etoile( unsigned char *r, unsigned char *g
 	return s_rando_graine;
 }
 
+// --- experimental randomizers (Marcus: "I just wanna see if it crashes") ---
+
+// Random Goal Givers: a goal giver's appearance swapped for another human
+// ped / pro profile (same skeleton, its own anims kept). modelcomponent.cpp
+// Obj_InitModelFromProfile. Returns the profile structure name, 0 = as is.
+static const char *s_donneurs[] = { "Ped_Skeezo", "Ped_Ralphie", "Ped_Bender", "Ped_Jordan", "Ped_Eric", "Ped_Bum_01",
+	"Ped_Crackhead_01", "Ped_Drugdealer_01", "Ped_Drugdealer_02", "Ped_Drugdealer_03", "Ped_FactoryWorker_01",
+	"Ped_FactoryWorker_02", "Ped_Security_Train", "Ped_Street_Warrior_01", "Ped_Street_Warrior_02", "Ped_Street_Warrior_03",
+	"Ped_Tombstone", "Ped_M_NYPD_01", "Ped_Construction_Jhammer", "Ped_Construction_Manhole", "Ped_Skater_NY1", "Ped_Skater_NY2",
+	"Ped_Peralta", "Ped_Chef", "Ped_BusinessMan_01", "Ped_BusinessMan_02", "Ped_BusinessMan_03", "Ped_BlkKid_01",
+	"Ped_Trooper", "Ped_Todd", "Ped_Clemens", "Ped_AfroJim", "Ped_Doorman_01", "Ped_Deskclerk_01", "Ped_Leafblower",
+	"Ped_Security_01", "Ped_F_Security", "Ped_Gardener_01", "Ped_F_Gardener", "Ped_F_KGB", "Ped_KGB_01", "Ped_RGuard_01",
+	"Ped_Cameraman", "Ped_Official_SC_01", "Ped_QBert", "Ped_Video", "Ped_Photo", "Ped_SCJ_Worker", "Ped_SCJ_Judge_01",
+	"Ped_Bartender", "Ped_Film", "Ped_Surfer", "Ped_KISS_Paul", "Ped_KISS_Peter", "Ped_KISS_Ace", "Ped_KISS_Gene",
+	"PedPro_Hawk", "PedPro_Koston", "PedPro_Burnquist", "PedPro_Lasek", "PedPro_Mullen", "PedPro_Muska", "PedPro_Margera",
+	"PedPro_Rodrigez", "PedPro_Reynolds", "PedPro_Vallely" };
+
+static bool est_donneur( uint32 id )
+{
+	Game::CGoalManager *gm = Game::GetGoalManager();
+	if( !gm || !id ) return false;
+	for( int i = 0; i < gm->GetNumGoals(); ++i )
+	{
+		Game::CGoal *g = gm->GetGoalByIndex( i );
+		uint32 trig = 0;
+		if( g && g->GetParams() && g->GetParams()->GetChecksum( crc( "trigger_obj_id" ), &trig, Script::NO_ASSERT ) && trig == id ) return true;
+	}
+	return false;
+}
+
+extern "C" unsigned int desktop_rando_donneur( unsigned int obj_id )
+{
+	if( !rando_on( MOD_R_DONNEURS ) || !est_donneur( obj_id )) return 0;
+	const int n = (int)( sizeof( s_donneurs ) / sizeof( s_donneurs[0] ));
+	uint32 h = melanger( obj_id ^ s_rando_graine ^ 0x2545f491u );
+	for( int essai = 0; essai < 8; ++essai, h = melanger( h + 1 ))
+	{
+		const uint32 c = crc( s_donneurs[h % (uint32)n] );
+		if( Script::GetStructure( c, Script::NO_ASSERT ))
+		{
+			VLOG( "DSK", "random goal givers: %s -> %s", Script::FindChecksumName( obj_id ), s_donneurs[h % (uint32)n] );
+			return c;
+		}
+	}
+	return 0;
+}
+
+// ... and the goal markers over them (Element3d.cpp AddModel): one of the
+// game's marker models instead. NULL = as is.
+extern "C" const char *desktop_rando_marqueur( const char *p_nom, unsigned int id )
+{
+	if( !rando_on( MOD_R_DONNEURS ) || !p_nom ) return NULL;
+	static const char *s_m[] = { "arrow", "ped_pro_arrow", "super_pro_arrow", "goalarrow", "evilarrow" };
+	bool marqueur = false;
+	for( int i = 0; i < 5 && !marqueur; ++i ) marqueur = !stricmp( p_nom, s_m[i] );
+	if( !marqueur && stricmp( p_nom, "Special_Arrow" )) return NULL;
+	return s_m[melanger( id ^ s_rando_graine ^ 0x9b05688cu ) % 5u];
+}
+
+// Random Animations: every anim a set loads is noted (cfuncs.cpp LoadAnim);
+// a human skater / ped / goal giver playing one gets another of the same set.
+struct SJeuAnims { uint32 jeu; std::vector<uint32> anims; };
+static std::vector<SJeuAnims> s_jeux_anims;
+
+extern "C" void desktop_anim_notee( unsigned int jeu, unsigned int anim )
+{
+	if( !jeu || !anim ) return;
+	for( size_t i = 0; i < s_jeux_anims.size(); ++i )
+		if( s_jeux_anims[i].jeu == jeu )
+		{
+			std::vector<uint32> &v = s_jeux_anims[i].anims;
+			for( size_t k = 0; k < v.size(); ++k ) if( v[k] == anim ) return;
+			v.push_back( anim );
+			return;
+		}
+	SJeuAnims j; j.jeu = jeu; j.anims.push_back( anim );
+	s_jeux_anims.push_back( j );
+}
+
+extern "C" unsigned int desktop_rando_anim( unsigned int jeu, unsigned int anim )
+{
+	if( !rando_on( MOD_R_ANIMS ) || !anim ) return anim;
+	Mdl::Skate &mdl = *Mdl::Skate::Instance();
+	if(( mdl.GetMovieManager() && mdl.GetMovieManager()->IsRolling()) || ( mdl.GetObjectAnimManager() && mdl.GetObjectAnimManager()->IsRolling())) return anim;	// cutscenes stay
+	static uint32 s_jeu_vu = 0; static bool s_humain = false;
+	if( jeu != s_jeu_vu )
+	{
+		s_jeu_vu = jeu;
+		char b[96];
+		snprintf( b, sizeof( b ), "%s", Script::FindChecksumName( jeu ));
+		for( char *q = b; *q; ++q ) if( *q >= 'A' && *q <= 'Z' ) *q = (char)( *q - 'A' + 'a' );
+		s_humain = strstr( b, "human" ) || strstr( b, "ped_" );
+	}
+	if( !s_humain ) return anim;
+	for( size_t i = 0; i < s_jeux_anims.size(); ++i )
+		if( s_jeux_anims[i].jeu == jeu )
+		{
+			const std::vector<uint32> &v = s_jeux_anims[i].anims;
+			if( v.size() < 2 ) return anim;
+			return v[melanger( anim ^ s_rando_graine ^ 0x7137449bu ) % (uint32)v.size()];
+		}
+	return anim;
+}
+
 // Random Voices (p_music.cpp): voice streams swapped for another of about
 // the same length. 0 = off.
 extern "C" unsigned int desktop_rando_voix( void )
@@ -495,12 +599,14 @@ extern "C" unsigned int desktop_rando_voix( void )
 // Cheats are faked through CSkaterCareer::GetCheat (desktop_chaos_cheat);
 // the body ones need the real flags, put back when they end.
 enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_STATS_MAX, EV_STATS_RND,
-       EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, EV_SONS, NB_EV };
+       EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, EV_SONS,
+       EV_BOUTONS, EV_FRAGILE, EV_PERMA, NB_EV };
 static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
 	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
-	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD", "SOUND SALAD" };
+	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD", "SOUND SALAD",
+	"NO BUTTON HINTS", "FRAGILE", "PERMA BAIL" };
 // 0: never (Marcus: no moon gravity, and nothing that just helps the player: maxed stats, always special, perfect balance)
-static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7 };
+static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
 static float s_ev_prochain = 20.0f;
 static float s_ev_stat = 0.0f;
@@ -553,13 +659,28 @@ static void ev_temps( void )
 	else Tmr::SetSlomo( 1.0f );
 }
 
+// Fragile / Perma Bail events: a red banner like "Out of bounds!" that stays
+// up while it lasts (Marcus)
+static void ev_banniere( int e, bool on )
+{
+	Script::CStruct p;
+	p.AddChecksum( "id", crc( e == EV_PERMA ? "desktop_chaos_perma" : "desktop_chaos_fragile" ));
+	if( on )
+	{
+		p.AddString( "text", e == EV_PERMA ? "PERMA BAIL" : "FRAGILE" );
+		p.AddPair( "pos", 320.0f, e == EV_PERMA ? 80.0f : 110.0f );
+	}
+	Script::RunScript( on ? "desktop_chaos_banner" : "desktop_chaos_banner_off", &p );
+}
+
 static void ev_fin( int e )
 {
 	if( s_ev_reste[e] <= 0.0f ) return;
 	s_ev_reste[e] = 0.0f;
 	if( e == EV_FLIP ) s_flip = false;
 	if( e == EV_REVERSE ) s_inverse = false;
-	if( e == EV_SCRAMBLE ) ++s_txt_gen;	// back to plain text
+	if( e == EV_SCRAMBLE || e == EV_BOUTONS ) ++s_txt_gen;	// back to plain text
+	if( e == EV_FRAGILE || e == EV_PERMA ) ev_banniere( e, false );
 	if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
 	if( e == EV_SLOW || e == EV_FAST ) ev_temps();
 	if( ev_drapeau( e )) ev_corps();
@@ -621,6 +742,8 @@ static void ev_lancer( Game::CGoalManager *gm )
 			if( e == EV_FLIP ) s_flip = true;
 			if( e == EV_REVERSE ) s_inverse = true;
 			if( e == EV_SONS ) s_son_graine = hasard( 0x7fffffff ) | 1;
+			if( e == EV_BOUTONS ) ++s_txt_gen;
+			if( e == EV_FRAGILE || e == EV_PERMA ) ev_banniere( e, true );
 			if( e == EV_SCRAMBLE ) { s_salade_t = 0.0f; s_salade_pas = 0.08f; s_salade_graine = hasard( 0x7fffffff ) | 1; ++s_txt_gen; }
 			if( e == EV_STATS_RND ) { s_ev_stat = (float)hasard( 11 ); if( s_ev_stat == 0.0f ) s_ev_stat = 0.01f; snprintf( t, sizeof( t ), "CHAOS: STATS AT %d", (int)s_ev_stat ); }
 			if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
@@ -787,6 +910,14 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 	{
 		if( *p == '\\' )
 		{
+			// No Button Hints event: \bN / \mN icons become "?"
+			if( chaos && s_ev_reste[EV_BOUTONS] > 0.0f && ( p[1] == 'b' || p[1] == 'B' || p[1] == 'm' || p[1] == 'M' ) && p[2] )
+			{
+				out[o++] = '?';
+				p += 3;
+				change = 1;
+				continue;
+			}
 			for( int k = 0; k < 3 && *p && o < n - 1; ++k ) out[o++] = *p++;
 			continue;
 		}
@@ -881,9 +1012,9 @@ void desktop_demented_bail( void )
 	Mdl::Skate *sk = Mdl::Skate::Instance();
 	if( !sk->GetGameMode()->IsTrue( CRCD( 0x1ded1ea4, "is_career" ))) return;
 	++s_run.bails;
-	if( s_run.mods[MOD_PERMA] ) { game_over( "You bailed." ); return; }
-	// Fragile (Marcus): every bail costs a life.
-	if( s_run.mods[MOD_FRAGILE] )
+	if( s_run.mods[MOD_PERMA] || ( chaos_on() && s_ev_reste[EV_PERMA] > 0.0f )) { game_over( "You bailed." ); return; }
+	// Fragile (Marcus): every bail costs a life (also the Chaos event).
+	if( s_run.mods[MOD_FRAGILE] || ( chaos_on() && s_ev_reste[EV_FRAGILE] > 0.0f ))
 	{
 		--s_run.vies;
 		if( s_run.vies <= 0 ) { s_run.vies = 0; game_over( "Out of lives." ); return; }
@@ -1126,7 +1257,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	if( s_run.mods[MOD_SURPRISE] )
 	{
 		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 0, 30, 30, 0, 50, 40, 40, 35, 25, 40 };
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 0, 30, 30, 0, 50, 40, 40, 35, 25, 40, 0, 0 };	// the experimental ones never
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;

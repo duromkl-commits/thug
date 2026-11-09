@@ -38,6 +38,9 @@
 #include <gfx/nxmodel.h>
 #include <gfx/pose.h>
 #include <gfx/skeleton.h>
+#ifdef THUG_DESKTOP
+extern "C" unsigned int desktop_rando_anim( unsigned int jeu, unsigned int anim );	// desktop_demented.cpp
+#endif
 
 #include <sk/gamenet/gamenet.h>
 		  
@@ -1095,6 +1098,18 @@ void CAnimationComponent::PlayPrimarySequence( uint32 animName, bool propagate, 
 	}
 
 #ifdef THUG_DESKTOP
+	// Demented's Random Animations (experimental): another anim of this set,
+	// played whole
+	{
+		const uint32 autre = desktop_rando_anim( m_animScriptName, animName );
+		if ( autre != animName && AnimExists( autre ) )
+		{
+			animName = autre;
+			const float d = AnimDuration( autre );
+			if ( start_time <= end_time ) { start_time = 0.0f; end_time = d; }
+			else { start_time = d; end_time = 0.0f; }
+		}
+	}
 	// A missing anim (THPS4 peds running THUG's ped scripts) read NULL frame
 	// data further down: play the set's default pose, or nothing.
 	if ( !AnimExists( animName ) )
