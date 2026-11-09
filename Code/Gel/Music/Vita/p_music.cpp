@@ -562,6 +562,45 @@ static const SEntree *vtrouve( uint32 checksum )
 	return NULL;
 }
 
+#ifdef THUG_DESKTOP
+extern "C" unsigned int desktop_rando_voix( void );
+
+// Demented Random Voices: a stream plays another one of about the same
+// length (0.7x to 1.4x its size), so a goal waiting on its line still waits
+// about as long. Same swap for the whole chapter (the seed).
+static int cmp_taille( const void *a, const void *b )
+{
+	const uint32 x = ( *(SEntree * const *)a )->taille, y = ( *(SEntree * const *)b )->taille;
+	return x < y ? -1 : ( x > y ? 1 : 0 );
+}
+
+static const SEntree *vrando( const SEntree *p_e )
+{
+	const unsigned int g = desktop_rando_voix();
+	if( !g || s_vindex_nb < 2 ) return p_e;
+	static SEntree **s_tri = NULL;
+	if( !s_tri )
+	{
+		s_tri = (SEntree **)malloc( s_vindex_nb * sizeof( SEntree * ));
+		if( !s_tri ) return p_e;
+		for( int i = 0; i < s_vindex_nb; ++i ) s_tri[i] = &s_vindex[i];
+		qsort( s_tri, s_vindex_nb, sizeof( SEntree * ), cmp_taille );
+	}
+	const uint32 lo = (uint32)( p_e->taille * 0.7 ), hi = (uint32)( p_e->taille * 1.4 );
+	int a = 0, b = s_vindex_nb;
+	while( a < b ) { const int m = ( a + b ) / 2; if( s_tri[m]->taille < lo ) a = m + 1; else b = m; }
+	int fin = a;
+	while( fin < s_vindex_nb && s_tri[fin]->taille <= hi ) ++fin;
+	if( fin - a < 2 ) return p_e;
+	uint32 h = p_e->checksum ^ g;
+	h ^= h >> 16; h *= 0x7feb352dU; h ^= h >> 15; h *= 0x846ca68bU; h ^= h >> 16;
+	const SEntree *r = s_tri[a + (int)( h % (uint32)( fin - a ))];
+	static int n_log;
+	if( n_log++ < 30 ) VLOG( "PCM", "random voices: %08x -> %08x", p_e->checksum, r->checksum );
+	return r;
+}
+#endif
+
 static bool vcharge_index( void )
 {
 	SceUID f = sceIoOpen( CHEMIN_VOIX_DAT, SCE_O_RDONLY, 0 );
@@ -917,6 +956,9 @@ static bool vdemarre( uint32 checksum, int s, bool ok )
 	if( !vflux_ok( s ))
 		return false;
 	const SEntree *p_e = vtrouve( checksum );
+#ifdef THUG_DESKTOP
+	if( p_e ) p_e = vrando( p_e );	// Demented Random Voices
+#endif
 #ifdef THUG_DESKTOP
 	if( !p_e && wav_de( checksum ))
 	{

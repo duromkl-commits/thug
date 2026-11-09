@@ -168,6 +168,7 @@ bool ScriptDesktopPortrait(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedStatRows(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedDeal(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedChapter(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopRandoTod(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedWon(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedEndRun(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedSlotTricks(Script::CStruct *pParams, Script::CScript *pScript);

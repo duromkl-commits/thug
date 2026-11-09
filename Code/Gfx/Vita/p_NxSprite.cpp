@@ -44,6 +44,10 @@
 #define ENGINE_2D_H			480.0f
 #define ENGINE_2D_Y_MARGIN	16.0f
 
+#ifdef THUG_DESKTOP
+extern "C" unsigned int desktop_rando_couleurs( void );
+extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b );
+#endif
 #define SCREEN_W	960.0f
 #define SCREEN_H	544.0f
 
@@ -294,6 +298,18 @@ void RenderSprites2D( float bas, float haut )
 		if( cg > 1.0f ) cg = 1.0f;
 		if( cb > 1.0f ) cb = 1.0f;
 		if( ca > 1.0f ) ca = 1.0f;
+#ifdef THUG_DESKTOP
+		// Demented Random Colours: coloured HUD pieces (a vertex colour with
+		// some hue, or untextured) get another hue; pictures (grey vertex
+		// colour) and anything near full screen (fades, backdrops) stay.
+		if( desktop_rando_couleurs() && (( x1 - x0 ) < 0.5f * SCREEN_W || ( y1 - y0 ) < 0.5f * SCREEN_H ))
+		{
+			const int mx = c.r > c.g ? ( c.r > c.b ? c.r : c.b ) : ( c.g > c.b ? c.g : c.b );
+			const int mn = c.r < c.g ? ( c.r < c.b ? c.r : c.b ) : ( c.g < c.b ? c.g : c.b );
+			if( !p_tex || mx - mn > 12 )
+				desktop_rando_teinte( (unsigned int)gl_tex * 2654435761u ^ ( c.r | ( c.g << 8 ) | ( c.b << 16 )), &cr, &cg, &cb );
+		}
+#endif
 
 		if( !p_tex )
 		{

@@ -551,6 +551,10 @@ static void lot_glyphe( float x0, float y0, float x1, float y1,
 }
 
 // Couleur courante du texte : echelle PS2 (128 = 1,0), comme m_rgba.
+#ifdef THUG_DESKTOP
+extern "C" unsigned int desktop_rando_couleurs( void );
+extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b );
+#endif
 static void couleur_texte( const Image::RGBA &c, float kc )
 {
 	float cr = (float)c.r / kc, cg = (float)c.g / kc;
@@ -559,6 +563,11 @@ static void couleur_texte( const Image::RGBA &c, float kc )
 	if( cg > 1.0f ) cg = 1.0f;
 	if( cb > 1.0f ) cb = 1.0f;
 	if( ca > 1.0f ) ca = 1.0f;
+#ifdef THUG_DESKTOP
+	// Demented Random Colours: every text colour gets another hue
+	if( desktop_rando_couleurs())
+		desktop_rando_teinte( 0x51ed270bu ^ ( c.r | ( c.g << 8 ) | ( c.b << 16 )), &cr, &cg, &cb );
+#endif
 	if(( cr == s_lot_rgba[0] ) && ( cg == s_lot_rgba[1] ) && ( cb == s_lot_rgba[2] ) && ( ca == s_lot_rgba[3] ))
 		return;
 	lot_vider();

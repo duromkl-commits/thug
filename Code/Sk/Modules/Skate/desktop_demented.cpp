@@ -68,9 +68,20 @@ static uint32 hasard( uint32 n )
 	return n ? (uint32)( ( x >> 16 ) % n ) : 0;
 }
 
-enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_AUTO, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE, NB_MODS };
-static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Auto", "Mirror", "Chaos", "Surprise" };
-static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false };
+enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_AUTO, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
+       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, NB_MODS };
+static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Auto", "Mirror", "Chaos", "Surprise",
+                                           "Random World", "Random Colours", "Random Voices" };
+static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false };
+
+// Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
+// thing keeps its random replacement until the next chapter.
+static uint32 s_rando_graine = 1;
+static uint32 melanger( uint32 x )
+{
+	x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;
+	return x;
+}
 
 // Auto, Mirror and Chaos state (reset with each run)
 static float s_auto_t = 0.0f;		// seconds with nothing going on (Auto starts a goal after a few)
@@ -409,6 +420,47 @@ extern "C" int desktop_mirror_steer( void )
 }
 
 static bool chaos_on( void ) { return s_run.actif && s_run.skater && !s_run.fini && s_run.mods[MOD_CHAOS]; }
+
+// --- Randomizers ---------------------------------------------------------------------
+
+static bool rando_on( int m ) { return s_run.actif && !s_run.fini && s_run.mods[m]; }
+
+// Random Colours (p_NxSprite.cpp, p_NxFont.cpp): text and coloured HUD
+// pieces get another hue, same brightness, so dark stays dark and nothing
+// is tinted across the screen. 0 = off.
+extern "C" unsigned int desktop_rando_couleurs( void )
+{
+	return rando_on( MOD_R_COULEURS ) ? s_rando_graine : 0;
+}
+
+extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b )
+{
+	const float mx = *r > *g ? ( *r > *b ? *r : *b ) : ( *g > *b ? *g : *b );
+	const float mn = *r < *g ? ( *r < *b ? *r : *b ) : ( *g < *b ? *g : *b );
+	if( mx < 0.2f ) return;	// black outlines, shadows, dark panels
+	float sat = mx > 0.0f ? ( mx - mn ) / mx : 0.0f;
+	if( sat < 0.6f ) sat = 0.6f;
+	const uint32 h = melanger( cle ^ s_rando_graine );
+	const float hue = (float)( h % 360u ) / 60.0f;
+	const int i = (int)hue;
+	const float f = hue - (float)i, p = mx * ( 1.0f - sat ), q = mx * ( 1.0f - sat * f ), t = mx * ( 1.0f - sat * ( 1.0f - f ));
+	switch( i % 6 )
+	{
+		case 0: *r = mx; *g = t;  *b = p;  break;
+		case 1: *r = q;  *g = mx; *b = p;  break;
+		case 2: *r = p;  *g = mx; *b = t;  break;
+		case 3: *r = p;  *g = q;  *b = mx; break;
+		case 4: *r = t;  *g = p;  *b = mx; break;
+		default: *r = mx; *g = p; *b = q;  break;
+	}
+}
+
+// Random Voices (p_music.cpp): voice streams swapped for another of about
+// the same length. 0 = off.
+extern "C" unsigned int desktop_rando_voix( void )
+{
+	return rando_on( MOD_R_VOIX ) ? s_rando_graine : 0;
+}
 
 // --- Chaos: curveballs ---------------------------------------------------------------
 // At random times (8 to 40 s apart, the clock stopped in menus and cutscenes)
@@ -965,7 +1017,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	if( s_run.mods[MOD_SURPRISE] )
 	{
 		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 35, 30, 30, 0 };
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 35, 30, 30, 0, 50, 40, 40 };
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;
@@ -974,6 +1026,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	chaos_tout_finir();
 	s_ev_prochain = 15.0f + hasard( 30 );
 	s_graine_chaos = hasard( 0x7fffffff ) | 1;
+	s_rando_graine = hasard( 0x7fffffff ) | 1;
 	for( int i = 0; i < NB_NOMS_CHAOS; ++i ) s_perm_noms[i] = i;
 	for( int i = NB_NOMS_CHAOS - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ), x = s_perm_noms[i]; s_perm_noms[i] = s_perm_noms[k]; s_perm_noms[k] = x; }
 	s_run.skater = 0;
@@ -1167,6 +1220,35 @@ bool ScriptDesktopTricksViewOnly( Script::CStruct *pParams, Script::CScript *pSc
 	return gm && gm->GetNumActiveGoals() > 0;
 }
 
+// @script | DesktopRandoTod | desktop: Random World. Called first thing in
+// script_change_tod: the time of day it was asked for becomes another one
+// (the same one for the whole chapter). No weather: the port draws none
+// (Marcus didn't want rain/snow), so the rainy presets are left out and
+// set_tod_rainoff runs after, in case the original was a rainy one.
+bool ScriptDesktopRandoTod( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	if( !rando_on( MOD_R_MONDE ) || !pScript || !pScript->GetParams()) return true;
+	Script::CStruct *p = pScript->GetParams();
+	uint32 a = 0;
+	if( !p->GetChecksum( crc( "tod_action" ), &a, Script::NO_ASSERT )) return true;
+	static const char *orig[] = { "set_tod_startup", "set_tod_day", "set_tod_morning", "set_tod_evening", "set_tod_night",
+		"set_tod_nj_fog", "set_tod_nj_morning", "set_tod_nj_evening", "set_tod_nj_night", "set_tod_vc_evening",
+		"set_tod_ru_day", "set_tod_ru_day_snow", "set_tod_ru_night", "set_tod_ru_night_snow", "set_tod_scj" };
+	bool trouve = false;
+	for( unsigned i = 0; i < sizeof( orig ) / sizeof( orig[0] ); ++i ) if( crc( orig[i] ) == a ) { trouve = true; break; }
+	if( !trouve ) return true;	// night vision, KISS and other special looks stay
+	static const char *cible[] = { "set_tod_startup", "set_tod_morning", "set_tod_evening", "set_tod_night", "set_tod_nj_morning", "set_tod_nj_evening" };
+	static const int poids[] = { 30, 15, 20, 20, 7, 8 };
+	int total = 0;
+	for( unsigned i = 0; i < 6; ++i ) total += poids[i];
+	int r = (int)( melanger( a ^ s_rando_graine ) % (uint32)total ), k = 0;
+	while( r >= poids[k] ) r -= poids[k++];
+	p->AddChecksum( "tod_action", crc( cible[k] ));
+	p->AddChecksum( "tod_action2", crc( "set_tod_rainoff" ));
+	VLOG( "DSK", "random world: %08x -> %s", a, cible[k] );
+	return true;
+}
+
 // @script | DesktopDementedChapter | desktop: chapter title shown; a new chapter gives a life
 bool ScriptDesktopDementedChapter( Script::CStruct *pParams, Script::CScript *pScript )
 {
@@ -1175,6 +1257,7 @@ bool ScriptDesktopDementedChapter( Script::CStruct *pParams, Script::CScript *pS
 	if( s_run.chapitre_max < 0 ) { s_run.chapitre_max = ch; return true; }
 	if( ch <= s_run.chapitre_max ) return true;
 	s_run.chapitre_max = ch;
+	s_rando_graine = hasard( 0x7fffffff ) | 1;	// randomizers re-roll each chapter
 	if( s_run.mods[MOD_LIVES] && !s_run.fini )
 	{
 		++s_run.vies;
