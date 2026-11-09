@@ -38,7 +38,9 @@
 #ifdef THUG_DESKTOP
 bool DesktopThugZero( void );	// desktop_extras_glue.cpp: a THUG Zero story is running
 // THUG Zero: no stat goals at all (no popups, sounds or payouts).
-static inline bool desktop_zero( void ) { return DesktopThugZero(); }
+bool DesktopDemented( void );	// desktop_demented.cpp
+// Demented: no stat goals either (the dealt skater stays as dealt).
+static inline bool desktop_zero( void ) { return DesktopThugZero() || DesktopDemented(); }
 #else
 static inline bool desktop_zero( void ) { return false; }
 #endif

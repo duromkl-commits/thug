@@ -85,6 +85,7 @@ struct Run
 	float	gagne_temps;	// Time Extend: seconds earned
 	int		bails, gagnes, perdus;
 	bool	fini;			// summary shown, waiting to go back to the menu
+	bool	dialogue;		// the "You've been dealt" box was shown
 	bool	hud;
 	int		stats_custom[10];	// the created skater's own, put back after
 	bool	stats_gardees;
@@ -548,6 +549,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.gagne_temps = 0.0f;
 	s_run.bails = s_run.gagnes = s_run.perdus = 0;
 	s_run.fini = false;
+	s_run.dialogue = false;
 	s_run.depart_cles.clear(); s_run.depart_tricks.clear();
 	Obj::CSkaterCareer *car = Mdl::Skate::Instance()->GetCareer();
 	if( car )
@@ -617,6 +619,34 @@ bool ScriptDesktopDementedDeal( Script::CStruct *pParams, Script::CScript *pScri
 	pScript->GetParams()->AddString( "dealt_name", s_run.nom );
 	VLOG( "DSK", "demented: dealt %s (%d to pick from), %d starter tricks", s_run.nom, (int)v.size(), (int)s_run.depart_cles.size());
 	return true;
+}
+
+// @script | DesktopDementedNeedsDialog | desktop: a Demented run whose "You've been dealt" box hasn't shown
+bool ScriptDesktopDementedNeedsDialog( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	return s_run.actif && !s_run.dialogue;
+}
+
+// @script | DesktopDementedDialogShown | desktop: marks the dealt box as shown
+bool ScriptDesktopDementedDialogShown( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	s_run.dialogue = true;
+	return true;
+}
+
+// @script | DesktopDementedName | desktop: adds dealt_name (the dealt skater's name)
+bool ScriptDesktopDementedName( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	pScript->GetParams()->AddString( "dealt_name", s_run.nom );
+	return true;
+}
+
+// @script | DesktopTricksViewOnly | desktop: edit tricks menus are read only (Demented, or a goal running)
+bool ScriptDesktopTricksViewOnly( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	if( s_run.actif ) return true;
+	Game::CGoalManager *gm = Game::GetGoalManager();
+	return gm && gm->GetNumActiveGoals() > 0;
 }
 
 // @script | DesktopDementedChapter | desktop: chapter title shown; a new chapter gives a life

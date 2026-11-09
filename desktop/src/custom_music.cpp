@@ -1191,6 +1191,11 @@ static const char *s_item_pause =
 	"make_sprite_menu_item text = \"Extras\" id = menu_desktop_extras pad_choose_script = desktop_extras_menu\n"
 	"make_text_sprite texture = <view_icon> parent = menu_desktop_extras\n"
 	"endif\n"
+	"endif\n"
+	// Demented: the trick list, read only (the game's own View Tricks mode)
+	"if DesktopDemented\n"
+	"make_sprite_menu_item text = \"View Tricks\" id = menu_desktop_view_tricks pad_choose_script = create_edit_tricks_menu\n"
+	"make_text_sprite texture = <edit_skater_icon> parent = menu_desktop_view_tricks\n"
 	"endif\n";
 
 // Pause > Extras: the toggles (desktop_extras.cpp), and what they put on
@@ -1245,7 +1250,7 @@ static std::string scripts_extras( void )
 		"PlaySound GotStat04 vol = 150\n"
 		"endscript\n"
 		"script desktop_ach_toast\n"
-		"desktop_toast text = <text> rgba = [ 128 108 40 110 ] sound = HUD_specialtrickAA\n"
+		"desktop_toast text = <text> rgba = [ 128 108 40 110 ] sound = GoalMidGood\n"
 		"endscript\n"
 		// A small one-line notice top right, under the score, gone after 3 s
 		// (achievements, Demented lives and time). sound = optional.
@@ -1485,8 +1490,7 @@ static const char *s_demented_scripts =
 	"career_options_menu_exit new_menu_script = desktop_demented_menu focus = <focus>\n"
 	"endscript\n"
 	// after the intro cutscene: the deal, then the second intro
-	"script desktop_demented_deal\n"
-	"load_cas_textures_to_main_memory\n"
+	"script desktop_demented_roll\n"
 	// no cheats in a run (their menu is hidden too)
 	"UnSetGlobalFlag flag = CHEAT_ALWAYS_SPECIAL\n"
 	"UnSetGlobalFlag flag = CHEAT_BIGHEAD\n"
@@ -1507,9 +1511,17 @@ static const char *s_demented_scripts =
 	"UnSetGlobalFlag flag = CHEAT_SLOMO\n"
 	"UnSetGlobalFlag flag = CHEAT_STATS_13\n"
 	"UnSetGlobalFlag flag = CHEAT_SUPER_BLOOD\n"
-	"set_cas_cam wait_for_skater\n"
 	"DesktopDementedDeal\n"
 	"RefreshSkaterModel profile = 0 skater = 0\n"
+	"endscript\n"
+	"script desktop_demented_deal\n"
+	"load_cas_textures_to_main_memory\n"
+	"set_cas_cam wait_for_skater\n"
+	"if DesktopDementedNeedsDeal\n"
+	"desktop_demented_roll\n"
+	"endif\n"
+	"DesktopDementedDialogShown\n"
+	"DesktopDementedName\n"
 	"FormatText TextName = text \"You've been dealt:\\n\\n\\c2%s\\n\\n\\c0No changing skater, no editing your starter tricks, no saving.\" s = <dealt_name>\n"
 	"create_dialog_box { title = \"DEMENTED\" title_font = testtitle text = <text> pos = (320,240) just = [ center center ] "
 	"text_rgba = [ 88 105 112 128 ] text_dims = (330,0) line_spacing = 0.85 "
@@ -1562,6 +1574,33 @@ static const char *s_demented_scripts =
 
 // Pause menu (create_pause_menu, gamemenu.qb): the item before Change Level,
 // and the mode's scripts at the end of the file.
+// Demented: the edit tricks menus go read only, as they do during a goal:
+// their GoalManager_HasActiveGoals checks become DesktopTricksViewOnly
+// (true in Demented, else the goal manager's answer).
+static void patch_view_tricks( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	static const char *scripts[] = { "create_edit_tricks_menu", "create_edit_tricks_sub_menu",
+		"edit_tricks_sub_menu_add_key_combo", "special_tricks_menu_add_slot" };
+	const uint32_t actif = crc( "GoalManager_HasActiveGoals" ), neuf = crc( "DesktopTricksViewOnly" );
+	int nb = 0;
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT ) continue;
+		bool ok = false;
+		for( int i = 0; i < 4; ++i ) ok |= est_nom( qb, j[k + 1], crc( scripts[i] ));
+		if( !ok ) continue;
+		for( size_t a = k + 2; a < j.size() && qb[j[a].pos] != T_ENDSCRIPT; ++a )
+			if( est_nom( qb, j[a], actif ))
+			{
+				std::vector<unsigned char> b( 4 );
+				for( int i = 0; i < 4; ++i ) b[i] = (unsigned char)( neuf >> ( 8 * i ));
+				m.push_back( Modif{ j[a].pos + 1, 4, b } );
+				++nb;
+			}
+	}
+	if( nb ) VLOG( "MUS", "edit tricks: %d goal checks now view-only checks", nb );
+}
+
 // Demented: single lines of a script wrapped in "if NOT DesktopDemented".
 // A line qualifies when it starts with 'debut' and (if 'id_' is set) names
 // id = id_ somewhere on it.
@@ -1579,8 +1618,13 @@ static int wrap_lignes( const unsigned char *qb, const std::vector<Jeton> &j, st
 			if( !( pre == T_EOL || pre == T_EOLNUM ) || !est_nom( qb, j[a], d )) continue;
 			size_t f = a + 1;
 			bool ok = !cible;
-			for( ; f < j.size() && qb[j[f].pos] != T_EOL && qb[j[f].pos] != T_EOLNUM && qb[j[f].pos] != T_ENDSCRIPT; ++f )
+			int prof = 0;	// a { ... } spanning lines belongs to this line
+			for( ; f < j.size() && qb[j[f].pos] != T_ENDSCRIPT && ( prof > 0 || ( qb[j[f].pos] != T_EOL && qb[j[f].pos] != T_EOLNUM )); ++f )
+			{
+				if( qb[j[f].pos] == T_STRUCT ) ++prof;
+				else if( qb[j[f].pos] == T_FSTRUCT ) --prof;
 				if( cible && f + 2 < j.size() && est_nom( qb, j[f], id ) && qb[j[f + 1].pos] == T_EGAL && est_nom( qb, j[f + 2], cible )) ok = true;
+			}
 			if( !ok || f >= j.size() || qb[j[f].pos] == T_ENDSCRIPT ) continue;
 			Ecrit w1; compile_q( w1, "if NOT DesktopDemented\n" );
 			m.push_back( Modif{ j[a].pos, 0, w1.o } );
@@ -1591,7 +1635,7 @@ static int wrap_lignes( const unsigned char *qb, const std::vector<Jeton> &j, st
 		}
 		break;
 	}
-	VLOG( "MUS", "%s: %d %s lines kept out of Demented", script, nb, debut );
+	if( nb ) VLOG( "MUS", "%s: %d %s lines kept out of Demented", script, nb, debut );
 	return nb;
 }
 
@@ -2547,6 +2591,9 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_quitter( qb, j, m );
 	patch_pause_extras( qb, j, m );
 	patch_pause_live( qb, j, m );
+	patch_view_tricks( qb, j, m );
+	wrap_lignes( qb, j, m, "create_edit_tricks_menu", "PauseMusicAndStreams", NULL );
+	wrap_lignes( qb, j, m, "goal_fail", "create_speech_box", NULL );	// "Press START to retry goal"
 	// Demented: the music plays on in the pause menu (the game doesn't
 	// freeze either), and no cheats in Options
 	wrap_lignes( qb, j, m, "create_pause_menu", "PauseMusicAndStreams", NULL );
@@ -2579,7 +2626,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	// Demented: dealt a skater instead of the create-a-skater, no saving,
 	// missing goal tricks slotted in, a life per chapter, its own ending.
 	patch_debut( qb, j, m, "launch_pre_cas_menu",
-		"if DesktopDementedNeedsDeal\n"
+		"if DesktopDementedNeedsDialog\n"
 		"if NOT ( goto_cad = 1 )\n"
 		"desktop_demented_deal\n"
 		"return\n"
@@ -2601,6 +2648,21 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	// no goal retries in Demented (pause menu items are hidden; this also
 	// covers retry-on-Select)
 	patch_debut( qb, j, m, "RetryCurrentGoal", "if DesktopDemented\nreturn\nendif\n" );
+	// one goal at a time in Demented: no new goal offers while one runs
+	patch_debut( qb, j, m, "goal_got_trigger", "if DesktopDemented\nif GoalManager_HasActiveGoals\nreturn\nendif\nendif\n" );
+	// the skater is dealt before the first intro, so it's in it
+	patch_debut( qb, j, m, "play_first_cutscene", "if DesktopDementedNeedsDeal\ndesktop_demented_roll\nendif\n" );
+	// View Tricks (Demented) goes back to the pause menu
+	patch_debut( qb, j, m, "edit_tricks_menu_exit",
+		"if DesktopDemented\n"
+		"if NOT GotParam just_remove\n"
+		"if NOT LevelIs load_skateshop\n"
+		"restore_start_key_binding\n"
+		"create_pause_menu\n"
+		"return\n"
+		"endif\n"
+		"endif\n"
+		"endif\n" );
 	patch_debut( qb, j, m, "launch_options_menu_save_game_sequence", "if DesktopDemented\nreturn\nendif\n" );
 	patch_debut( qb, j, m, "ShownChapterTitle_Spawned",
 		"GoalManager_GetCurrentChapterAndStage\n"
