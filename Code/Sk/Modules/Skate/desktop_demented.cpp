@@ -416,12 +416,12 @@ static bool chaos_on( void ) { return s_run.actif && s_run.skater && !s_run.fini
 // Cheats are faked through CSkaterCareer::GetCheat (desktop_chaos_cheat);
 // the body ones need the real flags, put back when they end.
 enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_STATS_MAX, EV_STATS_RND,
-       EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, NB_EV };
+       EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, EV_SONS, NB_EV };
 static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
 	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
-	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD" };
+	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD", "SOUND SALAD" };
 // 0: never (Marcus: no moon gravity, and nothing that just helps the player: maxed stats, always special, perfect balance)
-static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7 };
+static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
 static float s_ev_prochain = 20.0f;
 static float s_ev_stat = 0.0f;
@@ -431,6 +431,7 @@ static bool  s_ev_corps = false;	// the body flags were changed (refresh owed)
 static int   s_txt_gen = 1;
 static float s_salade_t = 0.0f, s_salade_pas = 0.1f;
 static uint32 s_salade_graine = 1;
+static uint32 s_son_graine = 1;
 
 static const char *ev_drapeau( int e )
 {
@@ -540,6 +541,7 @@ static void ev_lancer( Game::CGoalManager *gm )
 			s_ev_reste[e] = duree;
 			if( e == EV_FLIP ) s_flip = true;
 			if( e == EV_REVERSE ) s_inverse = true;
+			if( e == EV_SONS ) s_son_graine = hasard( 0x7fffffff ) | 1;
 			if( e == EV_SCRAMBLE ) { s_salade_t = 0.0f; s_salade_pas = 0.08f; s_salade_graine = hasard( 0x7fffffff ) | 1; ++s_txt_gen; }
 			if( e == EV_STATS_RND ) { s_ev_stat = (float)hasard( 11 ); if( s_ev_stat == 0.0f ) s_ev_stat = 0.01f; snprintf( t, sizeof( t ), "CHAOS: STATS AT %d", (int)s_ev_stat ); }
 			if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
@@ -597,6 +599,12 @@ bool desktop_demented_cheat( uint32 cheat )
 }
 
 extern "C" int desktop_chaos_gen( void ) { return s_txt_gen; }
+
+// soundfx.cpp PlaySound: Sound Salad's swap seed, 0 when off
+extern "C" unsigned int desktop_chaos_son_graine( void )
+{
+	return ( chaos_on() && s_ev_reste[EV_SONS] > 0.0f ) ? s_son_graine : 0;
+}
 
 // Word Salad: words of a text change places, and their letters get shuffled
 static int salade( char *t, uint32 graine )
@@ -858,9 +866,9 @@ void DesktopDementedUpdate( Skate &mdl )
 		else
 		{
 			s_auto_t += dt;
-			if( s_auto_t > 3.0f )
+			if( s_auto_t > 0.25f )	// right away (Marcus), once the result screen is gone
 			{
-				s_auto_t = -5.0f;	// before trying again if nothing could start
+				s_auto_t = -2.0f;	// before trying again if nothing could start
 				Script::CArray *a = new Script::CArray;
 				std::vector<uint32> v;
 				for( int i = 0; i < gm->GetNumGoals(); ++i )
