@@ -122,6 +122,7 @@ struct Run
 	int		chapitre_max;
 	float	t;				// skating time, pauses left out
 	float	reste;			// Time Extend: seconds left on the clock
+	bool	horloge;		// Time Extend: running (from the first goal started on)
 	float	gagne_temps;	// Time Extend: seconds earned
 	int		bails, gagnes, perdus;
 	bool	fini;			// summary shown, waiting to go back to the menu
@@ -1135,7 +1136,17 @@ void DesktopDementedUpdate( Skate &mdl )
 	float dt = Tmr::FrameLength();
 	if( dt > 0.1f ) dt = 0.1f;	// a load or hitch is not skating time
 	if( !pause && !s_run.fini ) s_run.t += dt;
-	if( !pause && !film && !s_run.fini && s_run.mods[MOD_TIME] )
+	// Time Extend's clock waits for the first goal (Marcus)
+	if( s_run.mods[MOD_TIME] && !s_run.horloge )
+	{
+		Game::CGoalManager *gm = Game::GetGoalManager();
+		for( int i = 0; gm && i < gm->GetNumGoals() && !s_run.horloge; ++i )
+		{
+			Game::CGoal *g = gm->GetGoalByIndex( i );
+			if( g && g->IsActive()) s_run.horloge = true;
+		}
+	}
+	if( !pause && !film && !s_run.fini && s_run.mods[MOD_TIME] && s_run.horloge )
 	{
 		const float avant = s_run.reste;
 		s_run.reste -= dt;
@@ -1310,6 +1321,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.chapitre_max = -1;
 	s_run.t = 0.0f;
 	s_run.reste = TE_DEPART;
+	s_run.horloge = false;
 	s_run.gagne_temps = 0.0f;
 	s_run.bails = s_run.gagnes = s_run.perdus = 0;
 	s_run.fini = false;

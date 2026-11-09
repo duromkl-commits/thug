@@ -1216,7 +1216,7 @@ static const char *s_demented_scripts =
 	"make_main_menu_item { text = <text1> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 1 focus = 2 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every stat locked at 0 for the whole run\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text3> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 3 focus = 3 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"A countdown clock that starts at 1 minute. Goals and new chapters add time. At zero you lose a life\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"A 1 minute countdown clock that starts with your first goal. Goals and new chapters add time. At zero you lose a life\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text6> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 6 focus = 4 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"The world is flipped left to right, and so are your controls\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text5> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 5 focus = 5 } }\n"
