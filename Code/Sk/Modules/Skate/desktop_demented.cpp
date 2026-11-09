@@ -63,9 +63,9 @@ static uint32 hasard( uint32 n )
 	return n ? (uint32)( ( x >> 16 ) % n ) : 0;
 }
 
-enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, NB_MODS };
-static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend" };
-static bool s_arme[NB_MODS] = { false, false, true, false };
+enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, NB_MODS };
+static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile" };
+static bool s_arme[NB_MODS] = { false, false, true, false, false };
 
 // Time Extend: seconds on the clock at the start, per goal, per chapter, after a lost life.
 // Guesses, to tune once it has been played.
@@ -369,7 +369,14 @@ void desktop_demented_bail( void )
 	Mdl::Skate *sk = Mdl::Skate::Instance();
 	if( !sk->GetGameMode()->IsTrue( CRCD( 0x1ded1ea4, "is_career" ))) return;
 	++s_run.bails;
-	if( s_run.mods[MOD_PERMA] ) game_over( "You bailed." );
+	if( s_run.mods[MOD_PERMA] ) { game_over( "You bailed." ); return; }
+	// Fragile (Marcus): every bail costs a life.
+	if( s_run.mods[MOD_FRAGILE] )
+	{
+		--s_run.vies;
+		if( s_run.vies <= 0 ) { s_run.vies = 0; game_over( "Out of lives." ); return; }
+		panneau( "-1 LIFE", NULL, 0, 128, 50, 40 );
+	}
 }
 
 // goal_time: the goal's own time limit in seconds, 0 when it has none
@@ -511,7 +518,7 @@ bool ScriptDesktopDemented( Script::CStruct *pParams, Script::CScript *pScript )
 	return s_run.actif;
 }
 
-// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives, 3 Time Extend)
+// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives, 3 Time Extend, 4 Fragile)
 bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	int i = -1;
@@ -556,7 +563,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	{
 		if( s_run.mods[MOD_ZERO] ) car->SetGlobalFlag( 511 ); else car->UnSetGlobalFlag( 511 );
 	}
-	VLOG( "DSK", "demented: new run, perma bail %d, zero %d, lives %d, time extend %d", s_run.mods[0], s_run.mods[1], s_run.mods[2], s_run.mods[3] );
+	VLOG( "DSK", "demented: new run, perma bail %d, zero %d, lives %d, time extend %d, fragile %d", s_run.mods[0], s_run.mods[1], s_run.mods[2], s_run.mods[3], s_run.mods[4] );
 	return true;
 }
 

@@ -1465,12 +1465,14 @@ static const char *s_demented_scripts =
 	"DesktopDementedText\n"
 	"make_main_menu_item { text = <text0> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 0 focus = 0 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 1 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Bail once and the run is over\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
-	"make_main_menu_item { text = <text1> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 1 focus = 1 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 2 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every stat locked at 0 for the whole run\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
-	"make_main_menu_item { text = <text3> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 3 focus = 2 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"A countdown clock. Beating goals and new chapters add time. At zero you lose a life\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text4> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 4 focus = 1 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 2 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every bail costs a life\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text1> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 1 focus = 2 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every stat locked at 0 for the whole run\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text3> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 3 focus = 3 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"A countdown clock. Beating goals and new chapters add time. At zero you lose a life\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = \"Start Run\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = set_career_difficulty dif = 2 desktop_demented } }\n"
-	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Your skater is dealt after the intro\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Your skater is dealt after the intro\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"FormatText ChecksumName = bar_color \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
 	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,310) just = [ center top ] }\n"
 	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = black scale = (70,15) just = [ center top ] rgba = [ 0 0 0 90 ] }\n"
@@ -2770,6 +2772,33 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		"endif\n"
 		"endif\n" );
 	patch_debut( qb, j, m, "launch_options_menu_save_game_sequence", "if DesktopDemented\nreturn\nendif\n" );
+	// Demented (Marcus): no Create-A-Trick menu after the CAT goals (Nut
+	// Buster, Soul Skating): "Return to Game" is taken for you.
+	patch_debut( qb, j, m, "goal_cat_create_menu",
+		"if DesktopDemented\n"
+		"GoalManager_GetGoalParams name = <goal_id>\n"
+		"if ( <should_create_cat_menu> = 1 )\n"
+		"goal_cat_refuse_cat_menu goal_id = <goal_id>\n"
+		"endif\n"
+		"return\n"
+		"endif\n" );
+	// ...no Peralta skateshop visit: straight back to New York, as leaving
+	// the shop would (the shop still gets unlocked)...
+	patch_debut( qb, j, m, "NY03_SkateshopUnlocked",
+		"if DesktopDemented\n"
+		"SetGlobalFlag flag = BOARDSHOP_UNLOCKED\n"
+		"change in_ny03_sequence = 0\n"
+		"change_level level = load_ny next_level_script = NY03_back_from_boardshop\n"
+		"return\n"
+		"endif\n" );
+	// ...and no Create-A-Deck before Vancouver.
+	patch_debut( qb, j, m, "change_level_to_cad",
+		"if DesktopDemented\n"
+		"if ( in_cad_cutscene_sequence = 1 )\n"
+		"cad_exit_to_vc\n"
+		"return\n"
+		"endif\n"
+		"endif\n" );
 	patch_debut( qb, j, m, "ShownChapterTitle_Spawned",
 		"GoalManager_GetCurrentChapterAndStage\n"
 		"DesktopDementedChapter chapter = <currentchapter>\n" );
