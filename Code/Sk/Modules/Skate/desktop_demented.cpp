@@ -971,14 +971,17 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		if( strstr( in, s_propres[i] )) return 0;
 	// Word Salad randomizer: words shuffled, one seed per chapter, in play
 	// only (a paused menu is built while the game is paused, and stays plain)
-	const bool mots = rando_on( MOD_R_MOTS ) && !Mdl::FrontEnd::Instance()->GamePaused() && !s_menu_seul;
+	// a menu is checked now, not at the last update: its texts are made the
+	// frame it opens
+	const bool menu = Mdl::FrontEnd::Instance()->GamePaused() || element( crc( "current_menu_anchor" ));
+	const bool mots = rando_on( MOD_R_MOTS ) && !menu;
 	// ... and every known name becomes one from the pool (the stock list +
 	// data\custom\names.txt), one seed per chapter, menus included
 	const bool noms = rando_on( MOD_R_MOTS );
 	const bool chaos = chaos_on();
 	// Obscure modifier: button icons blanked in play (menus keep theirs)
 	// (Demented's pause doesn't pause: a menu on screen counts too)
-	const bool obscur = rando_on( MOD_OBSCURE ) && !Mdl::FrontEnd::Instance()->GamePaused() && !s_menu_seul;
+	const bool obscur = rando_on( MOD_OBSCURE ) && !menu;
 	if( !chaos && !noms && !obscur )
 	{
 		if( !mots ) return 0;
@@ -1019,7 +1022,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		const char *rempl = NULL;
 		bool majuscules = l > 1;
 		for( int k = 1; k < l; ++k ) if( d[k] >= 'a' ) majuscules = false;
-		for( int i = 0; i < NB_NOMS_CHAOS && !rempl; ++i )
+		for( int i = 0; ( chaos || noms ) && i < NB_NOMS_CHAOS && !rempl; ++i )	// not for Obscure alone
 		{
 			const char *nm = s_noms_chaos[i];
 			if( (int)strlen( nm ) != l ) continue;
@@ -1251,7 +1254,12 @@ void DesktopDementedUpdate( Skate &mdl )
 		}
 	}
 	if( !pause ) s_reve_t += dt;
-	s_menu_seul = pause || element( crc( "current_menu_anchor" ));
+	{
+		// a menu opening or closing: texts redone (Obscure, Word Salad spare menus)
+		const bool m = pause || element( crc( "current_menu_anchor" ));
+		if( m != s_menu_seul ) ++s_txt_gen;
+		s_menu_seul = m;
+	}
 	s_menu = pause || element( crc( "current_menu_anchor" )) || element( crc( "dialog_box_anchor" ))
 		|| element( crc( "goal_start_dialog" )) || element( crc( "speech_box_anchor" ));
 	// Chaos: curveballs at random times
