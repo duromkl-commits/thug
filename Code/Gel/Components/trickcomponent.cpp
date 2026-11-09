@@ -39,6 +39,7 @@
 #include "vita_log.h"
 #ifdef THUG_DESKTOP
 void desktop_demented_bail( void );	// desktop_demented.cpp: Perma Bail, run stats
+extern "C" int custom_skater_voice_pitch( unsigned int name_checksum );	// custom_music.cpp
 #endif
 // ISSUE PUBLIQUE #6 « Can't manual » : trace du chemin complet d'un manual,
 // muette par defaut, armee par la commande « trk 1 » (p_siodev.cpp).
@@ -3908,6 +3909,15 @@ CBaseComponent::EMemberFunctionResult CTrickComponent::CallMemberFunction( uint3
 				GetScoreObject()->Bail();
 #ifdef THUG_DESKTOP
 				desktop_demented_bail();
+				// Extra skaters' bail voices: THUG only voices the bails whose
+				// anims carry a knee/ankle/kick event, so most bails were
+				// silent (Marcus heard it once). Every bail asks for one;
+				// cfuncs.cpp drops a second within 1.5 s.
+				if ( custom_skater_voice_pitch( GetSkater()->m_skaterNameChecksum ) > 0 )
+				{
+					static const char *s_scr[3] = { "HandleBailKneeStream", "HandleBailAnkleStream", "HandleBailKickStream" };
+					Script::RunScript( Script::GenerateCRC( s_scr[Mth::Rnd( 3 )] ), NULL, GetObject() );
+				}
 #endif
 			}
 

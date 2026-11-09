@@ -10,6 +10,7 @@
 #include "vita_log.h"
 #ifdef THUG_DESKTOP
 extern "C" unsigned int desktop_rando_donneur( unsigned int obj_id );	// desktop_demented.cpp
+extern "C" int desktop_mirror_world( void );
 #endif
 #endif
 #include "vita_log.h"
@@ -1489,6 +1490,16 @@ CBaseComponent::EMemberFunctionResult CModelComponent::CallMemberFunction( uint3
 			}	
 			if (pParams->ContainsFlag(CRCD(0x424d9ea, "Y")))
 			{
+#ifdef THUG_DESKTOP
+				// Demented Mirror: the picture is flipped, so a skater's own
+				// display spin (manual L2/R2 spins) turns the other way on
+				// screen; turned back so L2 still looks like L2
+				if (desktop_mirror_world() && GetObject() && GetObject()->GetType() == SKATE_TYPE_SKATER)
+				{
+					start_angle = -start_angle;
+					end_angle = -end_angle;
+				}
+#endif
 				flags |= 2;
 				mpDisplayRotationInfo[1].SetUp(duration,
 											   start_time,

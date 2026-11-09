@@ -913,7 +913,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 			// No Button Hints event: \bN / \mN icons become "?"
 			if( chaos && s_ev_reste[EV_BOUTONS] > 0.0f && ( p[1] == 'b' || p[1] == 'B' || p[1] == 'm' || p[1] == 'M' ) && p[2] )
 			{
-				out[o++] = '?';
+				out[o++] = ' ';	// blank, not "?" (Marcus)
 				p += 3;
 				change = 1;
 				continue;
@@ -1018,7 +1018,7 @@ void desktop_demented_bail( void )
 	{
 		--s_run.vies;
 		if( s_run.vies <= 0 ) { s_run.vies = 0; game_over( "Out of lives." ); return; }
-		panneau( "-1 LIFE", NULL, 0, 128, 50, 40 );
+		panneau( "-1 LIFE", "HUDtrickslopC", 0, 128, 50, 40 );	// life lost sound (Marcus)
 	}
 }
 
@@ -1045,7 +1045,7 @@ void desktop_demented_goal( bool won, int goal_time )
 	if( s_run.vies <= 0 ) { s_run.vies = 0; game_over( "Out of lives." ); return; }
 	char t[64];
 	snprintf( t, sizeof( t ), "-1 LIFE" );
-	panneau( t, NULL, 0, 128, 50, 40 );
+	panneau( t, "HUDtrickslopC", 0, 128, 50, 40 );
 }
 
 // Binding a trick in Demented: never over a starter trick.
@@ -1133,7 +1133,7 @@ void DesktopDementedUpdate( Skate &mdl )
 				s_run.reste = TE_RECHARGE;
 				char t[64];
 				snprintf( t, sizeof( t ), "OUT OF TIME -1 LIFE" );
-				panneau( t, "GoalFail", 0, 128, 50, 40 );
+				panneau( t, "HUDtrickslopC", 0, 128, 50, 40 );
 			}
 			else { if( s_run.mods[MOD_LIVES] ) s_run.vies = 0; game_over( "Out of time." ); }
 		}
@@ -1176,9 +1176,9 @@ void DesktopDementedUpdate( Skate &mdl )
 		const int n = s_run.mods[MOD_LIVES] ? ( s_run.vies > 0 ? s_run.vies : 0 ) : 0;
 		const int miroir = 0;
 		const bool hud = s_run.hud;
-		// olive green (Marcus's swatch, about 60,71,23 on the star's body),
+		// bright Frankenstein green by default,
 		// a random hue with Random Colours
-		float r = 0.40f, g = 0.47f, b = 0.15f;
+		float r = 0.36f, g = 0.85f, b = 0.40f;	// brighter Frankenstein green (Marcus's swatch, ~78,185,89)
 		if( rando_on( MOD_R_COULEURS )) { r = 1.0f; g = 0.0f; b = 0.0f; desktop_rando_teinte( 0x510e527f, &r, &g, &b ); }
 		const uint32 coul = ((uint32)( r * 128.0f ) << 16 ) | ((uint32)( g * 128.0f ) << 8 ) | (uint32)( b * 128.0f );
 		if( s_hud_neuf || n != s_n || miroir != s_miroir || coul != s_coul )

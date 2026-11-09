@@ -3627,6 +3627,13 @@ bool ScriptPlayStream( Script::CStruct *pParams, Script::CScript *pScript )
 			}
 			if ( a_clip )
 			{
+				// one vocal per bail: the bail itself asks for one
+				// (trickcomponent.cpp), and its anim event may ask again
+				static Tmr::Time s_derniere = 0;
+				const Tmr::Time maintenant = Tmr::GetTime();
+				if ( s_derniere && maintenant - s_derniere < 1500 )
+					return true;
+				s_derniere = maintenant;
 				streamNameChecksum = Crc::GenerateCRCFromString( clip );
 				desktop_voice_wav( streamNameChecksum, clip );
 			}
