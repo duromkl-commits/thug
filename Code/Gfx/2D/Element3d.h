@@ -91,6 +91,10 @@ class CElement3d : public CScreenElement
 
 	// These three are used for when the object needs to scale according to the distance from the camera.
 	bool 	m_scale_with_distance;
+#ifdef THUG_DESKTOP
+	bool	m_desktop_ecran;	// desktop_screen_pos: placed with the real projection, 2D margin included
+	bool	m_desktop_propre;	// desktop_own_mesh: its own copy of the mesh, so its tint is its own
+#endif
 	float 	m_scale_multiplier;
 	float 	m_max_scale;
 

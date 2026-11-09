@@ -3676,6 +3676,47 @@ bool CVitaGeom::plat_set_material_color( uint32 mat_name_checksum, int pass, Ima
 	return change;
 }
 
+#ifdef THUG_DESKTOP
+// Element3d's goal star: its vertex colours replace glColor, so a model
+// colour never showed. The tint is baked into them instead, like the CAS
+// material colours above (and the lit copy, for rigid pieces).
+void CVitaGeom::DesktopTeinte( const float f[3] )
+{
+	if( !mp_mesh )
+		return;
+	const float k[3] = { f[0], f[1], f[2] };	// 1 = as loaded (the star's material colour is neutral)
+	for( int i = 0; i < mp_mesh->NumPieces(); ++i )
+	{
+		SGpuMesh *p = const_cast< SGpuMesh * >( &mp_mesh->Pieces()[i] );
+		if( p->color_locked || !p->cbo || !p->p_couleurs_brutes )
+			continue;
+		const unsigned char *p_up = NxVita::TeindreCouleursMateriau( p->p_couleurs_brutes, p->num_vertices, k );
+		glBindBuffer( GL_ARRAY_BUFFER, p->cbo );
+		glBufferData( GL_ARRAY_BUFFER, 4 * p->num_vertices, p_up, GL_STATIC_DRAW );
+		if( p->p_c_base && p->cbo_rig )
+		{
+			memcpy( p->p_c_base, p_up, 4 * p->num_vertices );
+			glBindBuffer( GL_ARRAY_BUFFER, p->cbo_rig );
+			glBufferData( GL_ARRAY_BUFFER, 4 * p->num_vertices, p_up, GL_DYNAMIC_DRAW );
+		}
+		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+	}
+}
+
+void DesktopTeinterModele( Nx::CModel *p_model, unsigned char r, unsigned char g, unsigned char b )
+{
+	if( !p_model )
+		return;
+	const float f[3] = { r / 128.0f > 1.0f ? 1.0f : r / 128.0f, g / 128.0f > 1.0f ? 1.0f : g / 128.0f, b / 128.0f > 1.0f ? 1.0f : b / 128.0f };
+	for( int i = 0; i < p_model->GetNumGeoms(); ++i )
+	{
+		CVitaGeom *p_geom = static_cast< CVitaGeom * >( p_model->GetGeomByIndex( i ));
+		if( p_geom )
+			p_geom->DesktopTeinte( f );
+	}
+}
+#endif
+
 // Issue #16. [SOURCE] XBox/p_NxGeom.cpp:1131 : meme recherche du materiau par
 // nom (materiaux scindes a la conversion : bits 0-2 = passe isolee, bits 3-6 =
 // passes retenues), puis la matrice ne garde que m00, m01 (rotation x echelle)

@@ -33,6 +33,11 @@ namespace NxVita { bool GetDisplayedCamera( Mth::Matrix *p_mat, Mth::Vector *p_p
 #include <sys/config/config.h>
 #include <sys/replay/replay.h>
 
+#ifdef THUG_DESKTOP
+namespace NxVita { bool GetProjectionFocal( float *m0, float *m5 ); }
+namespace Nx { void DesktopTeinterModele( CModel *p_model, unsigned char r, unsigned char g, unsigned char b ); }
+#endif
+
 namespace Front
 {
 
@@ -55,6 +60,10 @@ static float sGetScaleFromScreenDimensions(float screenW, float screenH, float z
 /******************************************************************/
 
 // screenX, screenY indicate where the origin of the model will be located
+#ifdef THUG_DESKTOP
+static bool s_desktop_ecran = false;	// set around the call for desktop_screen_pos elements
+#endif
+
 static void sGetWorldMatrixFromScreenPosition(int camera_num, Mth::Matrix *p_world_matrix, float screenX, float screenY, float zOffset, Mth::Vector &model_offs)
 {
 	Dbg_MsgAssert(p_world_matrix,("NULL p_world_matrix"));
@@ -84,6 +93,21 @@ static void sGetWorldMatrixFromScreenPosition(int camera_num, Mth::Matrix *p_wor
 #endif
 
 	camera_space_pos.Set( -screenX * zOffset / 448.0f, screenY * zOffset / 448.0f, zOffset );
+#ifdef THUG_DESKTOP
+	// desktop_screen_pos: where the 2D layer would draw that point (logical
+	// 640x480, drawn 16 lines lower, p_NxSprite.cpp), unprojected with the
+	// projection actually in use. Mirror's negative m0 cancels out.
+	{
+		float m0, m5;
+		if( s_desktop_ecran && NxVita::GetProjectionFocal( &m0, &m5 ))
+		{
+			const float sx = screenX + 320.0f, sy = screenY + 224.0f;	// undo the lines above
+			const float nx = sx / 320.0f - 1.0f;
+			const float ny = 1.0f - ( sy + 16.0f ) / 240.0f;
+			camera_space_pos.Set( -nx * zOffset / m0, -ny * zOffset / m5, zOffset );
+		}
+	}
+#endif
 #else
 	// Mick:  Need to convert from logical to physical screen coordinates
 	screenX = SCREEN_CONV_X(screenX);
@@ -187,6 +211,10 @@ static void sGetWorldMatrixFromScreenPosition(int camera_num, Mth::Matrix *p_wor
 
 CElement3d::CElement3d()
 {
+#ifdef THUG_DESKTOP
+	m_desktop_ecran = false;
+	m_desktop_propre = false;
+#endif
 	for (int i=0; i<MAX_MODELS_PER_ELEMENT; ++i)
 	{
 		mp_models[i].mpModel=NULL;
@@ -342,17 +370,26 @@ void CElement3d::AddModel(const char *p_model_name, uint32 skeleton_name, Mth::V
 		// loads a geom, if one was specified
 		Str::String fullModelName;
 		fullModelName = Gfx::GetModelFileName(p_model_name, ".mdl");
+#ifdef THUG_DESKTOP
+		// desktop_own_mesh: not the shared asset, so a vertex tint stays ours
+		p_new_model->AddGeom(fullModelName.getString(), 0, !m_desktop_propre, texDictOffset);
+#else
 		p_new_model->AddGeom(fullModelName.getString(), 0, true, texDictOffset);
+#endif
 	}
 	
-#ifdef THUG_DESKTOP
-	// The star's textures are loaded grey (p_NxTexture.cpp, dxt1_gris): red
-	// again unless the script gave it a colour.
-	if (p_model_name && !stricmp(p_model_name, "arrow") && m_rgba.r == 128 && m_rgba.g == 128 && m_rgba.b == 128)
-		p_new_model->SetColor(128, 0, 0, m_rgba.a);
-	else
-#endif
 	p_new_model->SetColor(m_rgba.r,m_rgba.g,m_rgba.b,m_rgba.a);
+#ifdef THUG_DESKTOP
+	// The star's textures are loaded grey (p_NxTexture.cpp, dxt1_gris), and
+	// its vertex colours override a model colour: the tint goes into them.
+	// Red (the goal givers' stars, shared mesh) unless the script asked for
+	// a colour on its own copy.
+	if (p_model_name && !stricmp(p_model_name, "arrow"))
+	{
+		if (m_desktop_propre) Nx::DesktopTeinterModele(p_new_model, m_rgba.r, m_rgba.g, m_rgba.b);
+		else { Nx::DesktopTeinterModele(p_new_model, 128, 0, 0); p_new_model->SetColor(128, 0, 0, m_rgba.a); }
+	}
+#endif
 	
 	Dbg_MsgAssert(mp_models[m_num_models].mpModel==NULL,("mp_models[m_num_models].mpModel not NULL ?"));
 	mp_models[m_num_models].mpModel=p_new_model;
@@ -491,6 +528,9 @@ void CElement3d::AutoComputeScale()
 void CElement3d::SetProperties(Script::CStruct *p_props)
 {
 	CScreenElement::SetProperties(p_props);
+#ifdef THUG_DESKTOP
+	if (p_props->ContainsFlag("desktop_own_mesh")) m_desktop_propre = true;
+#endif
 
 #ifdef __PLAT_VITA__
 	// Que demande VRAIMENT le script ? Le terme AbsW/2 s'annule avec la
@@ -706,6 +746,9 @@ void CElement3d::SetProperties(Script::CStruct *p_props)
 	}
 
 	m_scale_with_distance=p_props->ContainsFlag(CRCD(0x4564c8f2,"ScaleWithDistance"));
+#ifdef THUG_DESKTOP
+	if (p_props->ContainsFlag("desktop_screen_pos")) m_desktop_ecran = true;
+#endif
 	m_scale_multiplier=0.002f;
 	p_props->GetFloat(CRCD(0x571f3f3a,"ScaleMultiplier"),&m_scale_multiplier);
 	m_max_scale=3.0f;
@@ -822,11 +865,17 @@ void CElement3d::update()
 					      m_camera_z );
 			}
 #endif
+#ifdef THUG_DESKTOP
+			s_desktop_ecran = m_desktop_ecran;
+#endif
 			sGetWorldMatrixFromScreenPosition(m_active_viewport_number, &m_model_matrix, 
 											  m_summed_props.GetScreenUpperLeftX() + GetAbsW() / 2.0f, 
 											  m_summed_props.GetScreenUpperLeftY() + GetAbsH() / 2.0f, 
 											  m_camera_z, 
 											  pos_change);
+#ifdef THUG_DESKTOP
+			s_desktop_ecran = false;
+#endif
 	
 			// If the model were rendered using m_model_matrix as it is then it will be unscaled
 			// and facing the camera.

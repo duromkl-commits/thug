@@ -957,22 +957,22 @@ void DesktopDementedUpdate( Skate &mdl )
 	Front::CTextElement *e = (Front::CTextElement *)element( crc( "desktop_demented_time" ));
 	if( e )
 	{
-		e->SetText( c );
+		e->SetText( compte ? c : " " );	// only with Time Extend (Marcus)
 		// Time Extend: brighter, then red over the last 15 seconds
 		Image::RGBA col( 128, 128, 128, compte ? 100 : 70 );
 		if( compte && s_run.reste < 15.0f ) col = Image::RGBA( 128, 24, 16, 120 );
 		e->SetRGBA( col );
 	}
-	// Lives: the goal givers' spinning star, one per life, stacked down the
-	// left side (Marcus). Past ETOILES_MAX the rest shows as "+N" under them.
-	// Rebuilt only when the count, the mirror or the colour changes.
+	// Lives: the goal givers' spinning star, one per life, stacked up the
+	// left side from the bottom (Marcus), 9 at most. Rebuilt only when the
+	// count or the colour changes (Mirror is handled by the projection).
 	{
-		enum { ETOILES_MAX = 8 };
+		enum { ETOILES_MAX = 9 };
 		static int s_n = -1;
 		static int s_miroir = -1;
 		static uint32 s_coul = 0xffffffff;
 		const int n = s_run.mods[MOD_LIVES] ? ( s_run.vies > 0 ? s_run.vies : 0 ) : 0;
-		const int miroir = desktop_mirror_world();
+		const int miroir = 0;
 		const bool hud = s_run.hud;
 		float r = 1.0f, g = 0.0f, b = 0.0f;
 		if( rando_on( MOD_R_COULEURS )) desktop_rando_teinte( 0x510e527f, &r, &g, &b );
@@ -987,9 +987,9 @@ void DesktopDementedUpdate( Skate &mdl )
 				p.AddChecksum( "id", crc( id ));
 				if( i < n && hud )
 				{
-					// The projection is flipped in Mirror, 3D elements with it
-					const float x = miroir ? 640.0f - 30.0f : 30.0f;
-					p.AddPair( "pos", x, 150.0f + 32.0f * (float)i );
+					// Inside the TV border (2D y runs -16..464 on screen), a few
+					// units from its left and bottom edges, then upwards.
+					p.AddPair( "pos", 14.0f, 450.0f - 25.0f * (float)i );
 					Script::CArray *a = new Script::CArray;
 					a->SetSizeAndType( 4, ESYMBOLTYPE_INTEGER );
 					a->SetInteger( 0, (int)( r * 128.0f )); a->SetInteger( 1, (int)( g * 128.0f ));
@@ -1000,10 +1000,6 @@ void DesktopDementedUpdate( Skate &mdl )
 				Script::RunScript( "desktop_demented_star", &p );
 			}
 			s_hud_neuf = false; s_n = n; s_miroir = miroir; s_coul = coul;
-			if( n > ETOILES_MAX ) snprintf( t, sizeof( t ), "+%d", n - ETOILES_MAX );
-			else snprintf( t, sizeof( t ), " " );
-			e = (Front::CTextElement *)element( crc( "desktop_demented_lives" ));
-			if( e ) e->SetText( t );
 		}
 	}
 }

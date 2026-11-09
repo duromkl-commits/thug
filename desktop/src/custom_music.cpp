@@ -1427,7 +1427,7 @@ static const char *s_demented_scripts =
 	"desktop_demented_hud_off\n"
 	"SetScreenElementLock id = root_window off\n"
 	"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_demented_hud pos = (0,0) just = [ left top ] }\n"
-	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_time font = newtimerfont text = \"0:00\" pos = (634,468) just = [ right bottom ] scale = 0.55 rgba = [ 128 128 128 70 ] z_priority = -1 }\n"
+	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_time font = newtimerfont text = \" \" pos = (638,462) just = [ right bottom ] scale = 0.55 rgba = [ 128 128 128 70 ] z_priority = -1 }\n"
 	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_lives font = small text = \" \" pos = (30,416) just = [ center top ] scale = 0.6 rgba = [ 128 128 128 90 ] z_priority = -1 }\n"
 	"endscript\n"
 	// one life: the goal givers' star (model arrow), same bob and spin, on screen
@@ -1438,7 +1438,7 @@ static const char *s_demented_scripts =
 	"if GotParam pos\n"
 	"if ScreenElementExists id = desktop_demented_hud\n"
 	"SetScreenElementLock id = desktop_demented_hud off\n"
-	"CreateScreenElement { type = Element3D parent = desktop_demented_hud id = <id> model = \"arrow\" pos = <pos> CameraZ = -6 scale = 0.022 rgba = <rgba> AngleY = <AngleY> AngVelY = 0.08 HoverParams = { Amp = 9.5 Freq = 1.2 } }\n"
+	"CreateScreenElement { type = Element3D parent = desktop_demented_hud id = <id> model = \"arrow\" desktop_screen_pos desktop_own_mesh pos = <pos> CameraZ = -6 scale = 0.0055 rgba = <rgba> AngleY = <AngleY> AngVelY = 0.08 HoverParams = { Amp = 9.5 Freq = 1.2 } }\n"
 	"endif\n"
 	"endif\n"
 	"endscript\n"

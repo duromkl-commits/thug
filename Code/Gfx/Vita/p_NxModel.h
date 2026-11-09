@@ -431,6 +431,12 @@ private:
 	// raison de le supposer bon. Cette trace le dira au moment ou une mission
 	// reclamera ses barrieres.
 	virtual bool	plat_set_material_color( uint32 mat_checksum, int pass, Image::RGBA rgba );
+#ifdef THUG_DESKTOP
+public:
+	// every piece's vertex colours times f (0..1 each), from the raw colours
+	void			DesktopTeinte( const float f[3] );
+private:
+#endif
 	// Issue #16 : la version de base est un STUB (NxGeom.cpp:488) -- les
 	// tatouages et logos du CAS restaient a leur place par defaut.
 	virtual bool	plat_set_uv_matrix( uint32 mat_checksum, int pass, const Mth::Matrix &mat );

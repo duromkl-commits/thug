@@ -2598,6 +2598,17 @@ static void set_projection( float fov_deg, float aspect, float znear, float zfar
 }
 
 
+// The projection's x and y focal terms (m0 is negative in Demented's Mirror),
+// for 3D elements placed at a 2D screen position (Element3d.cpp).
+bool GetProjectionFocal( float *m0, float *m5 )
+{
+	if( s_proj[5] == 0.0f )
+		return false;
+	*m0 = s_proj[0];
+	*m5 = s_proj[5];
+	return true;
+}
+
 bool GetViewMatrix( float out[16] )
 {
 	if( !s_view_valid )
