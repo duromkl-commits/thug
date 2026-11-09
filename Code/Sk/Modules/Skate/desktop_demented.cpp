@@ -781,6 +781,18 @@ static void chaos_maj( float dt, bool pause, bool film )
 		return;
 	}
 	ev_temps();
+	// the red FRAGILE / PERMA BAIL banners stay up as long as their event:
+	// the game clears panel messages (goals, bails...), so they come back
+	{
+		static float s_verif = 0.0f;
+		s_verif += dt;
+		if( s_verif >= 0.25f )
+		{
+			s_verif = 0.0f;
+			if( s_ev_reste[EV_FRAGILE] > 0.0f && !element( crc( "desktop_chaos_fragile" ))) ev_banniere( EV_FRAGILE, true );
+			if( s_ev_reste[EV_PERMA] > 0.0f && !element( crc( "desktop_chaos_perma" ))) ev_banniere( EV_PERMA, true );
+		}
+	}
 	if( s_ev_reste[EV_SCRAMBLE] > 0.0f )
 	{
 		s_salade_t += dt;
