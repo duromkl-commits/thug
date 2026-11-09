@@ -437,7 +437,8 @@ public:
 	// next render; NULL = its own texture back
 	void			DesktopTeinte( const float *f );
 private:
-	void			desktop_teinte_appliquer();
+	bool			desktop_teinte_poser( bool pose, unsigned int *p_garde, int n_garde );
+	void			desktop_teinte_oublier();
 #endif
 	// Issue #16 : la version de base est un STUB (NxGeom.cpp:488) -- les
 	// tatouages et logos du CAS restaient a leur place par defaut.

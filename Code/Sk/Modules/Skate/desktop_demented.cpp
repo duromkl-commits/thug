@@ -70,9 +70,9 @@ static uint32 hasard( uint32 n )
 }
 
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_AUTO, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
-       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, NB_MODS };
+       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, NB_MODS };
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Auto", "Mirror", "Chaos", "Surprise",
-                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad" };
+                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names" };
 static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
@@ -743,6 +743,9 @@ extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte )
 	return 1;
 }
 
+extern "C" int desktop_noms_extra_count( void );		// custom_music.cpp: data\custom\names.txt
+extern "C" const char *desktop_noms_extra( int i );
+
 // Chaos: people's names swapped for each other (the same swap all run), and
 // now and then a word with two letters traded. Same input, same output, so
 // text redrawn every frame doesn't flicker.
@@ -752,7 +755,11 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 	// Word Salad randomizer: words shuffled, one seed per chapter, in play
 	// only (a paused menu is built while the game is paused, and stays plain)
 	const bool mots = rando_on( MOD_R_MOTS ) && !Mdl::FrontEnd::Instance()->GamePaused();
-	if( !chaos_on())
+	// Random Names randomizer: every known name becomes one from the pool
+	// (the stock list + data\custom\names.txt), one seed per chapter
+	const bool noms = rando_on( MOD_R_NOMS );
+	const bool chaos = chaos_on();
+	if( !chaos && !noms )
 	{
 		if( !mots ) return 0;
 		strncpy( out, in, n - 1 );
@@ -790,7 +797,18 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 				if( majuscules && c >= 'A' && c <= 'Z' && k > 0 ) c = (char)( c - 'A' + 'a' );
 				ok = c == nm[k];
 			}
-			if( ok ) rempl = s_noms_chaos[s_perm_noms[i]];
+			if( ok )
+			{
+				if( noms )
+				{
+					const int nx = desktop_noms_extra_count();
+					const uint32 h = melanger((uint32)i * 0x9E3779B1u ^ s_rando_graine ^ 0x1f83d9abu );
+					const uint32 k = h % (uint32)( NB_NOMS_CHAOS + nx );
+					rempl = k < (uint32)NB_NOMS_CHAOS ? s_noms_chaos[k] : desktop_noms_extra( (int)k - NB_NOMS_CHAOS );
+					if( !rempl ) rempl = s_noms_chaos[i];
+				}
+				else rempl = s_noms_chaos[s_perm_noms[i]];
+			}
 		}
 		if( rempl )
 		{
@@ -807,7 +825,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		for( int k = 0; k < l; ++k ) h = ( h ^ (uint8)d[k] ) * 16777619u;
 		const int debut = o;
 		for( int k = 0; k < l && o < n - 1; ++k ) out[o++] = d[k];
-		if( l >= 5 && ( h % 100 ) < 5 && o - debut == l )
+		if( chaos && l >= 5 && ( h % 100 ) < 5 && o - debut == l )
 		{
 			const int a = 1 + (int)(( h >> 8 ) % ( l - 2 )), b = a + 1;
 			const char x = out[debut + a]; out[debut + a] = out[debut + b]; out[debut + b] = x;
@@ -1071,7 +1089,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	if( s_run.mods[MOD_SURPRISE] )
 	{
 		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 0, 30, 30, 0, 50, 40, 40, 35, 25 };
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 0, 30, 30, 0, 50, 40, 40, 35, 25, 40 };
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;

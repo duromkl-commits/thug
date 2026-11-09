@@ -375,7 +375,9 @@ void CElement3d::AddModel(const char *p_model_name, uint32 skeleton_name, Mth::V
 		fullModelName = Gfx::GetModelFileName(p_model_name, ".mdl");
 #ifdef THUG_DESKTOP
 		// desktop_own_mesh: not the shared asset, so a vertex tint stays ours
-		p_new_model->AddGeom(fullModelName.getString(), 0, !m_desktop_propre, texDictOffset);
+		// (desktop_own_mesh's own copy came out untextured: the shared asset,
+		// coloured per geom at draw time, p_NxModel.cpp DesktopTeinte)
+		p_new_model->AddGeom(fullModelName.getString(), 0, true, texDictOffset);
 #else
 		p_new_model->AddGeom(fullModelName.getString(), 0, true, texDictOffset);
 #endif

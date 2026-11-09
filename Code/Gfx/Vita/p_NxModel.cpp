@@ -70,6 +70,7 @@ bool g_vita_trace_reset_inactifs = false;
 struct SMorceauReporte
 {
 	const SGpuMesh *p_piece;
+	unsigned int    tex;		// its texture when deferred (a goal star's may be swapped back since)
 	float           mv[16];
 	float           rgba[4];
 	bool            a_rgba;
@@ -2737,10 +2738,10 @@ void VitaDessinerModelesReportes( void )
 		glVertexPointer( 3, GL_FLOAT, 0, NULL );
 
 		float coul[4];
-		if( p->texture && p->uvbo )
+		if( r->tex && p->uvbo )
 		{
 			glEnable( GL_TEXTURE_2D );
-			glBindTexture( GL_TEXTURE_2D, p->texture );
+			glBindTexture( GL_TEXTURE_2D, r->tex );
 			glEnableClientState( GL_TEXTURE_COORD_ARRAY );
 			glBindBuffer( GL_ARRAY_BUFFER, p->uvbo );
 			glTexCoordPointer( 2, GL_FLOAT, 0, NULL );
@@ -3353,6 +3354,7 @@ void CVitaMesh::Draw( const float *p_rgba,
 		{
 			SMorceauReporte *r = &s_reportes[s_num_reportes++];
 			r->p_piece = p;
+			r->tex = p->texture;
 			glGetFloatv( GL_MODELVIEW_MATRIX, r->mv );
 			r->a_rgba = ( p_rgba != NULL );
 			if( p_rgba )
@@ -3682,37 +3684,64 @@ bool CVitaGeom::plat_set_material_color( uint32 mat_name_checksum, int pass, Ima
 // (p_NxTexture.cpp DesktopTextureEtoile). Applied at the geom's next render,
 // when its pieces surely exist; f = NULL puts the star's own texture back.
 unsigned int DesktopTextureEtoile( unsigned int gl, const float *f );	// p_NxTexture.cpp
-struct SDesktopTeinteGeom { const CVitaGeom *g; float f[3]; bool orig; };
+struct SDesktopTeinteGeom { const CVitaGeom *g; float f[3]; };
 static SDesktopTeinteGeom s_desktop_teintes[64];
 static int s_desktop_nteintes = 0;
 
+// The goal star's mesh is shared (one asset for every star), so a colour is
+// per geom: its pieces get the recoloured texture just for its own draw.
 void CVitaGeom::DesktopTeinte( const float *f )
 {
-	SDesktopTeinteGeom e; e.g = this; e.orig = !f;
-	e.f[0] = f ? f[0] : 1.0f; e.f[1] = f ? f[1] : 1.0f; e.f[2] = f ? f[2] : 1.0f;
 	for( int i = 0; i < s_desktop_nteintes; ++i )
-		if( s_desktop_teintes[i].g == this ) { s_desktop_teintes[i] = e; return; }
-	if( s_desktop_nteintes < 64 ) s_desktop_teintes[s_desktop_nteintes++] = e;
+		if( s_desktop_teintes[i].g == this )
+		{
+			if( f ) { s_desktop_teintes[i].f[0] = f[0]; s_desktop_teintes[i].f[1] = f[1]; s_desktop_teintes[i].f[2] = f[2]; }
+			else s_desktop_teintes[i] = s_desktop_teintes[--s_desktop_nteintes];
+			return;
+		}
+	if( !f || s_desktop_nteintes >= 64 ) return;
+	SDesktopTeinteGeom e; e.g = this; e.f[0] = f[0]; e.f[1] = f[1]; e.f[2] = f[2];
+	s_desktop_teintes[s_desktop_nteintes++] = e;
 }
 
-void CVitaGeom::desktop_teinte_appliquer()
+void CVitaGeom::desktop_teinte_oublier()
 {
-	if( !s_desktop_nteintes || !mp_mesh || ( mp_mesh->NumPieces() <= 0 ))
-		return;
+	DesktopTeinte( NULL );
+}
+
+// pose = true: swap in the copies (old textures into p_garde); false: put back
+bool CVitaGeom::desktop_teinte_poser( bool pose, unsigned int *p_garde, int n_garde )
+{
+	if( !s_desktop_nteintes || !mp_mesh ) return false;
+	const int n = mp_mesh->NumPieces() < n_garde ? mp_mesh->NumPieces() : n_garde;
+	if( !pose )
+	{
+		for( int k = 0; k < n; ++k )
+			const_cast< SGpuMesh * >( &mp_mesh->Pieces()[k] )->texture = p_garde[k];
+		return true;
+	}
 	for( int i = 0; i < s_desktop_nteintes; ++i )
 	{
 		if( s_desktop_teintes[i].g != this )
 			continue;
-		const SDesktopTeinteGeom e = s_desktop_teintes[i];
-		s_desktop_teintes[i] = s_desktop_teintes[--s_desktop_nteintes];
-		for( int k = 0; k < mp_mesh->NumPieces(); ++k )
+		for( int k = 0; k < n; ++k )
 		{
 			SGpuMesh *p = const_cast< SGpuMesh * >( &mp_mesh->Pieces()[k] );
+			p_garde[k] = p->texture;
 			if( p->texture )
-				p->texture = DesktopTextureEtoile( p->texture, e.orig ? NULL : e.f );
+				p->texture = DesktopTextureEtoile( p->texture, s_desktop_teintes[i].f );
 		}
-		return;
+		static int n_log;
+		if( n_log < 6 )
+		{
+			++n_log;
+			VLOG( "DSK", "star tint: geom %p, %d pieces, tex %u -> %u (%.2f %.2f %.2f)", (void *)this, n,
+			      n > 0 ? p_garde[0] : 0u, n > 0 ? (unsigned)mp_mesh->Pieces()[0].texture : 0u,
+			      s_desktop_teintes[i].f[0], s_desktop_teintes[i].f[1], s_desktop_teintes[i].f[2] );
+		}
+		return true;
 	}
+	return false;
 }
 
 void DesktopTeinterModele( Nx::CModel *p_model, unsigned char r, unsigned char g, unsigned char b )
@@ -3873,6 +3902,9 @@ CVitaGeom::~CVitaGeom()
 {
 	if( m_vita_clone )
 		NxVita::OublierInstance( this );
+#ifdef THUG_DESKTOP
+	desktop_teinte_oublier();
+#endif
 	NxVita::OmbreOublierGeom( this );	// sa pose ne doit plus aller a la carte d'ombre
 	VitaOublierPose();
 	liberer_lum();
@@ -4636,7 +4668,8 @@ bool CVitaGeom::plat_render( Mth::Matrix *pRootMatrix,
 		sp_lum_inst  = g_vita_lum_instance ? mp_vita_lum : NULL;
 		s_lum_inst_n = m_vita_lum_n;
 #ifdef THUG_DESKTOP
-		desktop_teinte_appliquer();
+		unsigned int garde_tex[16];
+		const bool teinte = desktop_teinte_poser( true, garde_tex, 16 );
 #endif
 		if( skin )
 			mp_mesh->DrawSkinned( ppBoneMatrices, numBones, m_vita_rgba,
@@ -4644,6 +4677,9 @@ bool CVitaGeom::plat_render( Mth::Matrix *pRootMatrix,
 		else
 			mp_mesh->Draw( m_vita_rgba, ppBoneMatrices, numBones,
 			               (CVitaModelLights *)mp_vita_lights );
+#ifdef THUG_DESKTOP
+		if( teinte ) desktop_teinte_poser( false, garde_tex, 16 );
+#endif
 		sp_lum_inst  = NULL;
 		s_lum_inst_n = 0;
 		s_lum_decision = -1;

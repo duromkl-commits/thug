@@ -1264,11 +1264,13 @@ static const char *s_demented_scripts =
 	"make_main_menu_item { text = <text11> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 11 focus = 2 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Goal dialogue and other voice lines play a different line of about the same length\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text12> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 12 focus = 3 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sound effects play other sounds, from THUG and from the extra sound folders you added\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sound effects play other THUG sounds, and some voice lines play sounds from the extra sound folders you added\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text13> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 13 focus = 4 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"The words in on-screen text are shuffled around. Menus stay readable\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text14> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 14 focus = 5 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Names in on-screen text are swapped for random names\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 6 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Back to the modifiers\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 7 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Back to the modifiers\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"FormatText ChecksumName = bar_color \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
 	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,384) just = [ center top ] }\n"
 	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = black scale = (70,15) just = [ center top ] rgba = [ 0 0 0 90 ] }\n"
@@ -2776,6 +2778,53 @@ extern "C" int custom_music_open( int i )
 	const int ok = cm_open( s_pistes[i].chemin.c_str());
 	VLOG( "MUS", "custom music: %s %s - %s", ok ? "playing" : "could not open", s_pistes[i].bande.c_str(), s_pistes[i].titre.c_str());
 	return ok;
+}
+
+// --- Random Names' extra pool --------------------------------------------------
+//
+// data\custom\names.txt: one name per line (# comments), added to the stock
+// list of names the Random Names randomizer picks from.
+static std::vector<std::string> s_noms_extra;
+static bool s_noms_extra_lu = false;
+
+static void noms_extra_lit( void )
+{
+	if( s_noms_extra_lu ) return;
+	s_noms_extra_lu = true;
+	char *base = SDL_GetBasePath();
+#ifdef _WIN32
+	const std::string chemin = std::string( base ? base : "" ) + "data\\custom\\names.txt";
+#else
+	const std::string chemin = std::string( base ? base : "" ) + "data/custom/names.txt";
+#endif
+	SDL_free( base );
+	FILE *f = fopen( chemin.c_str(), "rb" );
+	if( !f ) return;
+	char l[256];
+	while( fgets( l, sizeof( l ), f ))
+	{
+		size_t n = strlen( l );
+		while( n && ( l[n - 1] == '\n' || l[n - 1] == '\r' || l[n - 1] == ' ' || l[n - 1] == '\t' )) l[--n] = 0;
+		char *d = l;
+		while( *d == ' ' || *d == '\t' ) ++d;
+		if( !*d || *d == '#' || strlen( d ) > 40 ) continue;
+		if((unsigned char)d[0] == 0xef && (unsigned char)d[1] == 0xbb && (unsigned char)d[2] == 0xbf ) d += 3;	// UTF-8 mark
+		if( *d ) s_noms_extra.push_back( d );
+	}
+	fclose( f );
+	VLOG( "DSK", "random names: %d extra names in data\\custom\\names.txt", (int)s_noms_extra.size());
+}
+
+extern "C" int desktop_noms_extra_count( void )
+{
+	noms_extra_lit();
+	return (int)s_noms_extra.size();
+}
+
+extern "C" const char *desktop_noms_extra( int i )
+{
+	noms_extra_lit();
+	return ( i >= 0 && i < (int)s_noms_extra.size()) ? s_noms_extra[i].c_str() : NULL;
 }
 
 // --- Sound Salad's extra pool ----------------------------------------------------
