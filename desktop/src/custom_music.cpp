@@ -1776,8 +1776,9 @@ static const char *s_portrait_scripts =
 	"KillSpawnedScript name = skaterDoOptionsTricks\n"
 	"Change in_options_menu = 0\n"
 	"select_skater_get_current_skater_name\n"
-	"if NOT DesktopBuildPortraits restore = <current_skater>\n"
+	"if NOT DesktopBuildPortraits restore = <current_skater> <...>\n"
 	"launch_setup_options_menu\n"
+	"desktop_toast text = \"No new skaters\"\n"
 	"endif\n"
 	"endscript\n"
 	"script desktop_portrait_pose\n"
@@ -1786,6 +1787,7 @@ static const char *s_portrait_scripts =
 	"RefreshSkaterModel profile = <currentSkaterProfileIndex> skater = 0 no_board = no_board\n"
 	"MakeSkaterGoto SkateshopAI params = { }\n"
 	"skater : SwitchOffBoard\n"
+	"skater : CancelRotateDisplay\n"
 	"skater : Obj_SetLightAmbientColor r = 73 g = 70 b = 80\n"
 	"skater : Obj_SetLightDiffuseColor Index = 0 r = 110 g = 125 b = 155\n"
 	"skater : Obj_SetLightDiffuseColor Index = 1 r = 10 g = 3 b = 5\n"
@@ -1820,7 +1822,9 @@ static void patch_portraits_menu( const unsigned char *qb, const std::vector<Jet
 		if( b == k ) return;
 		Ecrit w1; compile_q( w1, s_portrait_scripts );
 		m.push_back( Modif{ j[k].pos, 0, w1.o } );
-		Ecrit w2; compile_q( w2, "theme_menu_add_item { text = \"Build Portraits\" id = options_desktop_portraits pad_choose_script = desktop_build_portraits centered no_bg }\n" );
+		Ecrit w2; compile_q( w2,
+			"theme_menu_add_item { text = \"Build New Portraits\" id = options_desktop_portraits pad_choose_script = desktop_build_portraits centered no_bg }\n"
+			"theme_menu_add_item { text = \"Rebuild All Portraits\" id = options_desktop_portraits_all pad_choose_script = desktop_build_portraits pad_choose_params = { all } centered no_bg }\n" );
 		m.push_back( Modif{ j[b].pos, 0, w2.o } );
 		VLOG( "MUS", "options menu: Build Portraits added" );
 		return;
@@ -1845,6 +1849,20 @@ static void patch_portraits_select( const unsigned char *qb, const std::vector<J
 			m.push_back( Modif{ j[f].pos + j[f].taille, 0, w.o } );
 			++nb;
 			b = f;
+		}
+		// The created skater's ss_cas: DesktopPortrait name = custom puts the
+		// built portrait over that picture, before its element is made.
+		const uint32_t cas = crc( "ss_cas" ), cree = crc( "CreateScreenElement" );
+		for( size_t b = k + 2; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+		{
+			if( !est_nom( qb, j[b], cas )) continue;
+			size_t d = b;
+			while( d > k && !est_nom( qb, j[d], cree )) --d;
+			if( d == k ) break;
+			Ecrit w; compile_q( w, "DesktopPortrait name = custom\n" );
+			m.push_back( Modif{ j[d].pos, 0, w.o } );
+			++nb;
+			break;
 		}
 		VLOG( "MUS", "skater select: %d portrait hooks", nb );
 		return;

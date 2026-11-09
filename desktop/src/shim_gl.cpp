@@ -1993,13 +1993,14 @@ static GLuint desktop_fantome( void )
 // is RGB, depth is the raw [0,1] depth (minimum over each box, so thin hair
 // and ears keep their silhouette).
 static bool s_portrait_want = false, s_portrait_ready = false;
-static int  s_portrait_n = 0;
+static int  s_portrait_w = 0, s_portrait_h = 0;
 static std::vector<unsigned char> s_portrait_rgb;
 static std::vector<float> s_portrait_dep;
 
-extern "C" void desktop_portrait_request( int n )
+extern "C" void desktop_portrait_request( int w, int h )
 {
-	s_portrait_n = n;
+	s_portrait_w = w;
+	s_portrait_h = h;
 	s_portrait_want = true;
 	s_portrait_ready = false;
 }
@@ -2009,7 +2010,7 @@ extern "C" int desktop_portrait_result( unsigned char *rgb, float *dep )
 	if( !s_portrait_ready )
 		return 0;
 	s_portrait_ready = false;
-	const size_t np = (size_t)s_portrait_n * s_portrait_n;
+	const size_t np = (size_t)s_portrait_w * s_portrait_h;
 	memcpy( rgb, &s_portrait_rgb[0], np * 3 );
 	memcpy( dep, &s_portrait_dep[0], np * sizeof( float ));
 	return 1;
@@ -2025,46 +2026,48 @@ extern "C" void desktop_portrait_grab( void )
 		return;
 	}
 	s_portrait_want = false;
-	const int n = s_portrait_n;
-	const int side = s_rt_h < s_rt_w ? s_rt_h : s_rt_w;
-	const int x0 = ( s_rt_w - side ) / 2, y0 = ( s_rt_h - side ) / 2;
+	// The crop: full height, width by the asked aspect, centred.
+	const int ow = s_portrait_w, oh = s_portrait_h;
+	int ch = s_rt_h, cw = s_rt_h * ow / oh;
+	if( cw > s_rt_w ) { cw = s_rt_w; ch = s_rt_w * oh / ow; }
+	const int x0 = ( s_rt_w - cw ) / 2, y0 = ( s_rt_h - ch ) / 2;
 
 	copier_profondeur();
-	std::vector<unsigned char> col( (size_t)side * side * 4 );
-	std::vector<float> dep( (size_t)side * side );
+	std::vector<unsigned char> col( (size_t)cw * ch * 4 );
+	std::vector<float> dep( (size_t)cw * ch );
 	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
 	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_fbo_resolve );
 	dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_COLOR_BUFFER_BIT, GL_NEAREST );
 	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
 	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo_resolve );
-	glReadPixels( x0, y0, side, side, GL_RGBA, GL_UNSIGNED_BYTE, &col[0] );
+	glReadPixels( x0, y0, cw, ch, GL_RGBA, GL_UNSIGNED_BYTE, &col[0] );
 	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_ao_dep_fbo );
-	glReadPixels( x0, y0, side, side, GL_DEPTH_COMPONENT, GL_FLOAT, &dep[0] );
+	glReadPixels( x0, y0, cw, ch, GL_DEPTH_COMPONENT, GL_FLOAT, &dep[0] );
 	glPixelStorei( GL_PACK_ALIGNMENT, 4 );
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
 
-	s_portrait_rgb.assign( (size_t)n * n * 3, 0 );
-	s_portrait_dep.assign( (size_t)n * n, 1.0f );
-	for( int y = 0; y < n; ++y )
+	s_portrait_rgb.assign( (size_t)ow * oh * 3, 0 );
+	s_portrait_dep.assign( (size_t)ow * oh, 1.0f );
+	for( int y = 0; y < oh; ++y )
 	{
 		// GL rows run bottom up; the portrait is stored top down.
-		const int sy0 = ( n - 1 - y ) * side / n, sy1 = ( n - y ) * side / n;
-		for( int x = 0; x < n; ++x )
+		const int sy0 = ( oh - 1 - y ) * ch / oh, sy1 = ( oh - y ) * ch / oh;
+		for( int x = 0; x < ow; ++x )
 		{
-			const int sx0 = x * side / n, sx1 = ( x + 1 ) * side / n;
+			const int sx0 = x * cw / ow, sx1 = ( x + 1 ) * cw / ow;
 			unsigned r = 0, g = 0, b = 0, k = 0;
 			float dmin = 1.0f;
 			for( int sy = sy0; sy < sy1; ++sy )
 				for( int sx = sx0; sx < sx1; ++sx )
 				{
-					const size_t i = (size_t)sy * side + sx;
+					const size_t i = (size_t)sy * cw + sx;
 					r += col[i * 4]; g += col[i * 4 + 1]; b += col[i * 4 + 2]; ++k;
 					if( dep[i] < dmin ) dmin = dep[i];
 				}
 			if( !k ) k = 1;
-			unsigned char *o = &s_portrait_rgb[( (size_t)y * n + x ) * 3];
+			unsigned char *o = &s_portrait_rgb[( (size_t)y * ow + x ) * 3];
 			o[0] = (unsigned char)( r / k ); o[1] = (unsigned char)( g / k ); o[2] = (unsigned char)( b / k );
-			s_portrait_dep[(size_t)y * n + x] = dmin;
+			s_portrait_dep[(size_t)y * ow + x] = dmin;
 		}
 	}
 	s_portrait_ready = true;

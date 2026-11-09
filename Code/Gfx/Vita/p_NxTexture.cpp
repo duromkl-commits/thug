@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <vector>
 
 // Pool circulaire de vitaGL (vgl.c:132), exporte par la bibliotheque mais
 // absent du header public. Voir envoi_dxt_prepare plus bas.
@@ -1104,10 +1105,20 @@ bool DesktopSpriteFromRGBA( uint32 checksum, const unsigned char *rgba, int pw, 
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
 	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, pw, ph, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba );
+	// Sprites sample this backend's textures bottom row first: rows go in
+	// reversed (the first build showed every portrait upside down).
+	std::vector<unsigned char> inv( (size_t)pw * ph * 4 );
+	for( int y = 0; y < ph; ++y )
+		memcpy( &inv[(size_t)y * pw * 4], rgba + (size_t)( ph - 1 - y ) * pw * 4, (size_t)pw * 4 );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, pw, ph, 0, GL_RGBA, GL_UNSIGNED_BYTE, &inv[0] );
 	glBindTexture( GL_TEXTURE_2D, 0 );
 	if( p_tex )
+	{
+		// Also over a game picture (ss_cas): its size becomes ours.
+		p_tex->SetGLTextureKeepChecksum( gl_tex, (uint16)w, (uint16)h, false );
+		p_tex->SetUtile( 0, 0 );
 		return true;
+	}
 	p_tex = new Nx::CVitaTexture;
 	p_tex->SetGLTexture( gl_tex, (uint16)w, (uint16)h, false, checksum );
 	p_tex->SetPerm( true );
