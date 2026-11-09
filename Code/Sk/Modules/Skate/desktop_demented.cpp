@@ -18,6 +18,7 @@
 #include <time.h>
 #include <math.h>
 #include <vector>
+#include <string>
 
 #include <gel/scripting/script.h>
 #include <gel/scripting/struct.h>
@@ -396,7 +397,14 @@ extern "C" int desktop_mirror_world( void )
 // menus keep their own directions.
 extern "C" int desktop_mirror_input( void )
 {
-	if( !s_run.actif || !s_run.skater || s_run.fini || s_menu ) return 0;
+	return 0;	// the pad stays as it is: trick prompts must match (Marcus)
+}
+
+// Steering only (SkaterCorePhysicsComponent, WalkComponent): left goes left
+// on a mirrored screen; tricks and balance keep the pad's own directions.
+extern "C" int desktop_mirror_steer( void )
+{
+	if( !s_run.actif || !s_run.skater || s_run.fini ) return 0;
 	return ( desktop_mirror_world() != 0 ) != ( s_run.mods[MOD_CHAOS] && s_inverse ) ? 1 : 0;
 }
 
@@ -408,15 +416,21 @@ static bool chaos_on( void ) { return s_run.actif && s_run.skater && !s_run.fini
 // Cheats are faked through CSkaterCareer::GetCheat (desktop_chaos_cheat);
 // the body ones need the real flags, put back when they end.
 enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_STATS_MAX, EV_STATS_RND,
-       EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, NB_EV };
+       EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, NB_EV };
 static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
 	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
-	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?" };
-static const int s_ev_poids[NB_EV] = { 8, 8, 6, 7, 6, 6, 5, 4, 5, 5, 5, 4, 4, 4, 4, 6, 3 };
+	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD" };
+// 0: never (Marcus: nothing that just helps the player: maxed stats, always special, perfect balance)
+static const int s_ev_poids[NB_EV] = { 8, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
 static float s_ev_prochain = 20.0f;
 static float s_ev_stat = 0.0f;
 static bool  s_ev_corps = false;	// the body flags were changed (refresh owed)
+// on-screen text: every text element redoes itself when this changes
+// (CTextElement::update); Word Salad bumps it fast at first, then slower
+static int   s_txt_gen = 1;
+static float s_salade_t = 0.0f, s_salade_pas = 0.1f;
+static uint32 s_salade_graine = 1;
 
 static const char *ev_drapeau( int e )
 {
@@ -465,6 +479,7 @@ static void ev_fin( int e )
 	s_ev_reste[e] = 0.0f;
 	if( e == EV_FLIP ) s_flip = false;
 	if( e == EV_REVERSE ) s_inverse = false;
+	if( e == EV_SCRAMBLE ) ++s_txt_gen;	// back to plain text
 	if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
 	if( e == EV_SLOW || e == EV_FAST ) ev_temps();
 	if( ev_drapeau( e )) ev_corps();
@@ -477,6 +492,7 @@ static void chaos_tout_finir( void )
 	if( rien && !s_ev_corps ) return;
 	for( int e = 0; e < NB_EV; ++e ) ev_fin( e );
 	s_flip = s_inverse = false;
+	++s_txt_gen;
 	Mdl::Skate::Instance()->SetStatOverride( 0.0f );
 	Tmr::SetSlomo( 1.0f );
 	if( s_ev_corps ) { ev_corps(); s_ev_corps = false; }
@@ -518,11 +534,13 @@ static void ev_lancer( Game::CGoalManager *gm )
 		case EV_NAMES:
 			for( int i = NB_NOMS_CHAOS - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ), x = s_perm_noms[i]; s_perm_noms[i] = s_perm_noms[k]; s_perm_noms[k] = x; }
 			s_graine_chaos = hasard( 0x7fffffff ) | 1;
+			++s_txt_gen;
 			break;
 		default:
 			s_ev_reste[e] = duree;
 			if( e == EV_FLIP ) s_flip = true;
 			if( e == EV_REVERSE ) s_inverse = true;
+			if( e == EV_SCRAMBLE ) { s_salade_t = 0.0f; s_salade_pas = 0.08f; s_salade_graine = hasard( 0x7fffffff ) | 1; ++s_txt_gen; }
 			if( e == EV_STATS_RND ) { s_ev_stat = (float)hasard( 11 ); if( s_ev_stat == 0.0f ) s_ev_stat = 0.01f; snprintf( t, sizeof( t ), "CHAOS: STATS AT %d", (int)s_ev_stat ); }
 			if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
 			if( e == EV_SLOW || e == EV_FAST ) ev_temps();
@@ -542,6 +560,17 @@ static void chaos_maj( float dt, bool pause, bool film )
 		return;
 	}
 	ev_temps();
+	if( s_ev_reste[EV_SCRAMBLE] > 0.0f )
+	{
+		s_salade_t += dt;
+		if( s_salade_t >= s_salade_pas )
+		{
+			s_salade_t = 0.0f;
+			s_salade_pas = s_salade_pas * 1.3f > 3.0f ? 3.0f : s_salade_pas * 1.3f;
+			s_salade_graine = hasard( 0x7fffffff ) | 1;
+			++s_txt_gen;
+		}
+	}
 	for( int e = 0; e < NB_EV; ++e )
 		if( s_ev_reste[e] > 0.0f )
 		{
@@ -565,6 +594,48 @@ bool desktop_demented_cheat( uint32 cheat )
 	if( s_ev_reste[EV_SPECIAL] > 0.0f && cheat == crc( "CHEAT_ALWAYS_SPECIAL" )) return true;
 	if( s_ev_reste[EV_PERFECT] > 0.0f && ( cheat == crc( "CHEAT_PERFECT_RAIL" ) || cheat == crc( "CHEAT_PERFECT_MANUAL" ))) return true;
 	return false;
+}
+
+extern "C" int desktop_chaos_gen( void ) { return s_txt_gen; }
+
+// Word Salad: words of a text change places, and their letters get shuffled
+static int salade( char *t, uint32 graine )
+{
+	const int n = (int)strlen( t );
+	std::vector<int> deb, lon;
+	for( int i = 0; i < n; )
+	{
+		if( t[i] == '\\' ) { i += 3; continue; }
+		if( !(( t[i] >= 'A' && t[i] <= 'Z' ) || ( t[i] >= 'a' && t[i] <= 'z' ))) { ++i; continue; }
+		const int d = i;
+		while( i < n && (( t[i] >= 'A' && t[i] <= 'Z' ) || ( t[i] >= 'a' && t[i] <= 'z' ))) ++i;
+		deb.push_back( d ); lon.push_back( i - d );
+	}
+	if( deb.empty()) return 0;
+	uint32 h = graine;
+	for( int i = 0; i < n; ++i ) h = ( h ^ (uint8)t[i] ) * 16777619u;
+	struct R { uint32 x; uint32 operator()( uint32 m ) { x ^= x << 13; x ^= x >> 17; x ^= x << 5; return m ? x % m : 0; } } r = { h | 1 };
+	std::string src( t );
+	// the words, shuffled, put back into the slots of the same length
+	std::vector<int> ordre( deb.size());
+	for( size_t i = 0; i < ordre.size(); ++i ) ordre[i] = (int)i;
+	for( int i = (int)ordre.size() - 1; i > 0; --i ) { const int k = (int)r( i + 1 ), x = ordre[i]; ordre[i] = ordre[k]; ordre[k] = x; }
+	// rebuilt: the separators where they were, the words in the new order
+	std::string o;
+	int p = 0;
+	for( size_t i = 0; i < deb.size(); ++i )
+	{
+		o.append( src, p, deb[i] - p );
+		std::string w = src.substr( deb[ordre[i]], lon[ordre[i]] );
+		// and its letters shuffled, two out of three times
+		if( w.size() >= 3 && r( 3 ) != 0 )
+			for( int k = (int)w.size() - 1; k > 0; --k ) { const int q = (int)r( k + 1 ); const char c = w[k]; w[k] = w[q]; w[q] = c; }
+		o += w;
+		p = deb[i] + lon[i];
+	}
+	o.append( src, p, std::string::npos );
+	memcpy( t, o.c_str(), n );	// same letters, same length
+	return 1;
 }
 
 // SkaterCorePhysicsComponent: air gravity multiplier
@@ -651,6 +722,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		}
 	}
 	out[o] = 0;
+	if( s_ev_reste[EV_SCRAMBLE] > 0.0f && salade( out, s_salade_graine )) change = 1;
 	return change;
 }
 
@@ -1040,38 +1112,42 @@ bool ScriptDesktopDementedName( Script::CStruct *pParams, Script::CScript *pScri
 bool ScriptDesktopDementedStatRows( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	if( !s_run.actif ) return false;
+	struct L { static void ligne( const char *g, const char *d )
+	{
+		Script::CStruct p;
+		if( !g ) p.AddChecksum( NONAME, crc( "sep" ));
+		else { p.AddString( "text", g ); p.AddString( "value", d ); }
+		Script::RunScript( crc( "desktop_demented_stat_row" ), &p );
+	} };
+	char v[64], g[48];
+	snprintf( g, sizeof( g ), " SKATER:" );
+	L::ligne( g, s_run.nom );
+	L::ligne( " DIFFICULTY:", "SICK" );
+	L::ligne( NULL, NULL );
 	for( int i = 0; i < 10; ++i )
 	{
-		Script::CStruct p;
-		p.AddString( "text", s_stats_noms[i] );
-		char v[8]; snprintf( v, sizeof( v ), "%d", stat_run( i ));
-		p.AddString( "value", v );
-		const float y = 122.0f + i * 19.0f;
-		p.AddPair( crc( "pos_nom" ), 150.0f, y );
-		p.AddPair( crc( "pos_barre" ), 290.0f, y + 2.0f );
-		p.AddPair( crc( "scale_barre" ), 25.0f, 1.0f );	// white2 is 8x8: 200x8 px
-		p.AddPair( crc( "scale_plein" ), 2.5f * stat_run( i ), 1.0f );
-		p.AddPair( crc( "pos_val" ), 522.0f, y );
-		Script::RunScript( crc( "desktop_demented_stat_row" ), &p );
+		snprintf( g, sizeof( g ), " %s:", s_stats_noms[i] );
+		snprintf( v, sizeof( v ), "%d / 10", stat_run( i ));
+		L::ligne( g, v );
 	}
-	char t[220], c[32], mods[200];
-	liste_mods( mods, sizeof( mods ));
-	temps( c, sizeof( c ), s_run.t );
-	const char *lignes[4];
-	char l0[64], l1[96], l2[64], l3[220];
-	snprintf( l0, sizeof( l0 ), "\\c0Skater: \\c2%s", s_run.nom );
-	snprintf( l1, sizeof( l1 ), "\\c0Lives: \\c2%d\\c0   Time: \\c2%s", s_run.vies, c );
-	snprintf( l2, sizeof( l2 ), "\\c0Goals: \\c2%d\\c0 beaten, \\c2%d\\c0 failed   Bails: \\c2%d", s_run.gagnes, s_run.perdus, s_run.bails );
-	snprintf( l3, sizeof( l3 ), "\\c0Modifiers: \\c2%s", mods );
-	lignes[0] = l0; lignes[1] = l1; lignes[2] = l2; lignes[3] = l3;
-	(void)t;
-	for( int i = 0; i < 4; ++i )
-	{
-		Script::CStruct p;
-		p.AddString( "text", lignes[i] );
-		p.AddPair( crc( "pos" ), 320.0f, 322.0f + i * 17.0f );
-		Script::RunScript( crc( "desktop_demented_info_row" ), &p );
-	}
+	L::ligne( NULL, NULL );
+	if( s_run.mods[MOD_LIVES] ) { snprintf( v, sizeof( v ), "%d", s_run.vies ); L::ligne( " LIVES:", v ); }
+	char c[32]; temps( c, sizeof( c ), s_run.t );
+	L::ligne( " RUN TIME:", c );
+	if( s_run.mods[MOD_TIME] ) { temps( c, sizeof( c ), s_run.reste ); L::ligne( " TIME LEFT:", c ); }
+	snprintf( v, sizeof( v ), "%d", s_run.gagnes ); L::ligne( " GOALS BEATEN:", v );
+	snprintf( v, sizeof( v ), "%d", s_run.perdus ); L::ligne( " GOALS FAILED:", v );
+	snprintf( v, sizeof( v ), "%d", s_run.bails ); L::ligne( " BAILS:", v );
+	L::ligne( NULL, NULL );
+	int n = 0;
+	for( int i = 0; i < NB_MODS; ++i )
+		if( s_run.mods[i] && i != MOD_LIVES && i != MOD_SURPRISE )
+		{
+			L::ligne( n ? " " : " MODIFIERS:", s_mod_noms[i] );
+			++n;
+		}
+	if( !n ) L::ligne( " MODIFIERS:", "NONE" );
+	if( s_run.mods[MOD_SURPRISE] ) L::ligne( " ROLLED BY:", "SURPRISE ME!" );
 	return true;
 }
 

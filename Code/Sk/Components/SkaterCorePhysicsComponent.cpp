@@ -48,6 +48,25 @@ extern "C" float desktop_demented_gravity( void );	// desktop_demented.cpp
 #include <sk/gamenet/gamenet.h>
 
 #include <core/math/slerp.h>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );	// desktop_demented.cpp: Mirror / Chaos
+// Demented's Mirror (and Chaos's reversed steering): left and right swapped
+// for steering only, so trick directions stay what the screen says.
+struct DesktopSteerFlip
+{
+	CSkaterPad &p; bool on;
+	DesktopSteerFlip( CSkaterPad &pad ) : p( pad ), on( desktop_mirror_steer() != 0 ) { if( on ) swap(); }
+	~DesktopSteerFlip() { if( on ) swap(); }
+	void swap( void )
+	{
+		char t[sizeof( CSkaterButton )];
+		memcpy( t, (void *)&p.m_left, sizeof( t )); memcpy( (void *)&p.m_left, (void *)&p.m_right, sizeof( t )); memcpy( (void *)&p.m_right, t, sizeof( t ));
+	}
+};
+#define DESKTOP_STEER_FLIP( pad ) DesktopSteerFlip desktop_steer_flip_( pad )
+#else
+#define DESKTOP_STEER_FLIP( pad )
+#endif
 
 #define	FLAGEXCEPTION(X) GetObject()->SelfEvent(X)
 							
@@ -3021,6 +3040,7 @@ void CSkaterCorePhysicsComponent::maybe_break_vert (   )
                     
 bool CSkaterCorePhysicsComponent::maybe_spine_transfer (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	// Break spin button is pressed, so try to break the spine
 			
 	// The line to check along is the skater's forward directinal vector, rotated onto the XZ plane
@@ -3918,6 +3938,7 @@ float CSkaterCorePhysicsComponent::calculate_time_to_reach_height ( float target
 
 void CSkaterCorePhysicsComponent::handle_ground_rotation (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	CControlPad& control_pad = mp_input_component->GetControlPad();	
 
 	float rot = 0.0f; 
@@ -4607,6 +4628,7 @@ float CSkaterCorePhysicsComponent::rotate_away_from_wall ( const Mth::Vector& no
 
 void CSkaterCorePhysicsComponent::check_leaning_into_wall (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	// If we are leaning left or right, then do a collision check in that direction, and proportional to the amount of the lean.
 	// If there is a collision, then push the skater away from the wall.
 	
@@ -5377,6 +5399,7 @@ void CSkaterCorePhysicsComponent::do_in_air_physics (   )
 
 void CSkaterCorePhysicsComponent::handle_air_rotation (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	CControlPad& control_pad = mp_input_component->GetControlPad();		 
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -7746,6 +7769,7 @@ void CSkaterCorePhysicsComponent::do_rail_physics (   )
 
 void CSkaterCorePhysicsComponent::ollie_off_rail_rotate (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	float rot;
 	if (mp_input_component->GetControlPad().m_left.GetPressed())
 	{

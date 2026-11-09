@@ -32,6 +32,11 @@ CTextElement::CTextElement() :
 	m_font_checksum = 0;
 	mp_font = NULL;
 	mp_text = NULL;
+#ifdef THUG_DESKTOP
+	mp_desktop_orig = NULL;
+	m_desktop_orig_taille = 0;
+	m_desktop_gen = 0;
+#endif
 	mp_blur_effect = NULL;
 	m_use_shadow = false;
 	create_text_instances(1);
@@ -57,6 +62,10 @@ CTextElement::~CTextElement()
 	destroy_text_instances();
 	if (mp_text)
 		delete mp_text;
+#ifdef THUG_DESKTOP
+	if (mp_desktop_orig)
+		delete [] mp_desktop_orig;
+#endif
 }
 
 
@@ -169,12 +178,28 @@ void CTextElement::SetFont(uint32 font_checksum)
 
 #ifdef THUG_DESKTOP
 extern "C" int desktop_chaos_text( const char *in, char *out, int n );	// desktop_demented.cpp
+extern "C" int desktop_chaos_gen( void );	// changes each time Chaos reshuffles on-screen text
 #endif
 
 void CTextElement::SetText(const char *pText)
 {
 #ifdef THUG_DESKTOP
 	// Demented's Chaos modifier: swapped names, traded letters.
+	// The text as given is kept, so a reshuffle can redo it from scratch.
+	if( pText != mp_desktop_orig )
+	{
+		const int l = (int)strlen( pText ) + 1;
+		if( l > m_desktop_orig_taille )
+		{
+			if( mp_desktop_orig ) delete [] mp_desktop_orig;
+			Mem::Manager::sHandle().PushContext(Mem::Manager::sHandle().FrontEndHeap());
+			mp_desktop_orig = new char[l];
+			Mem::Manager::sHandle().PopContext();
+			m_desktop_orig_taille = l;
+		}
+		memcpy( mp_desktop_orig, pText, l );
+	}
+	m_desktop_gen = desktop_chaos_gen();
 	static char s_chaos[vMAX_TEXT_LENGTH];
 	if( desktop_chaos_text( pText, s_chaos, vMAX_TEXT_LENGTH - 1 ))
 		pText = s_chaos;
@@ -422,6 +447,11 @@ void CTextElement::update()
 #else
 
 	if (!mp_text) return;
+#ifdef THUG_DESKTOP
+	// Chaos reshuffled the screen's text: redo this one from what it was given
+	if( mp_desktop_orig && m_desktop_gen != desktop_chaos_gen())
+		SetText( mp_desktop_orig );
+#endif
 	
 	bool offscreen = false;
 	// HACK

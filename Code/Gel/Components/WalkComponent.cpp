@@ -6,6 +6,9 @@
 //****************************************************************************
 
 #ifdef __PLAT_VITA__
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );	// desktop_demented.cpp
+#endif
 #include "vita_log.h"
 #endif
 
@@ -3109,6 +3112,9 @@ void CWalkComponent::get_controller_input (   )
 	
 	// allow a tolerance range for pressing directly forward
 	float angle = control_pad.m_leftAngle;
+#ifdef THUG_DESKTOP
+	if (desktop_mirror_steer()) angle = -angle;	// Demented Mirror / reversed steering
+#endif
 	if (Mth::Abs(angle) < Mth::DegToRad(s_get_param(CRCD(0x4676a268, "forward_tolerance"))))
 	{
 		angle = 0.0f;
