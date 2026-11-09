@@ -894,6 +894,43 @@ static const char *s_babil[] = { "skate", "board", "grind", "rail", "ledge", "ba
 	"wait", "stop", "go", "yes", "no", "why", "how", "what", "who", "where", "dude", "man", "bro", "sir", "ma'am", "buddy" };
 static const int NB_BABIL = (int)( sizeof( s_babil ) / sizeof( s_babil[0] ));
 
+// ... but words of trick names stay (Marcus: goals ask for tricks), from
+// the PC scripts' trick names, lower case
+static const char *s_mots_tricks[] = {
+	"acid", "air", "airwalk", "american", "andrecht", "anti", "around", "assume", "axle", "back", "backflip",
+	"backside", "balancer", "barrel", "beanplant", "bend", "benihana", "bert", "big", "bigspin", "bigspinflip", "bird",
+	"blaster", "blunt", "bluntslide", "boardslide", "body", "boneless", "boneslide", "boot", "bs", "cab", "cannonball",
+	"casper", "caveman", "chomp", "coffin", "comply", "crail", "crook", "crooked", "crookedcop", "crooks", "crossbone",
+	"daffy", "darkslide", "dbl", "disaster", "double", "down", "drop", "eggplant", "elbow", "faction", "fakie",
+	"fandangle", "fastplant", "feeble", "fingerflip", "fingerlfip", "fire", "fiveo", "flamingo", "flip", "flying",
+	"focus", "foot", "front", "frontside", "fs", "gazelle", "ghetto", "grab", "grind", "guitar", "gymnast", "half",
+	"handflip", "handstand", "hang", "hardflip", "head", "heel", "heelflip", "hippie", "hitter", "hurricane",
+	"impossible", "indy", "invert", "inward", "it", "jackass", "japan", "judo", "jump", "kick", "kickflip", "late",
+	"levitate", "lick", "lien", "lip", "lipslide", "madonna", "manual", "mctwist", "melon", "method", "moonwalk",
+	"mute", "natas", "nollie", "north", "nose", "noseblunt", "nosebluntslide", "nosebone", "nosegrab", "nosegrind",
+	"nosemanual", "nosepick", "noseslide", "ollie", "one", "overcrook", "overturn", "pivot", "plant", "pogo", "pop",
+	"position", "pressure", "primo", "quad", "rail", "reemo", "reverse", "revert", "rock", "rocket", "rodeo", "roll",
+	"russian", "rusty", "sacktap", "sad", "sal", "salad", "samba", "scanner", "scary", "seatbelt", "semi", "shifty",
+	"shove", "shoveit", "shovit", "sit", "skitch", "skull", "slam", "slap", "slide", "smash", "smith", "spacewalk",
+	"special", "spin", "spine", "spinner", "sproing", "squirrel", "stalefish", "stall", "sticker", "stiffy", "street",
+	"swimmer", "switch", "switcheroo", "tag", "tail", "tailblock", "tailgrab", "tailslide", "tailwhip", "toe",
+	"transfer", "tribute", "triple", "truck", "truckspin", "truckstand", "tuckknee", "tweak", "underflip", "varial",
+	"wallie", "wallplant", "wallpush", "wallride", "wheel", "wrap" };
+static const int NB_MOTS_TRICKS = (int)( sizeof( s_mots_tricks ) / sizeof( s_mots_tricks[0] ));
+
+static bool mot_trick( const char *d, int l )
+{
+	for( int i = 0; i < NB_MOTS_TRICKS; ++i )
+	{
+		const char *w = s_mots_tricks[i];
+		if( (int)strlen( w ) != l ) continue;
+		int k = 0;
+		while( k < l && ( d[k] | 0x20 ) == w[k] ) ++k;
+		if( k == l ) return true;
+	}
+	return false;
+}
+
 static int babil( char *t, int cap, uint32 graine )
 {
 	std::string o;
@@ -905,6 +942,7 @@ static int babil( char *t, int cap, uint32 graine )
 		const char *d = p;
 		while(( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' ) || ( *p == '\'' && p[1] >= 'a' )) ++p;
 		const int l = (int)( p - d );
+		if( mot_trick( d, l )) { o.append( d, l ); ++mot; continue; }
 		bool caps = l > 1, maj = d[0] >= 'A' && d[0] <= 'Z';
 		for( int k = 0; k < l; ++k ) if( d[k] >= 'a' && d[k] <= 'z' ) caps = false;
 		uint32 h = graine ^ (uint32)mot * 0x9E3779B1u;
@@ -959,6 +997,20 @@ static const char *s_noms_famille[] = { "Hawk", "Sparrow", "Margera", "Mullen", 
 	"Bartlett", "Kang", "Kelly", "Carrera", "Qbert", "Kaupas" };
 static const int NB_NOMS_FAMILLE = (int)( sizeof( s_noms_famille ) / sizeof( s_noms_famille[0] ));
 
+// Obscure / No Button Hints: a button that is a prompt stays (Marcus):
+// "\m0 = Accept", "\b7/\b4 = Select", "\m5 to talk", "Press \m0 to
+// continue". Trick and goal instructions lose theirs. 'q' = after the icon.
+static bool invite( const char *q )
+{
+	if( q[0] == '/' && q[1] == '\\' && q[2] && q[3] ) q += 4;	// \b7/\b4
+	while( *q == ' ' ) ++q;
+	if( *q == '=' ) return true;
+	static const char *s_suites[] = { "to talk", "to continue", "to quick start", "to skip", "to start", "to retry", "to accept", "to exit" };
+	for( int i = 0; i < (int)( sizeof( s_suites ) / sizeof( s_suites[0] )); ++i )
+		if( !strncmp( q, s_suites[i], strlen( s_suites[i] ))) return true;
+	return false;
+}
+
 // Chaos: people's names swapped for each other (the same swap all run), and
 // now and then a word with two letters traded. Same input, same output, so
 // text redrawn every frame doesn't flicker.
@@ -996,7 +1048,8 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		if( *p == '\\' )
 		{
 			// No Button Hints event: \bN / \mN icons become "?"
-			if((( chaos && s_ev_reste[EV_BOUTONS] > 0.0f ) || obscur ) && ( p[1] == 'b' || p[1] == 'B' || p[1] == 'm' || p[1] == 'M' ) && p[2] )
+			if((( chaos && s_ev_reste[EV_BOUTONS] > 0.0f ) || obscur ) && ( p[1] == 'b' || p[1] == 'B' || p[1] == 'm' || p[1] == 'M' ) && p[2]
+			 && !invite( p + 3 ))
 			{
 				out[o++] = ' ';	// blank, not "?" (Marcus)
 				p += 3;
