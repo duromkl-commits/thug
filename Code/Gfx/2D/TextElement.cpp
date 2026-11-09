@@ -167,8 +167,18 @@ void CTextElement::SetFont(uint32 font_checksum)
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_chaos_text( const char *in, char *out, int n );	// desktop_demented.cpp
+#endif
+
 void CTextElement::SetText(const char *pText)
 {
+#ifdef THUG_DESKTOP
+	// Demented's Chaos modifier: swapped names, traded letters.
+	static char s_chaos[vMAX_TEXT_LENGTH];
+	if( desktop_chaos_text( pText, s_chaos, vMAX_TEXT_LENGTH - 1 ))
+		pText = s_chaos;
+#endif
 	int new_length = strlen(pText) + 1;
 	Dbg_MsgAssert(new_length < vMAX_TEXT_LENGTH, ("string too long %d", new_length));
 

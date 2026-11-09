@@ -989,6 +989,7 @@ static void compile_q( Ecrit &w, const char *t )
 		if( c == '=' ) { w.octet( T_EGAL ); ++t; continue; }
 		if( c == ',' ) { w.octet( 9 ); ++t; continue; }
 		if( c == ':' ) { w.octet( 0x42 ); ++t; continue; }
+		if( c == '+' ) { w.octet( 11 ); ++t; continue; }
 		if( !strncmp( t, "<...>", 5 ))	// all the script's params
 		{
 			w.octet( 0x2c );
@@ -1196,6 +1197,8 @@ static const char *s_item_pause =
 	"if DesktopDemented\n"
 	"make_sprite_menu_item text = \"View Tricks\" id = menu_desktop_view_tricks pad_choose_script = create_edit_tricks_menu\n"
 	"make_text_sprite texture = <edit_skater_icon> parent = menu_desktop_view_tricks\n"
+	"make_sprite_menu_item text = \"View Stats\" id = menu_desktop_view_stats pad_choose_script = desktop_demented_stats\n"
+	"make_text_sprite texture = <edit_skater_icon> parent = menu_desktop_view_stats\n"
 	"endif\n";
 
 // Pause > Extras: the toggles (desktop_extras.cpp), and what they put on
@@ -1471,10 +1474,18 @@ static const char *s_demented_scripts =
 	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every stat locked at 0 for the whole run\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text3> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 3 focus = 3 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"A countdown clock. Beating goals and new chapters add time. At zero you lose a life\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text5> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 5 focus = 4 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"No walking up to people: a few seconds after each goal, a random one from the chapter starts by itself\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text6> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 6 focus = 5 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"The world is flipped left to right, and so are your controls\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text7> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 7 focus = 6 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 7 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Names get swapped, words come out wrong, the picture wobbles and the world flips now and then\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text8> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 8 focus = 7 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 8 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every other modifier is rolled at random when the run starts. You see what you got when you're dealt\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = \"Start Run\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = set_career_difficulty dif = 2 desktop_demented } }\n"
-	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Your skater is dealt after the intro\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 9 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Random skater, random stats\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"FormatText ChecksumName = bar_color \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
-	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,310) just = [ center top ] }\n"
+	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,384) just = [ center top ] }\n"
 	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = black scale = (70,15) just = [ center top ] rgba = [ 0 0 0 90 ] }\n"
 	"CreateScreenElement { Type = textBlockElement parent = diff_desc_box id = diff_desc_bg_text text = \"\" font = small pos = (0,6) dims = (250,0) line_spacing = 0.6 just = [ center center ] rgba = [ 80 80 80 50 ] not_focusable allow_expansion }\n"
 	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = white scale = (70,1) z_priority = 10 just = [ center top ] rgba = <bar_color> }\n"
@@ -1524,14 +1535,61 @@ static const char *s_demented_scripts =
 	"endif\n"
 	"DesktopDementedDialogShown\n"
 	"DesktopDementedName\n"
-	"FormatText TextName = text \"You've been dealt:\\n\\n\\c2%s\\n\\n\\c0No changing skater, no editing your starter tricks, no saving.\" s = <dealt_name>\n"
-	"create_dialog_box { title = \"DEMENTED\" title_font = testtitle text = <text> pos = (320,240) just = [ center center ] "
-	"text_rgba = [ 88 105 112 128 ] text_dims = (330,0) line_spacing = 0.85 "
+	"create_dialog_box { title = \"DEMENTED\" title_font = testtitle text = <dealt_text> pos = (320,240) just = [ center center ] "
+	"text_rgba = [ 88 105 112 128 ] text_dims = (400,0) line_spacing = 0.8 "
 	"buttons = [ { font = small text = \"OK\" pad_choose_script = desktop_demented_go } ] delay_input }\n"
 	"endscript\n"
 	"script desktop_demented_go\n"
 	"dialog_box_exit\n"
 	"show_intro_2\n"
+	"endscript\n"
+	"script desktop_demented_auto\n"
+	"GetArraySize <goals>\n"
+	"<i> = 0\n"
+	"begin\n"
+	"<g> = ( <goals> [ <i> ] )\n"
+	"GoalManager_GetGoalParams name = <g>\n"
+	"if GotParam trigger_obj_id\n"
+	"if IsAlive name = <trigger_obj_id>\n"
+	"goal_accept_trigger goal_id = <g> force_start\n"
+	"return\n"
+	"endif\n"
+	"endif\n"
+	"RemoveParameter trigger_obj_id\n"
+	"<i> = ( <i> + 1 )\n"
+	"repeat <array_size>\n"
+	"endscript\n"
+	"script desktop_demented_stats\n"
+	"if ScreenElementExists id = current_menu_anchor\n"
+	"DestroyScreenElement id = current_menu_anchor\n"
+	"endif\n"
+	"SetScreenElementLock id = root_window off\n"
+	"CreateScreenElement { Type = ContainerElement parent = root_window id = current_menu_anchor pos = (0,0) just = [ left top ] }\n"
+	"CreateScreenElement { Type = SpriteElement parent = current_menu_anchor texture = white2 pos = (320,245) just = [ center center ] scale = (52,42) rgba = [ 0 0 0 100 ] z_priority = 1 }\n"
+	"CreateScreenElement { Type = SpriteElement parent = current_menu_anchor texture = white2 pos = (320,108) just = [ center center ] scale = (48,0.2) rgba = [ 70 20 20 128 ] z_priority = 2 }\n"
+	"CreateScreenElement { Type = TextElement parent = current_menu_anchor font = testtitle text = \"RUN STATS\" pos = (320,100) just = [ center bottom ] scale = 0.9 rgba = [ 128 128 128 128 ] z_priority = 3 }\n"
+	"DesktopDementedStatRows\n"
+	"CreateScreenElement { Type = VMenu parent = current_menu_anchor id = desktop_stats_vmenu pos = (320,398) just = [ center top ] internal_just = [ center top ] z_priority = 3 "
+	"event_handlers = [ { pad_back desktop_demented_stats_exit } { pad_start desktop_demented_stats_exit } ] }\n"
+	"CreateScreenElement { Type = TextElement parent = desktop_stats_vmenu font = small text = \"Back\" rgba = [ 128 128 128 128 ] z_priority = 3 "
+	"event_handlers = [ { pad_choose desktop_demented_stats_exit } { pad_choose generic_menu_pad_back_sound } ] }\n"
+	"SetScreenElementLock id = root_window on\n"
+	"FireEvent type = focus target = desktop_stats_vmenu\n"
+	"endscript\n"
+	"script desktop_demented_stat_row\n"
+	"CreateScreenElement { Type = TextElement parent = current_menu_anchor font = small text = <text> pos = <pos_nom> just = [ left top ] scale = 0.8 rgba = [ 110 110 110 128 ] z_priority = 3 }\n"
+	"CreateScreenElement { Type = SpriteElement parent = current_menu_anchor texture = white2 pos = <pos_barre> just = [ left top ] scale = <scale_barre> rgba = [ 30 30 30 128 ] z_priority = 2 }\n"
+	"CreateScreenElement { Type = SpriteElement parent = current_menu_anchor texture = white2 pos = <pos_barre> just = [ left top ] scale = <scale_plein> rgba = [ 120 30 25 128 ] z_priority = 3 }\n"
+	"CreateScreenElement { Type = TextElement parent = current_menu_anchor font = small text = <value> pos = <pos_val> just = [ right top ] scale = 0.8 rgba = [ 128 128 128 128 ] z_priority = 3 }\n"
+	"endscript\n"
+	"script desktop_demented_info_row\n"
+	"CreateScreenElement { Type = TextBlockElement parent = current_menu_anchor font = small text = <text> pos = <pos> dims = (390,0) just = [ center top ] internal_just = [ center top ] scale = 0.75 line_spacing = 0.8 rgba = [ 88 105 112 128 ] z_priority = 3 }\n"
+	"endscript\n"
+	"script desktop_demented_stats_exit\n"
+	"if ScreenElementExists id = current_menu_anchor\n"
+	"DestroyScreenElement id = current_menu_anchor\n"
+	"endif\n"
+	"create_pause_menu\n"
 	"endscript\n"
 	"script desktop_demented_nosave\n"
 	"wait 2 frames\n"
@@ -2098,7 +2156,6 @@ static const PersoGTA s_gta[] = {
 	// desktop/tools/rdr_to_thug.py), data/models/rdr/<name>/. Unnamed ones keep
 	// their game file code.
 	{ "smileyfawler", "RDR Smiley Fawler", 0, "rdr" },
-	{ "anniestokes", "RDR Annie Stokes", 1, "rdr" },
 	{ "dan", "RDR Dan", 0, "rdr" },
 	{ "buffalosoldier", "RDR Buffalo Soldier", 0, "rdr" },
 	{ "cooper", "RDR Cooper", 0, "rdr" },

@@ -697,6 +697,7 @@ SCFunction CFunctionLookupTable[]=
 	{"DesktopBuildPortraits",	CFuncs::ScriptDesktopBuildPortraits},
 	{"DesktopPortraitsBuilding",	CFuncs::ScriptDesktopPortraitsBuilding},
 	{"DesktopPortrait",	CFuncs::ScriptDesktopPortrait},
+	{"DesktopDementedStatRows",	CFuncs::ScriptDesktopDementedStatRows},
 	{"DesktopDementedDeal",	CFuncs::ScriptDesktopDementedDeal},
 	{"DesktopDementedChapter",	CFuncs::ScriptDesktopDementedChapter},
 	{"DesktopDementedWon",	CFuncs::ScriptDesktopDementedWon},

@@ -371,6 +371,8 @@ void (*g_desktop_post_hook)( GLuint, int, int ) = NULL;
 // same formula as the Vita shader (the Xbox gamma table).
 static float  s_gamma_k[3] = { 1.0f, 1.0f, 1.0f };
 static GLuint s_gamma_prog = 0;
+static GLint  s_gamma_loc_reve = -1;
+extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte );	// desktop_demented.cpp
 static GLint  s_gamma_loc_k = -1, s_gamma_loc_zoom = -1, s_gamma_loc_tram = -1, s_gamma_loc_grille = -1, s_gamma_loc_taille = -1, s_gamma_loc_tv = -1, s_gamma_loc_sat = -1;
 static bool   s_gamma_echec = false;
 
@@ -404,6 +406,7 @@ static bool gamma_prog( void )
 		"uniform vec3 taille;\n"		// picture width, height in pixels; softening (0-1)
 		"uniform float tv;\n"		// 1 = TV video levels (PS2 output)
 		"uniform float sat;\n"		// colour saturation, 1 = unchanged
+		"uniform vec3 reve;\n"		// Demented Chaos: wave size, time, hue turn (radians)
 		"varying vec2 t;\n"
 		// 4x4 Bayer matrix (the ordered dither Aseprite uses): every
 		// threshold once, spread as evenly as possible, so a flat colour
@@ -422,8 +425,16 @@ static bool gamma_prog( void )
 	// One window pixel of the finished picture.
 		"vec3 px(vec2 f) {\n"
 		"	vec2 u = 0.5 + ((f - grille.xy) / taille.xy - 0.5) * zoom;\n"
+		"	if (reve.x > 0.0) u += reve.x * vec2(sin(u.y * 17.0 + reve.y * 1.7), 0.6 * sin(u.x * 13.0 + reve.y * 1.3));\n"
 		"	if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) return vec3(0.0);\n"
 		"	vec3 c = texture2D(img, u).rgb;\n"
+		"	if (reve.z != 0.0) {\n"
+		"		float y = dot(c, vec3(0.299, 0.587, 0.114));\n"
+		"		float i = dot(c, vec3(0.596, -0.274, -0.322)), q = dot(c, vec3(0.211, -0.523, 0.312));\n"
+		"		float cs = cos(reve.z), sn = sin(reve.z);\n"
+		"		float i2 = i * cs - q * sn, q2 = i * sn + q * cs;\n"
+		"		c = clamp(vec3(y + 0.956 * i2 + 0.621 * q2, y - 0.272 * i2 - 0.647 * q2, y - 1.106 * i2 + 1.703 * q2), 0.0, 1.0);\n"
+		"	}\n"
 		"	vec3 o = floor(256.0 * pow(c * (255.0 / 256.0), k) + 0.001);\n"
 		"	o = min(o, 255.0);\n"
 		// A touch of the PS2's video-out look: whites not quite white, mid-tones very slightly lifted. The full
@@ -486,6 +497,7 @@ static bool gamma_prog( void )
 	s_gamma_loc_taille = glGetUniformLocation( p, "taille" );
 	s_gamma_loc_tv = glGetUniformLocation( p, "tv" );
 	s_gamma_loc_sat = glGetUniformLocation( p, "sat" );
+	s_gamma_loc_reve = glGetUniformLocation( p, "reve" );
 	GLint avant = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
 	glUseProgram( p );
@@ -535,6 +547,9 @@ static void gamma_draw( int x, int y, int w, int h, GLuint img )
 		glUniform3f( s_gamma_loc_taille, (float)w, (float)h, doux );
 		glUniform1f( s_gamma_loc_tv, cfg.tv_levels ? 1.0f : 0.0f );
 		glUniform1f( s_gamma_loc_sat, cfg.saturation < 0.0f ? 0.0f : cfg.saturation > 2.0f ? 2.0f : cfg.saturation );
+		float ra = 0.0f, rt = 0.0f, rh = 0.0f;
+		if( !desktop_chaos_dream( &ra, &rt, &rh )) ra = rt = rh = 0.0f;
+		glUniform3f( s_gamma_loc_reve, ra, rt, rh );
 	}
 	glBindTexture( GL_TEXTURE_2D, img );
 	glBegin( GL_TRIANGLE_STRIP );
@@ -598,6 +613,8 @@ static void photo_ecrit( int x, int y, int w, int h )
 	fprintf( stderr, "photo: %s %s\n", f.c_str(), ok ? "saved" : "FAILED" );
 }
 
+static float s_reve_tmp[3];
+
 extern "C" void vglSwapBuffers( GLboolean )
 {
 	if( !s_window )
@@ -628,7 +645,7 @@ extern "C" void vglSwapBuffers( GLboolean )
 	const DesktopConfig &cfg = desktop_config();
 	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
 	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f
-	                     || cfg.tv_levels || cfg.saturation != 1.0f )
+	                     || cfg.tv_levels || cfg.saturation != 1.0f || desktop_chaos_dream( &s_reve_tmp[0], &s_reve_tmp[1], &s_reve_tmp[2] ))
 	                   && gamma_prog();
 	if( gamma )
 	{

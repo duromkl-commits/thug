@@ -2556,6 +2556,8 @@ extern "C" void desktop_ssao_projection( float f, float aspect, float znear, flo
 extern "C" void desktop_ssao( void );
 extern "C" void desktop_post( void );
 extern "C" void desktop_portrait_grab( void );
+extern "C" int desktop_mirror_world( void );		// desktop_demented.cpp: Mirror (and Chaos)
+extern "C" float desktop_chaos_fov( void );
 // Portrait camera (desktop_portraits.cpp): while set, the world and the
 // models are drawn from this eye, looking at this point, with this
 // vertical field of view.
@@ -2574,6 +2576,15 @@ static void set_projection( float fov_deg, float aspect, float znear, float zfar
 	m[10] = ( zfar + znear ) / ( znear - zfar );
 	m[11] = -1.0f;
 	m[14] = ( 2.0f * zfar * znear ) / ( znear - zfar );
+#ifdef THUG_DESKTOP
+	// Demented's Mirror: the world flipped left to right by the projection,
+	// triangle winding flipped with it so culling still keeps the fronts.
+	{
+		const bool miroir = desktop_mirror_world() != 0 && !g_desktop_portrait_cam;
+		if( miroir ) m[0] = -m[0];
+		glFrontFace( miroir ? GL_CW : GL_CCW );
+	}
+#endif
 
 	glMatrixMode( GL_PROJECTION );
 	glLoadMatrixf( m );
@@ -2885,7 +2896,7 @@ void SetWorldProjection( void )
 		return;
 	}
 #endif
-	set_projection( v, aspect, 4.0f, g_vita_plan_loin );
+	set_projection( v * desktop_chaos_fov(), aspect, 4.0f, g_vita_plan_loin );
 }
 
 

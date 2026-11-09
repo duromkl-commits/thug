@@ -16,6 +16,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 #include <vector>
 
 #include <gel/scripting/script.h>
@@ -63,9 +64,24 @@ static uint32 hasard( uint32 n )
 	return n ? (uint32)( ( x >> 16 ) % n ) : 0;
 }
 
-enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, NB_MODS };
-static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile" };
-static bool s_arme[NB_MODS] = { false, false, true, false, false };
+enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_AUTO, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE, NB_MODS };
+static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Auto", "Mirror", "Chaos", "Surprise" };
+static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false };
+
+// Auto, Mirror and Chaos state (reset with each run)
+static float s_auto_t = 0.0f;		// seconds with nothing going on (Auto starts a goal after a few)
+static float s_reve_t = 0.0f;		// Chaos: time for its slow waves
+static float s_flip_t = 0.0f, s_flip_suivant = 90.0f;
+static bool  s_flip = false;		// Chaos: the world is mirrored right now
+static bool  s_menu = false;		// a menu or dialog is up (Mirror leaves the pad alone)
+
+// Chaos: names that get swapped for each other, the same way all run
+static const char *s_noms_chaos[] = { "Eric", "Mindy", "Kyle", "Paulie", "Chad", "Tony", "Bob", "Andrew",
+	"Bam", "Rodney", "Paul", "Arto", "Mike", "Jamie", "Rune", "Steve", "Mark", "Geoff", "Kareem", "Stevie",
+	"Bucky", "Elissa", "Peralta", "Muska", "Eddie", "Iggy", "Stacey", "Ryan", "Daewon", "Ali" };
+static const int NB_NOMS_CHAOS = (int)( sizeof( s_noms_chaos ) / sizeof( s_noms_chaos[0] ));
+static int s_perm_noms[64];
+static uint32 s_graine_chaos = 1;
 
 // Time Extend: seconds on the clock at the start, per goal, per chapter, after a lost life.
 // Guesses, to tune once it has been played.
@@ -299,7 +315,7 @@ static void fin_run( void )
 
 static void resume( char *o, int n, bool gagne )
 {
-	char t[32], mods[64] = "";
+	char t[32], mods[200] = "";
 	temps( t, sizeof( t ), s_run.t );
 	for( int i = 0; i < NB_MODS; ++i )
 		if( s_run.mods[i] && i != MOD_LIVES )
@@ -361,6 +377,105 @@ static void temps_plus( float s, const char *quoi )
 bool DesktopDemented( void )
 {
 	return s_run.actif;
+}
+
+// --- Mirror and Chaos, for the renderer and the pad ------------------------------
+
+extern "C" int desktop_mirror_world( void )
+{
+	if( !s_run.actif || !s_run.skater || s_run.fini ) return 0;
+	return ( s_run.mods[MOD_MIRROR] != ( s_run.mods[MOD_CHAOS] && s_flip )) ? 1 : 0;
+}
+
+// Left and right swapped on the pad too, so left still goes left on screen;
+// menus keep their own directions.
+extern "C" int desktop_mirror_input( void )
+{
+	return desktop_mirror_world() && !s_menu;
+}
+
+static bool chaos_on( void ) { return s_run.actif && s_run.skater && !s_run.fini && s_run.mods[MOD_CHAOS]; }
+
+// Chaos: the field of view breathes.
+extern "C" float desktop_chaos_fov( void )
+{
+	if( !chaos_on()) return 1.0f;
+	return 1.0f + 0.07f * sinf( s_reve_t * 0.6f ) + 0.03f * sinf( s_reve_t * 1.7f );
+}
+
+// Chaos: a slow wave over the picture and colours drifting round the wheel.
+extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte )
+{
+	if( !chaos_on()) return 0;
+	*amp = 0.0035f * ( 0.6f + 0.4f * sinf( s_reve_t * 0.21f ));
+	*t = s_reve_t;
+	*teinte = 0.45f * sinf( s_reve_t * 0.11f );
+	return 1;
+}
+
+// Chaos: people's names swapped for each other (the same swap all run), and
+// now and then a word with two letters traded. Same input, same output, so
+// text redrawn every frame doesn't flicker.
+extern "C" int desktop_chaos_text( const char *in, char *out, int n )
+{
+	if( !chaos_on() || !in || n < 2 ) return 0;
+	int o = 0, change = 0;
+	const char *p = in;
+	while( *p && o < n - 1 )
+	{
+		if( *p == '\\' )
+		{
+			for( int k = 0; k < 3 && *p && o < n - 1; ++k ) out[o++] = *p++;
+			continue;
+		}
+		if( !(( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' )))
+		{
+			out[o++] = *p++;
+			continue;
+		}
+		const char *d = p;
+		while(( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' )) ++p;
+		const int l = (int)( p - d );
+		const char *rempl = NULL;
+		bool majuscules = l > 1;
+		for( int k = 1; k < l; ++k ) if( d[k] >= 'a' ) majuscules = false;
+		for( int i = 0; i < NB_NOMS_CHAOS && !rempl; ++i )
+		{
+			const char *nm = s_noms_chaos[i];
+			if( (int)strlen( nm ) != l ) continue;
+			bool ok = true;
+			for( int k = 0; k < l && ok; ++k )
+			{
+				char c = d[k];
+				if( majuscules && c >= 'A' && c <= 'Z' && k > 0 ) c = (char)( c - 'A' + 'a' );
+				ok = c == nm[k];
+			}
+			if( ok ) rempl = s_noms_chaos[s_perm_noms[i]];
+		}
+		if( rempl )
+		{
+			for( int k = 0; rempl[k] && o < n - 1; ++k )
+			{
+				char c = rempl[k];
+				if( majuscules && c >= 'a' && c <= 'z' ) c = (char)( c - 'a' + 'A' );
+				out[o++] = c;
+			}
+			change = 1;
+			continue;
+		}
+		uint32 h = s_graine_chaos;
+		for( int k = 0; k < l; ++k ) h = ( h ^ (uint8)d[k] ) * 16777619u;
+		const int debut = o;
+		for( int k = 0; k < l && o < n - 1; ++k ) out[o++] = d[k];
+		if( l >= 5 && ( h % 100 ) < 5 && o - debut == l )
+		{
+			const int a = 1 + (int)(( h >> 8 ) % ( l - 2 )), b = a + 1;
+			const char x = out[debut + a]; out[debut + a] = out[debut + b]; out[debut + b] = x;
+			change = 1;
+		}
+	}
+	out[o] = 0;
+	return change;
 }
 
 void desktop_demented_bail( void )
@@ -480,6 +595,56 @@ void DesktopDementedUpdate( Skate &mdl )
 			else { if( s_run.mods[MOD_LIVES] ) s_run.vies = 0; game_over( "Out of time." ); }
 		}
 	}
+	if( !pause ) s_reve_t += dt;
+	s_menu = pause || element( crc( "current_menu_anchor" )) || element( crc( "dialog_box_anchor" ))
+		|| element( crc( "goal_start_dialog" )) || element( crc( "speech_box_anchor" ));
+	// Chaos: the world mirrors itself now and then
+	if( s_run.mods[MOD_CHAOS] && !pause && !film && !s_run.fini )
+	{
+		s_flip_t += dt;
+		if( s_flip_t > s_flip_suivant )
+		{
+			s_flip_t = 0.0f;
+			s_flip = !s_flip;
+			s_flip_suivant = s_flip ? 25.0f + hasard( 50 ) : 60.0f + hasard( 120 );
+			panneau( "THE WORLD FLIPS", "HUD_jumpgap", 0, 110, 70, 128 );
+		}
+	}
+	// Auto: a few seconds with no goal going and nothing on screen, then a
+	// random goal whose giver is around gets started for you
+	if( s_run.mods[MOD_AUTO] && !s_run.fini )
+	{
+		Game::CGoalManager *gm = Game::GetGoalManager();
+		if( !gm || gm->GetNumActiveGoals() > 0 || film || s_menu ) { if( s_auto_t > 0.0f ) s_auto_t = 0.0f; }
+		else
+		{
+			s_auto_t += dt;
+			if( s_auto_t > 3.0f )
+			{
+				s_auto_t = -5.0f;	// before trying again if nothing could start
+				Script::CArray *a = new Script::CArray;
+				std::vector<uint32> v;
+				for( int i = 0; i < gm->GetNumGoals(); ++i )
+				{
+					Game::CGoal *g = gm->GetGoalByIndex( i );
+					if( !g || g->IsLocked() || g->IsActive() || g->HasWonGoal() || g->IsMinigame()) continue;
+					uint32 trig = 0;
+					if( !g->GetParams() || !g->GetParams()->GetChecksum( crc( "trigger_obj_id" ), &trig, Script::NO_ASSERT ) || !trig ) continue;
+					v.push_back( g->GetGoalId());
+				}
+				for( int i = (int)v.size() - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ); const uint32 x = v[i]; v[i] = v[k]; v[k] = x; }
+				if( !v.empty())
+				{
+					a->SetSizeAndType( (int)v.size(), ESYMBOLTYPE_NAME );
+					for( size_t i = 0; i < v.size(); ++i ) a->SetChecksum( i, v[i] );
+					Script::CStruct p;
+					p.AddArrayPointer( "goals", a );
+					Script::SpawnScript( "desktop_demented_auto", &p );
+				}
+				else delete a;
+			}
+		}
+	}
 	if( film ) { hud_off(); return; }
 
 	// Run clock bottom right, with lives when they're on.
@@ -518,7 +683,7 @@ bool ScriptDesktopDemented( Script::CStruct *pParams, Script::CScript *pScript )
 	return s_run.actif;
 }
 
-// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives, 3 Time Extend, 4 Fragile)
+// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives, 3 Time Extend, 4 Fragile, 5 Auto, 6 Mirror, 7 Chaos, 8 Surprise)
 bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	int i = -1;
@@ -527,7 +692,7 @@ bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pSc
 	return true;
 }
 
-// @script | DesktopDementedText | desktop: adds text0..text3 ("Perma Bail: Off" ...)
+// @script | DesktopDementedText | desktop: adds text0..text8 ("Perma Bail: Off" ...)
 bool ScriptDesktopDementedText( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	for( int i = 0; i < NB_MODS; ++i )
@@ -547,6 +712,18 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.actif = true;
 	for( int i = 0; i < NB_MODS; ++i ) s_run.mods[i] = s_arme[i];
 	s_run.mods[MOD_LIVES] = true;	// not a modifier (Marcus): every run has lives
+	if( s_run.mods[MOD_SURPRISE] )
+	{
+		// Surprise: every other modifier rolled, odds by how much it hurts
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 35, 30, 30, 0 };
+		for( int i = 0; i < NB_MODS; ++i )
+			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
+		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;
+	}
+	s_auto_t = 0.0f; s_reve_t = 0.0f; s_flip_t = 0.0f; s_flip_suivant = 60.0f + hasard( 90 ); s_flip = false;
+	s_graine_chaos = hasard( 0x7fffffff ) | 1;
+	for( int i = 0; i < NB_NOMS_CHAOS; ++i ) s_perm_noms[i] = i;
+	for( int i = NB_NOMS_CHAOS - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ), x = s_perm_noms[i]; s_perm_noms[i] = s_perm_noms[k]; s_perm_noms[k] = x; }
 	s_run.skater = 0;
 	s_run.nom[0] = 0;
 	s_run.vies = 3;
@@ -563,7 +740,9 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	{
 		if( s_run.mods[MOD_ZERO] ) car->SetGlobalFlag( 511 ); else car->UnSetGlobalFlag( 511 );
 	}
-	VLOG( "DSK", "demented: new run, perma bail %d, zero %d, lives %d, time extend %d, fragile %d", s_run.mods[0], s_run.mods[1], s_run.mods[2], s_run.mods[3], s_run.mods[4] );
+	VLOG( "DSK", "demented: new run, perma %d zero %d time %d fragile %d auto %d mirror %d chaos %d surprise %d",
+		s_run.mods[MOD_PERMA], s_run.mods[MOD_ZERO], s_run.mods[MOD_TIME], s_run.mods[MOD_FRAGILE],
+		s_run.mods[MOD_AUTO], s_run.mods[MOD_MIRROR], s_run.mods[MOD_CHAOS], s_run.mods[MOD_SURPRISE] );
 	return true;
 }
 
@@ -605,16 +784,17 @@ bool ScriptDesktopDementedDeal( Script::CStruct *pParams, Script::CScript *pScri
 	pro->GetInfo()->GetString( CRCD( 0x2ab66cb8, "display_name" ), &d, Script::NO_ASSERT );
 	snprintf( s_run.nom, sizeof( s_run.nom ), "%s", d ? d : "" );
 
-	// The dealt skater starts with its own stats: they go through the
-	// created skater, whose figures the story lends to whoever is played.
+	// The dealt skater gets random stats: they go through the created
+	// skater, whose figures the story lends to whoever is played.
 	Obj::CSkaterProfile *c = pm->GetProfileTemplate( CRCD( 0xa7be964, "custom" ));
 	if( c )
 	{
 		for( int i = 0; i < 10; ++i )
 		{
-			int v0 = 0, vp = 0;
+			int v0 = 0;
 			c->GetInfo()->GetInteger( crc( s_stats[i] ), &v0, Script::NO_ASSERT );
-			pro->GetInfo()->GetInteger( crc( s_stats[i] ), &vp, Script::NO_ASSERT );
+			// Random 0-10 (Marcus): not the dealt skater's own figures.
+			const int vp = (int)hasard( 11 );
 			s_run.stats_custom[i] = v0;
 			c->GetInfo()->AddInteger( crc( s_stats[i] ), vp );
 		}
@@ -641,10 +821,85 @@ bool ScriptDesktopDementedDialogShown( Script::CStruct *pParams, Script::CScript
 	return true;
 }
 
-// @script | DesktopDementedName | desktop: adds dealt_name (the dealt skater's name)
+static const char *s_stats_noms[10] = { "Air", "Hang Time", "Ollie", "Speed", "Spin", "Switch",
+	"Flip Speed", "Rail Balance", "Lip Balance", "Manual Balance" };
+
+static int stat_run( int i )
+{
+	if( s_run.mods[MOD_ZERO] ) return 0;
+	Obj::CSkaterProfile *c = ppm()->GetProfileTemplate( crc( "custom" ));
+	int v = 0;
+	if( c ) c->GetInfo()->GetInteger( crc( s_stats[i] ), &v, Script::NO_ASSERT );
+	return v;
+}
+
+static void liste_mods( char *o, int n )
+{
+	o[0] = 0;
+	for( int i = 0; i < NB_MODS; ++i )
+		if( s_run.mods[i] && i != MOD_LIVES )
+		{
+			const size_t l = strlen( o );
+			snprintf( o + l, n - l, "%s%s", l ? ", " : "", s_mod_noms[i] );
+		}
+	if( !o[0] ) snprintf( o, n, "None" );
+}
+
+// @script | DesktopDementedName | desktop: adds dealt_name and dealt_text (the box shown in the room)
 bool ScriptDesktopDementedName( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	pScript->GetParams()->AddString( "dealt_name", s_run.nom );
+	char mods[200], t[700];
+	liste_mods( mods, sizeof( mods ));
+	snprintf( t, sizeof( t ),
+		"You've been dealt:\\n\\c2%s\\n\\n"
+		"\\c0Difficulty: \\c2Sick\\n"
+		"\\c0Modifiers: \\c2%s\\n"
+		"\\c0Air %d  Hang %d  Ollie %d  Speed %d  Spin %d\\n"
+		"Switch %d  Flip %d  Rail %d  Lip %d  Manual %d\\n\\n"
+		"No changing skater, no editing your starter tricks, no saving.",
+		s_run.nom, mods, stat_run( 0 ), stat_run( 1 ), stat_run( 2 ), stat_run( 3 ), stat_run( 4 ),
+		stat_run( 5 ), stat_run( 6 ), stat_run( 7 ), stat_run( 8 ), stat_run( 9 ));
+	pScript->GetParams()->AddString( "dealt_text", t );
+	return true;
+}
+
+// @script | DesktopDementedStatRows | desktop: the View Stats panel, one desktop_demented_stat_row / desktop_demented_info_row per line
+bool ScriptDesktopDementedStatRows( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	if( !s_run.actif ) return false;
+	for( int i = 0; i < 10; ++i )
+	{
+		Script::CStruct p;
+		p.AddString( "text", s_stats_noms[i] );
+		char v[8]; snprintf( v, sizeof( v ), "%d", stat_run( i ));
+		p.AddString( "value", v );
+		const float y = 122.0f + i * 19.0f;
+		p.AddPair( crc( "pos_nom" ), 150.0f, y );
+		p.AddPair( crc( "pos_barre" ), 290.0f, y + 2.0f );
+		p.AddPair( crc( "scale_barre" ), 25.0f, 1.0f );	// white2 is 8x8: 200x8 px
+		p.AddPair( crc( "scale_plein" ), 2.5f * stat_run( i ), 1.0f );
+		p.AddPair( crc( "pos_val" ), 522.0f, y );
+		Script::RunScript( crc( "desktop_demented_stat_row" ), &p );
+	}
+	char t[220], c[32], mods[200];
+	liste_mods( mods, sizeof( mods ));
+	temps( c, sizeof( c ), s_run.t );
+	const char *lignes[4];
+	char l0[64], l1[96], l2[64], l3[220];
+	snprintf( l0, sizeof( l0 ), "\\c0Skater: \\c2%s", s_run.nom );
+	snprintf( l1, sizeof( l1 ), "\\c0Lives: \\c2%d\\c0   Time: \\c2%s", s_run.vies, c );
+	snprintf( l2, sizeof( l2 ), "\\c0Goals: \\c2%d\\c0 beaten, \\c2%d\\c0 failed   Bails: \\c2%d", s_run.gagnes, s_run.perdus, s_run.bails );
+	snprintf( l3, sizeof( l3 ), "\\c0Modifiers: \\c2%s", mods );
+	lignes[0] = l0; lignes[1] = l1; lignes[2] = l2; lignes[3] = l3;
+	(void)t;
+	for( int i = 0; i < 4; ++i )
+	{
+		Script::CStruct p;
+		p.AddString( "text", lignes[i] );
+		p.AddPair( crc( "pos" ), 320.0f, 322.0f + i * 17.0f );
+		Script::RunScript( crc( "desktop_demented_info_row" ), &p );
+	}
 	return true;
 }
 

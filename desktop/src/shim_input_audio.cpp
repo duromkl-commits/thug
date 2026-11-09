@@ -151,6 +151,8 @@ static unsigned char axis_to_byte( Sint16 v )
 	return (unsigned char)( b < 0 ? 0 : b > 255 ? 255 : b );
 }
 
+extern "C" int desktop_mirror_input( void );	// desktop_demented.cpp
+
 extern "C" int sceCtrlPeekBufferPositive( int, SceCtrlData *d, int )
 {
 	sceCtrlSetSamplingMode( SCE_CTRL_MODE_ANALOG_WIDE );
@@ -215,6 +217,16 @@ extern "C" int sceCtrlPeekBufferPositive( int, SceCtrlData *d, int )
 		if( k[SDL_SCANCODE_I] ) y -= 127;
 		if( k[SDL_SCANCODE_K] ) y += 127;
 		if( x || y ) { d->rx = (unsigned char)( 128 + x ); d->ry = (unsigned char)( 128 + y ); }
+	}
+	// Demented's Mirror: left and right swapped to match the flipped world.
+	if( desktop_mirror_input())
+	{
+		d->lx = (unsigned char)( 255 - d->lx );
+		d->rx = (unsigned char)( 255 - d->rx );
+		const unsigned g = b & SCE_CTRL_LEFT, dr = b & SCE_CTRL_RIGHT;
+		b &= ~( SCE_CTRL_LEFT | SCE_CTRL_RIGHT );
+		if( g ) b |= SCE_CTRL_RIGHT;
+		if( dr ) b |= SCE_CTRL_LEFT;
 	}
 	desktop_pad_record( b, d->lx, d->ly, d->rx, d->ry );	// extras read it too
 	d->buttons = b;

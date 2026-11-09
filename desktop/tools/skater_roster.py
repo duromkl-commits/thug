@@ -163,7 +163,6 @@ R = {
 'spiderman_styled': ('Spider-Man (2099)', 'Miguel', 23, 'Nueva York', 'allround athletic alien'),
 # --- Red Dead Revolver -----------------------------------------------------
 'smileyfawler': ('Smiley Fawler', 'Smiley', 34, 'Brimstone', 'street normal western'),
-'anniestokes': ('Annie Stokes', 'Annie', 29, 'Stokes Ranch', 'allround athletic western'),
 'dan': ('Dan', 'Dan', 41, 'Bear Mountain', 'vert normal nature'),
 'buffalosoldier': ('Buffalo Soldier', 'Buffalo', 32, 'Fort Diego', 'allround athletic army'),
 'cooper': ('Cooper', 'Cooper', 38, 'Brimstone', 'street heavy comic'),

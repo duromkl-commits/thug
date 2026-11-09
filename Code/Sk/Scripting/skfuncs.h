@@ -165,6 +165,7 @@ bool ScriptDesktopTricksViewOnly(Script::CStruct *pParams, Script::CScript *pScr
 bool ScriptDesktopBuildPortraits(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopPortraitsBuilding(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopPortrait(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedStatRows(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedDeal(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedChapter(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedWon(Script::CStruct *pParams, Script::CScript *pScript);
