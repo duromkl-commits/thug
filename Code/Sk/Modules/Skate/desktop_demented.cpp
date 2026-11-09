@@ -42,6 +42,7 @@
 #include <sk/objects/playerprofilemanager.h>
 #include <sk/objects/skatertricks.h>
 #include <sys/timer.h>
+#include <gel/object/compositeobjectmanager.h>
 #include <sk/objects/restart.h>
 #include "vita_log.h"
 
@@ -77,6 +78,7 @@ static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
 // thing keeps its random replacement until the next chapter.
 static uint32 s_rando_graine = 1;
+static uint32 s_niv_log = 0;	// level of the last goal dump (reset each run)
 static uint32 melanger( uint32 x )
 {
 	x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;
@@ -867,9 +869,8 @@ void DesktopDementedUpdate( Skate &mdl )
 	if( cas ) return;
 	// diagnostics: what the goal manager holds 10 s into each level
 	{
-		static uint32 niv_log = 0;
 		static float t_niv = 0.0f;
-		if( niveau != niv_log ) { niv_log = niveau; t_niv = 0.0f; }
+		if( niveau != s_niv_log ) { s_niv_log = niveau; t_niv = 0.0f; }
 		else if( t_niv >= 0.0f )
 		{
 			t_niv += Tmr::FrameLength();
@@ -881,6 +882,18 @@ void DesktopDementedUpdate( Skate &mdl )
 				for( int i = 0; gm && i < n; ++i ) { Game::CGoal *g = gm->GetGoalByIndex( i ); if( g && g->IsLocked()) ++verr; }
 				VLOG( "DSK", "demented: level %08x, %d goals (%d locked, %d active), skater %08x", niveau, n, verr,
 					gm ? gm->GetNumActiveGoals() : -1, s_run.skater );
+				// each goal: why it might not be offered (giver missing, locked, ...)
+				for( int i = 0; gm && i < n; ++i )
+				{
+					Game::CGoal *g = gm->GetGoalByIndex( i );
+					if( !g ) continue;
+					uint32 trig = 0;
+					if( g->GetParams()) g->GetParams()->GetChecksum( crc( "trigger_obj_id" ), &trig, Script::NO_ASSERT );
+					const bool vivant = trig && Obj::CCompositeObjectManager::Instance()->GetObjectByID( trig ) != NULL;
+					VLOG( "DSK", "  goal %s: locked %d active %d won %d mini %d giver %s %s", Script::FindChecksumName( g->GetGoalId()),
+						g->IsLocked(), g->IsActive(), g->HasWonGoal(), g->IsMinigame(), trig ? Script::FindChecksumName( trig ) : "-",
+						trig ? ( vivant ? "here" : "MISSING" ) : "" );
+				}
 			}
 		}
 	}
@@ -1033,6 +1046,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	chaos_tout_finir();
 	s_ev_prochain = 15.0f + hasard( 30 );
 	s_graine_chaos = hasard( 0x7fffffff ) | 1;
+	s_niv_log = 0;
 	s_rando_graine = hasard( 0x7fffffff ) | 1;
 	for( int i = 0; i < NB_NOMS_CHAOS; ++i ) s_perm_noms[i] = i;
 	for( int i = NB_NOMS_CHAOS - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ), x = s_perm_noms[i]; s_perm_noms[i] = s_perm_noms[k]; s_perm_noms[k] = x; }

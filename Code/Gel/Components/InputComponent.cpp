@@ -7,6 +7,9 @@
 
 #ifdef __PLAT_VITA__
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );
+#endif
 #endif
 #include <gel/components/inputcomponent.h>
 #include <gel/components/vibrationcomponent.h>
@@ -170,11 +173,19 @@ CBaseComponent::EMemberFunctionResult CInputComponent::CallMemberFunction( uint3
 
         // @script | LeftPressed | true if left is being pressed on the pad
 		case CRCC(0x78238598, "LeftPressed"):
+#ifdef THUG_DESKTOP
+			// Demented Mirror / reversed steering: the turn, brake and cess
+			// slide anims follow the way the skater actually turns
+			if( desktop_mirror_steer()) return m_pad.m_right.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
+#endif
 			return m_pad.m_left.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
 			break;
 			
         // @script | RightPressed | true if right is being pressed on the pad
 		case CRCC(0x1d604a9d, "RightPressed"):
+#ifdef THUG_DESKTOP
+			if( desktop_mirror_steer()) return m_pad.m_left.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
+#endif
 			return m_pad.m_right.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
 			break;
 			
