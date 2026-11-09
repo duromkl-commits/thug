@@ -316,6 +316,10 @@ bool LoadSoundPlease( const char *sfxName, uint32, PlatformWaveInfo *pInfo,
 	// sait deja ouvrir de maniere transparente.
 	char chemin[256];
 	snprintf( chemin, sizeof( chemin ), "sounds\\pcm\\%s.pcm", sfxName );
+#ifdef THUG_DESKTOP
+	// "@path": a loose file named from data (Sound Salad's extra pool)
+	if( sfxName[0] == '@' ) snprintf( chemin, sizeof( chemin ), "%s", sfxName + 1 );
+#endif
 
 	void *p_fic = File::Open( chemin, "rb" );
 #ifdef THUG_DESKTOP

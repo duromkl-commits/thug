@@ -35,7 +35,6 @@ extern "C" int desktop_mirror_world( void );
 #include <gfx/debuggfx.h>
 #ifdef THUG_DESKTOP
 namespace Obj { class CCompositeObject; }
-bool desktop_first_person( Obj::CCompositeObject *sk, Mth::Vector &pos, Mth::Matrix &m );
 #endif
 
 namespace Obj
@@ -382,14 +381,6 @@ void CWalkCameraComponent::Update()
 		DesktopCameraWeight( mp_camera_component ? mp_camera_component->GetCamera() : NULL, mp_target->GetVel(), true,
 							 mp_target_walk_component->GetState() == CWalkComponent::WALKING_GROUND,
 							 false, instantly, camera_pos, GetObject()->GetMatrix());
-	}
-	// First person (Extras): no collision.
-	if( desktop_first_person( mp_target, camera_pos, GetObject()->GetMatrix()))
-	{
-		camera_pos[W] = 1.0f;
-		GetObject()->SetPos( camera_pos );
-		if( instantly ) mp_camera_component->StoreOldPosition();
-		return;
 	}
 #endif
 

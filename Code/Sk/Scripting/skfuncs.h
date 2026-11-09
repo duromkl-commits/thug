@@ -173,12 +173,6 @@ bool ScriptDesktopDementedWon(Script::CStruct *pParams, Script::CScript *pScript
 bool ScriptDesktopDementedEndRun(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedSlotTricks(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopZeroArmed(Script::CStruct *pParams, Script::CScript *pScript);
-bool ScriptDesktopExtraToggle(Script::CStruct *pParams, Script::CScript *pScript);
-bool ScriptDesktopExtrasText(Script::CStruct *pParams, Script::CScript *pScript);
-bool ScriptDesktopPhoto(Script::CStruct *pParams, Script::CScript *pScript);
-bool ScriptDesktopClassic(Script::CStruct *pParams, Script::CScript *pScript);
-bool ScriptDesktopClassicOn(Script::CStruct *pParams, Script::CScript *pScript);
-bool ScriptDesktopAchText(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopTH4Career(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopTH4Active(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopTH4Level(Script::CStruct *pParams, Script::CScript *pScript);

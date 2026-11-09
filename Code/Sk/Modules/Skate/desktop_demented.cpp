@@ -70,10 +70,10 @@ static uint32 hasard( uint32 n )
 }
 
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_AUTO, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
-       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, NB_MODS };
+       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, NB_MODS };
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Auto", "Mirror", "Chaos", "Surprise",
-                                           "Random World", "Random Colours", "Random Voices" };
-static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false };
+                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad" };
+static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
 // thing keeps its random replacement until the next chapter.
@@ -86,7 +86,6 @@ static uint32 melanger( uint32 x )
 }
 
 // Auto, Mirror and Chaos state (reset with each run)
-static float s_auto_t = 0.0f;		// seconds with nothing going on (Auto starts a goal after a few)
 static float s_reve_t = 0.0f;		// Chaos: time for its slow waves
 static float s_flip_t = 0.0f, s_flip_suivant = 90.0f;
 static bool  s_flip = false;		// Chaos: the world is mirrored right now
@@ -314,6 +313,8 @@ static void stats_rendre( void )
 	if( !c ) return;
 	for( int i = 0; i < 10; ++i ) c->GetInfo()->AddInteger( crc( s_stats[i] ), s_run.stats_custom[i] );
 }
+
+static bool s_hud_neuf = true;	// stars to rebuild (lives HUD)
 
 static void hud_off( void )
 {
@@ -609,8 +610,7 @@ static void ev_lancer( Game::CGoalManager *gm )
 			if( ev_drapeau( e )) ev_corps();
 			break;
 	}
-	VLOG( "DSK", "demented chaos: %s (%.0f s)", t, duree );
-	panneau( t, "HUD_jumpgap", 0, 128, 60, 40 );
+	VLOG( "DSK", "demented chaos: %s (%.0f s)", t, duree );	// no on-screen label: you work it out (Marcus)
 }
 
 static void chaos_maj( float dt, bool pause, bool film )
@@ -663,7 +663,10 @@ extern "C" int desktop_chaos_gen( void ) { return s_txt_gen; }
 // soundfx.cpp PlaySound: Sound Salad's swap seed, 0 when off
 extern "C" unsigned int desktop_chaos_son_graine( void )
 {
-	return ( chaos_on() && s_ev_reste[EV_SONS] > 0.0f ) ? s_son_graine : 0;
+	if( chaos_on() && s_ev_reste[EV_SONS] > 0.0f ) return s_son_graine;
+	// the Sound Salad randomizer: in play only, menus keep their sounds
+	if( rando_on( MOD_R_SONS ) && !s_menu ) return melanger( s_rando_graine ^ 0x50a15a1du ) | 1;
+	return 0;
 }
 
 // Word Salad: words of a text change places, and their letters get shuffled
@@ -733,7 +736,17 @@ extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte )
 // text redrawn every frame doesn't flicker.
 extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 {
-	if( !chaos_on() || !in || n < 2 ) return 0;
+	if( !in || n < 2 ) return 0;
+	// Word Salad randomizer: words shuffled, one seed per chapter, in play
+	// only (a paused menu is built while the game is paused, and stays plain)
+	const bool mots = rando_on( MOD_R_MOTS ) && !Mdl::FrontEnd::Instance()->GamePaused();
+	if( !chaos_on())
+	{
+		if( !mots ) return 0;
+		strncpy( out, in, n - 1 );
+		out[n - 1] = 0;
+		return salade( out, melanger( s_rando_graine ^ 0x3c6e1a5bu ) | 1 );
+	}
 	int o = 0, change = 0;
 	const char *p = in;
 	while( *p && o < n - 1 )
@@ -790,7 +803,8 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		}
 	}
 	out[o] = 0;
-	if( s_ev_reste[EV_SCRAMBLE] > 0.0f && salade( out, s_salade_graine )) change = 1;
+	if( s_ev_reste[EV_SCRAMBLE] > 0.0f ) { if( salade( out, s_salade_graine )) change = 1; }
+	else if( mots && salade( out, melanger( s_rando_graine ^ 0x3c6e1a5bu ) | 1 )) change = 1;
 	return change;
 }
 
@@ -928,49 +942,6 @@ void DesktopDementedUpdate( Skate &mdl )
 	// Chaos: curveballs at random times
 	if( s_run.mods[MOD_CHAOS] && !s_run.fini ) chaos_maj( dt, pause, film );
 	else chaos_tout_finir();
-	// Auto: a few seconds with no goal going and nothing on screen, then a
-	// random goal whose giver is around gets started for you
-	if( s_run.mods[MOD_AUTO] && !s_run.fini )
-	{
-		Game::CGoalManager *gm = Game::GetGoalManager();
-		// Not in the first seconds of a level: the story activates its own
-		// opening goal then, and force_start (GoalManager_DeactivateAllGoals)
-		// would kill it and stall the chapter. Any active goal counts.
-		static uint32 s_auto_niv = 0;
-		static float s_auto_niv_t = 0.0f;
-		if( niveau != s_auto_niv ) { s_auto_niv = niveau; s_auto_niv_t = 0.0f; }
-		if( !film && !pause ) s_auto_niv_t += dt;
-		if( !gm || s_auto_niv_t < 8.0f || gm->GetNumActiveGoals( true ) > 0 || film || s_menu ) { if( s_auto_t > 0.0f ) s_auto_t = 0.0f; }
-		else
-		{
-			s_auto_t += dt;
-			if( s_auto_t > 0.25f )	// right away (Marcus), once the result screen is gone
-			{
-				s_auto_t = -2.0f;	// before trying again if nothing could start
-				Script::CArray *a = new Script::CArray;
-				std::vector<uint32> v;
-				for( int i = 0; i < gm->GetNumGoals(); ++i )
-				{
-					Game::CGoal *g = gm->GetGoalByIndex( i );
-					if( !g || g->IsLocked() || g->IsActive() || g->HasWonGoal() || g->IsMinigame()) continue;
-					uint32 trig = 0;
-					if( !g->GetParams() || !g->GetParams()->GetChecksum( crc( "trigger_obj_id" ), &trig, Script::NO_ASSERT ) || !trig ) continue;
-					v.push_back( g->GetGoalId());
-				}
-				for( int i = (int)v.size() - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ); const uint32 x = v[i]; v[i] = v[k]; v[k] = x; }
-				if( !v.empty())
-				{
-					a->SetSizeAndType( (int)v.size(), ESYMBOLTYPE_NAME );
-					for( size_t i = 0; i < v.size(); ++i ) a->SetChecksum( i, v[i] );
-					Script::CStruct p;
-					p.AddArrayPointer( "goals", a );
-					Script::SpawnScript( "desktop_demented_auto", &p );
-					VLOG( "DSK", "demented auto: %d goals to pick from", (int)v.size());
-				}
-				else { delete a; VLOG( "DSK", "demented auto: no goal with a giver to start" ); }
-			}
-		}
-	}
 	if( film ) { hud_off(); return; }
 
 	// Run clock bottom right, with lives when they're on.
@@ -978,6 +949,7 @@ void DesktopDementedUpdate( Skate &mdl )
 	{
 		Script::RunScript( "desktop_demented_hud_create" );
 		s_run.hud = element( crc( "desktop_demented_hud" )) != NULL;
+		s_hud_neuf = true;
 	}
 	char t[48], c[32];
 	const bool compte = s_run.mods[MOD_TIME];
@@ -991,10 +963,49 @@ void DesktopDementedUpdate( Skate &mdl )
 		if( compte && s_run.reste < 15.0f ) col = Image::RGBA( 128, 24, 16, 120 );
 		e->SetRGBA( col );
 	}
-	if( s_run.mods[MOD_LIVES] ) snprintf( t, sizeof( t ), "LIVES %d", s_run.vies );
-	else snprintf( t, sizeof( t ), " " );
-	e = (Front::CTextElement *)element( crc( "desktop_demented_lives" ));
-	if( e ) e->SetText( t );
+	// Lives: the goal givers' spinning star, one per life, stacked down the
+	// left side (Marcus). Past ETOILES_MAX the rest shows as "+N" under them.
+	// Rebuilt only when the count, the mirror or the colour changes.
+	{
+		enum { ETOILES_MAX = 8 };
+		static int s_n = -1;
+		static int s_miroir = -1;
+		static uint32 s_coul = 0xffffffff;
+		const int n = s_run.mods[MOD_LIVES] ? ( s_run.vies > 0 ? s_run.vies : 0 ) : 0;
+		const int miroir = desktop_mirror_world();
+		const bool hud = s_run.hud;
+		float r = 1.0f, g = 0.0f, b = 0.0f;
+		if( rando_on( MOD_R_COULEURS )) desktop_rando_teinte( 0x510e527f, &r, &g, &b );
+		const uint32 coul = ((uint32)( r * 128.0f ) << 16 ) | ((uint32)( g * 128.0f ) << 8 ) | (uint32)( b * 128.0f );
+		if( s_hud_neuf || n != s_n || miroir != s_miroir || coul != s_coul )
+		{
+			for( int i = 0; i < ETOILES_MAX; ++i )
+			{
+				char id[40];
+				snprintf( id, sizeof( id ), "desktop_demented_star%d", i );
+				Script::CStruct p;
+				p.AddChecksum( "id", crc( id ));
+				if( i < n && hud )
+				{
+					// The projection is flipped in Mirror, 3D elements with it
+					const float x = miroir ? 640.0f - 30.0f : 30.0f;
+					p.AddPair( "pos", x, 150.0f + 32.0f * (float)i );
+					Script::CArray *a = new Script::CArray;
+					a->SetSizeAndType( 4, ESYMBOLTYPE_INTEGER );
+					a->SetInteger( 0, (int)( r * 128.0f )); a->SetInteger( 1, (int)( g * 128.0f ));
+					a->SetInteger( 2, (int)( b * 128.0f )); a->SetInteger( 3, 128 );
+					p.AddArrayPointer( "rgba", a );
+					p.AddFloat( "AngleY", (float)i * 0.6f );	// not all facing the same way
+				}
+				Script::RunScript( "desktop_demented_star", &p );
+			}
+			s_hud_neuf = false; s_n = n; s_miroir = miroir; s_coul = coul;
+			if( n > ETOILES_MAX ) snprintf( t, sizeof( t ), "+%d", n - ETOILES_MAX );
+			else snprintf( t, sizeof( t ), " " );
+			e = (Front::CTextElement *)element( crc( "desktop_demented_lives" ));
+			if( e ) e->SetText( t );
+		}
+	}
 }
 } // namespace Mdl
 
@@ -1014,6 +1025,7 @@ bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pSc
 {
 	int i = -1;
 	pParams->GetInteger( crc( "i" ), &i, Script::NO_ASSERT );
+	if( i == MOD_AUTO ) return true;	// Auto removed (Marcus)
 	int v = -1;
 	if( pParams->GetInteger( crc( "set" ), &v, Script::NO_ASSERT ) && i >= 0 && i < NB_MODS && i != MOD_LIVES )
 		s_arme[i] = v != 0;		// SURPRISE ME! / Start Run
@@ -1041,15 +1053,16 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.actif = true;
 	for( int i = 0; i < NB_MODS; ++i ) s_run.mods[i] = s_arme[i];
 	s_run.mods[MOD_LIVES] = true;	// not a modifier (Marcus): every run has lives
+	s_run.mods[MOD_AUTO] = false;	// removed (Marcus)
 	if( s_run.mods[MOD_SURPRISE] )
 	{
 		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 35, 30, 30, 0, 50, 40, 40 };
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 0, 30, 30, 0, 50, 40, 40, 35, 25 };
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;
 	}
-	s_auto_t = 0.0f; s_reve_t = 0.0f; s_flip_t = 0.0f; s_flip_suivant = 60.0f + hasard( 90 ); s_flip = false;
+	s_reve_t = 0.0f; s_flip_t = 0.0f; s_flip_suivant = 60.0f + hasard( 90 ); s_flip = false;
 	chaos_tout_finir();
 	s_ev_prochain = 15.0f + hasard( 30 );
 	s_graine_chaos = hasard( 0x7fffffff ) | 1;
@@ -1286,6 +1299,7 @@ bool ScriptDesktopDementedChapter( Script::CStruct *pParams, Script::CScript *pS
 	if( ch <= s_run.chapitre_max ) return true;
 	s_run.chapitre_max = ch;
 	s_rando_graine = hasard( 0x7fffffff ) | 1;	// randomizers re-roll each chapter
+	++s_txt_gen;	// Word Salad: on-screen text re-shuffled with the new seed
 	if( s_run.mods[MOD_LIVES] && !s_run.fini )
 	{
 		++s_run.vies;

@@ -40,7 +40,6 @@
 #include <algorithm>
 
 #include "custom_music.h"
-#include "achievements.h"
 #include "vita_log.h"
 
 extern "C" void desktop_host_path( const char *vita_path, char *out, size_t out_size );
@@ -1185,14 +1184,8 @@ static void patch_air_shuffle( const unsigned char *qb, const std::vector<Jeton>
 	}
 }
 
-// Pause menu: the "Extras" item.
+// Pause menu: Demented's own items (the Extras menu is gone, Marcus 2026-11-09).
 static const char *s_item_pause =
-	"if NOT IsObserving\n"
-	"if NOT DesktopDemented\n"
-	"make_sprite_menu_item text = \"Extras\" id = menu_desktop_extras pad_choose_script = desktop_extras_menu\n"
-	"make_text_sprite texture = <view_icon> parent = menu_desktop_extras\n"
-	"endif\n"
-	"endif\n"
 	// Demented: the trick list, read only (the game's own View Tricks mode)
 	"if DesktopDemented\n"
 	"make_sprite_menu_item text = \"View Tricks\" id = menu_desktop_view_tricks pad_choose_script = create_edit_tricks_menu\n"
@@ -1201,257 +1194,7 @@ static const char *s_item_pause =
 	"make_text_sprite texture = <edit_skater_icon> parent = menu_desktop_view_stats\n"
 	"endif\n";
 
-// Pause > Extras: the toggles (desktop_extras.cpp), and what they put on
-// screen (desktop_extras_glue.cpp and desktop_modes_glue.cpp drive it).
-static std::string ach_items( void )
-{
-	std::string t;
-	for( int i = 0; i < ach_count(); ++i )
-	{
-		char l[280];
-		snprintf( l, sizeof( l ), "theme_menu_add_item text = <text%d> id = desktop_ach_item%d highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = nullscript focus_script = desktop_ach_focus focus_params = { desc = <desc%d> }\n", i, i, i );
-		t += l;
-	}
-	return t;
-}
-
-static std::string scripts_extras( void )
-{
-	std::string t =
-		"script desktop_extras_menu\n"
-		"if ObjectExists id = current_menu_anchor\n"
-		"DestroyScreenElement id = current_menu_anchor\n"
-		"endif\n"
-		"FormatText ChecksumName = title_icon \"%i_edit_skater\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
-		"make_new_themed_scrolling_menu title = \"EXTRAS\" title_icon = <title_icon> dims = (600,237) pos = (229,80) right_bracket_z = 1\n"
-		"SetScreenElementProps { id = sub_menu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = create_pause_menu } } ] }\n"
-		"create_helper_text generic_helper_text\n"
-		"kill_start_key_binding\n"
-		"DesktopExtrasText\n"
-		"theme_menu_add_item text = \"Photo Mode\" id = desktop_extras_photo highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_photo_go\n"
-		"theme_menu_add_item text = \"Achievements\" id = desktop_extras_ach highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_ach_menu\n"
-		"if GameModeEquals is_singlesession\n"
-		"if DesktopClassicOn\n"
-		"theme_menu_add_item text = \"End Classic Run\" id = desktop_extras_classic highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_classic_stop\n"
-		"else\n"
-		"theme_menu_add_item text = \"Classic Run (2:00)\" id = desktop_extras_classic highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_classic_go\n"
-		"endif\n"
-		"endif\n"
-		"theme_menu_add_item text = <text0> id = desktop_extras_item0 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 0 }\n"
-		"theme_menu_add_item text = <text1> id = desktop_extras_item1 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 1 }\n"
-		"theme_menu_add_item text = <text2> id = desktop_extras_item2 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 2 }\n"
-		"theme_menu_add_item text = <text3> id = desktop_extras_item3 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 3 }\n"
-		"theme_menu_add_item text = <text4> id = desktop_extras_item4 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 4 }\n"
-		"theme_menu_add_item text = <text5> id = desktop_extras_item5 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 5 }\n"
-		"theme_menu_add_item text = <text6> id = desktop_extras_item6 highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg pad_choose_script = desktop_extras_flip pad_choose_params = { i = 6 }\n"
-		"theme_menu_add_item text = \"SELECT in game: first-person camera\" id = desktop_extras_note highlight_bar_scale = (2.8,0.8) centered ignore_width no_bg not_focusable\n"
-		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
-		"endscript\n"
-		// Achievements: the list, and the unlock pop-up.
-		"script desktop_th4_toast\n"
-		"create_panel_message id = desktop_th4_toast text = <text> pos = (320,140) rgba = [ 40 110 128 128 ] time = 5000\n"
-		"PlaySound GotStat04 vol = 150\n"
-		"endscript\n"
-		"script desktop_ach_toast\n"
-		"desktop_toast text = <text> rgba = [ 128 108 40 110 ] sound = GoalMidGood\n"
-		"endscript\n"
-		// A small one-line notice top right, under the score, gone after 3 s
-		// (achievements, Demented lives and time). sound = optional.
-		"script desktop_toast rgba = [ 128 128 128 110 ]\n"
-		"KillSpawnedScript name = desktop_toast_fade\n"
-		"if ScreenElementExists id = desktop_toast_el\n"
-		"DestroyScreenElement id = desktop_toast_el\n"
-		"endif\n"
-		"SetScreenElementLock id = root_window off\n"
-		"CreateScreenElement { type = TextElement parent = root_window id = desktop_toast_el font = small text = <text> pos = (628,64) just = [ right top ] scale = 0.75 rgba = <rgba> z_priority = 50 }\n"
-		"if GotParam sound\n"
-		"PlaySound <sound> vol = 130\n"
-		"endif\n"
-		"SpawnScript desktop_toast_fade\n"
-		"endscript\n"
-		"script desktop_toast_fade\n"
-		"wait 180 frames\n"
-		"if ScreenElementExists id = desktop_toast_el\n"
-		"DoScreenElementMorph id = desktop_toast_el alpha = 0 time = 0.4\n"
-		"endif\n"
-		"wait 25 frames\n"
-		"if ScreenElementExists id = desktop_toast_el\n"
-		"DestroyScreenElement id = desktop_toast_el\n"
-		"endif\n"
-		"endscript\n"
-		// The focused achievement's description, under the list.
-		"script desktop_ach_focus\n"
-		"main_theme_focus <...>\n"
-		"if ScreenElementExists id = desktop_ach_desc\n"
-		"SetScreenElementProps id = desktop_ach_desc text = <desc>\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_ach_menu\n"
-		"if ObjectExists id = current_menu_anchor\n"
-		"DestroyScreenElement id = current_menu_anchor\n"
-		"endif\n"
-		"DesktopAchText\n"
-		"FormatText ChecksumName = title_icon \"%i_edit_skater\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
-		"make_new_themed_scrolling_menu title = <title> title_icon = <title_icon> dims = (600,237) pos = (229,80) right_bracket_z = 1\n"
-		"SetScreenElementProps { id = sub_menu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = desktop_extras_menu } } ] }\n"
-		"create_helper_text generic_helper_text\n"
-		"kill_start_key_binding\n"
-		"CreateScreenElement { type = TextElement parent = current_menu_anchor id = desktop_ach_desc font = small text = \" \" pos = (320,392) just = [ center center ] scale = 0.9 rgba = [ 128 128 128 128 ] z_priority = 5 }\n"
-		+ ach_items() +
-		"finish_themed_scrolling_menu bg_width = 4 time = 0.2\n"
-		"endscript\n"
-		// Photo mode: the menu and HUD hidden, the game still paused.
-		"script desktop_photo_go\n"
-		"if ObjectExists id = current_menu_anchor\n"
-		"DestroyScreenElement id = current_menu_anchor\n"
-		"endif\n"
-		"KillSpawnedScript name = pulse_blur_script_down\n"
-		"KillSpawnedScript name = pulse_blur_script_up\n"
-		"SetScreenBlur 0\n"
-		"hide_root_window\n"
-		"DesktopPhoto on\n"
-		"endscript\n"
-		"script desktop_photo_back\n"
-		"unhide_root_window\n"
-		"create_pause_menu\n"
-		"endscript\n"
-		// Classic run: starts when the game resumes.
-		"script desktop_classic_go\n"
-		"if DesktopClassic start\n"
-		"exit_pause_menu\n"
-		"else\n"
-		"desktop_extras_menu\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_classic_stop\n"
-		"DesktopClassic stop\n"
-		"desktop_extras_menu\n"
-		"endscript\n"
-		"script desktop_classic_obj\n"
-		"if ObjectExists id = <name>\n"
-		"<name> : Die\n"
-		"endif\n"
-		"CreateCompositeObject { Components = [ { component = motion } { component = model model = <model> } ] Params = { name = <name> } }\n"
-		"<name> : Obj_SetPosition Position = <pos>\n"
-		"<name> : Obj_Hover Amp = 6 Freq = 2\n"
-		"<name> : Obj_RotY speed = 200\n"
-		"endscript\n"
-		"script desktop_classic_obj_kill\n"
-		"if ObjectExists id = <name>\n"
-		"<name> : Die\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_classic_hud_create\n"
-		"desktop_classic_hud_off\n"
-		"SetScreenElementLock id = root_window off\n"
-		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_classic_hud pos = (0,0) just = [ left top ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_time font = small text = \"2:00.0\" pos = (320,26) just = [ center center ] scale = 1.2 rgba = [ 128 128 128 128 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_score font = small text = \"0\" pos = (320,52) just = [ center center ] scale = 0.8 rgba = [ 128 128 128 110 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_g0 font = small text = \" \" pos = (24,110) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_g1 font = small text = \" \" pos = (24,125) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_g2 font = small text = \" \" pos = (24,140) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_g3 font = small text = \" \" pos = (24,155) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_g4 font = small text = \" \" pos = (24,170) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_g5 font = small text = \" \" pos = (24,185) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_classic_hud id = desktop_cl_g6 font = small text = \" \" pos = (24,200) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"endscript\n"
-		"script desktop_classic_hud_off\n"
-		"if ScreenElementExists id = desktop_classic_hud\n"
-		"DestroyScreenElement id = desktop_classic_hud\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_classic_msg\n"
-		"create_panel_message id = desktop_classic_msg text = <text> pos = (320,150) rgba = [ 128 120 60 128 ] time = 2000\n"
-		"endscript\n"
-		"script desktop_classic_end\n"
-		"create_panel_message id = desktop_classic_end text = <text> pos = (320,200) rgba = [ 128 128 128 128 ] time = 6000\n"
-		"endscript\n"
-		// Goal attack timer: top right.
-		"script desktop_ga_hud_create\n"
-		"desktop_ga_hud_off\n"
-		"SetScreenElementLock id = root_window off\n"
-		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_ga_hud pos = (0,0) just = [ left top ] }\n"
-		"CreateScreenElement { type = TextElement parent = desktop_ga_hud id = desktop_ga_time font = small text = \"0:00.0\" pos = (620,20) just = [ right center ] scale = 0.7 rgba = [ 128 128 128 110 ] }\n"
-		"endscript\n"
-		"script desktop_ga_hud_off\n"
-		"if ScreenElementExists id = desktop_ga_hud\n"
-		"DestroyScreenElement id = desktop_ga_hud\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_ga_msg\n"
-		"create_panel_message id = desktop_ga_msg text = <text> pos = (320,130) rgba = [ 100 128 128 128 ] time = 3500\n"
-		"endscript\n"
-		// Practice: the last combo's tricks, top centre.
-		"script desktop_readout_create\n"
-		"desktop_readout_off\n"
-		"SetScreenElementLock id = root_window off\n"
-		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_readout pos = (0,0) just = [ left top ] }\n"
-		"CreateScreenElement { type = TextBlockElement parent = desktop_readout id = desktop_readout_text font = small text = \"Practice: land a combo\" pos = (320,72) dims = (560,0) allow_expansion just = [ center top ] internal_just = [ center top ] scale = 0.6 rgba = [ 128 128 128 110 ] }\n"
-		"endscript\n"
-		"script desktop_readout_off\n"
-		"if ScreenElementExists id = desktop_readout\n"
-		"DestroyScreenElement id = desktop_readout\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_snd\n"
-		"PlaySound <s>\n"
-		"endscript\n"
-		"script desktop_extras_flip\n"
-		"DesktopExtraToggle i = <i>\n"
-		"desktop_extras_menu\n"
-		"endscript\n"
-		// Input display: lit buttons bottom left, history above.
-		"script desktop_input_create\n"
-		"SetScreenElementLock id = root_window off\n"
-		"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_input pos = (0,0) just = [ left top ] }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_input texture = white2 pos = (20,354) just = [ left top ] scale = (18.5,14.2) rgba = [ 0 0 0 60 ] z_priority = -10 }\n";
-	static const struct { const char *id; int x, y; float sx, sy; } b[] = {
-		{ "desktop_in_l2", 30, 362, 3.0f, 1.1f }, { "desktop_in_l1", 30, 374, 3.0f, 1.1f },
-		{ "desktop_in_r2", 136, 362, 3.0f, 1.1f }, { "desktop_in_r1", 136, 374, 3.0f, 1.1f },
-		{ "desktop_in_up", 46, 392, 1.4f, 1.4f }, { "desktop_in_down", 46, 420, 1.4f, 1.4f },
-		{ "desktop_in_left", 32, 406, 1.4f, 1.4f }, { "desktop_in_right", 60, 406, 1.4f, 1.4f },
-		{ "desktop_in_tri", 146, 392, 1.4f, 1.4f }, { "desktop_in_x", 146, 420, 1.4f, 1.4f },
-		{ "desktop_in_sq", 132, 406, 1.4f, 1.4f }, { "desktop_in_ci", 160, 406, 1.4f, 1.4f },
-		{ "desktop_in_sel", 84, 400, 1.6f, 0.8f }, { "desktop_in_start", 108, 400, 1.6f, 0.8f },
-		{ NULL, 84, 444, 2.5f, 2.5f }, { NULL, 114, 444, 2.5f, 2.5f } };
-	for( size_t i = 0; i < sizeof( b ) / sizeof( b[0] ); ++i )
-	{
-		char l[300];
-		if( b[i].id )
-			snprintf( l, sizeof( l ), "CreateScreenElement { type = SpriteElement parent = desktop_input id = %s texture = white2 pos = (%d,%d) just = [ left top ] scale = (%.1f,%.1f) rgba = [ 30 30 30 70 ] z_priority = -9 }\n",
-				b[i].id, b[i].x, b[i].y, b[i].sx, b[i].sy );
-		else
-			snprintf( l, sizeof( l ), "CreateScreenElement { type = SpriteElement parent = desktop_input texture = white2 pos = (%d,%d) just = [ left top ] scale = (%.1f,%.1f) rgba = [ 30 30 30 70 ] z_priority = -9 }\n",
-				b[i].x, b[i].y, b[i].sx, b[i].sy );
-		t += l;
-	}
-	t +=
-		"CreateScreenElement { type = SpriteElement parent = desktop_input id = desktop_in_ls texture = white2 pos = (92,452) just = [ center center ] scale = (0.9,0.9) rgba = [ 128 128 128 120 ] z_priority = -8 }\n"
-		"CreateScreenElement { type = SpriteElement parent = desktop_input id = desktop_in_rs texture = white2 pos = (122,452) just = [ center center ] scale = (0.9,0.9) rgba = [ 128 128 128 120 ] z_priority = -8 }\n";
-	for( int i = 0; i < 8; ++i )
-	{
-		char l[300];
-		snprintf( l, sizeof( l ), "CreateScreenElement { type = TextElement parent = desktop_input id = desktop_in_h%d font = small text = \" \" pos = (24,%d) just = [ left center ] scale = 0.6 rgba = [ 128 128 128 %d ] z_priority = -8 }\n",
-			i, 342 - 13 * i, 120 - 10 * i );
-		t += l;
-	}
-	t +=
-		"endscript\n"
-		"script desktop_input_off\n"
-		"if ScreenElementExists id = desktop_input\n"
-		"DestroyScreenElement id = desktop_input\n"
-		"endif\n"
-		"endscript\n"
-		"script desktop_combo_msg\n"
-		"create_panel_message id = desktop_combo_stats text = <text> pos = (320,110) rgba = [ 110 128 128 128 ] time = 3500\n"
-		"endscript\n"
-		"script desktop_chaos_msg\n"
-		"create_panel_message id = desktop_chaos_msg text = <text> pos = (320,170) rgba = [ 128 60 40 128 ] time = 2500\n"
-		"endscript\n";
-	return t;
-}
-
-// Demented's own scripts (appended to gamemenu.qb with the Extras ones).
+// Demented's own scripts (appended to gamemenu.qb).
 static const char *s_demented_scripts =
 	// the modifiers menu, laid out like the difficulty menu
 	"script desktop_demented_menu focus = 0\n"
@@ -1474,18 +1217,16 @@ static const char *s_demented_scripts =
 	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every stat locked at 0 for the whole run\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text3> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 3 focus = 3 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"A countdown clock. Beating goals and new chapters add time. At zero you lose a life\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
-	"make_main_menu_item { text = <text5> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 5 focus = 4 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"No walking up to people: a few seconds after each goal, a random one from the chapter starts by itself\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
-	"make_main_menu_item { text = <text6> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 6 focus = 5 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"The world is flipped left to right, and so are your controls\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
-	"make_main_menu_item { text = <text7> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 7 focus = 6 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 7 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Curveballs at random times: heavy gravity, slow motion, the world flips, swapped names, words and sounds, teleports\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text6> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 6 focus = 4 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"The world is flipped left to right, and so are your controls\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text7> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 7 focus = 5 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Curveballs at random times: heavy gravity, slow motion, the world flips, swapped names, words and sounds, teleports\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = \"Randomizers\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_rando focus = 0 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 8 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Random time of day, text and HUD colours, and voice lines. Re-rolled every chapter\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 7 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Random time of day, colours, voice lines, sounds and words. Re-rolled every chapter\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = \"SURPRISE ME!\" pad_choose_script = desktop_demented_start pad_choose_params = { surprise = 1 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 9 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Like Start Run, but every modifier is rolled at random. You find out what you got when you're dealt\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 8 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Like Start Run, but every modifier is rolled at random. View Stats in the pause menu shows what you got\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = \"Start Run\" pad_choose_script = desktop_demented_start pad_choose_params = { surprise = 0 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 10 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Random skater, random stats\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 9 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Random skater, random stats\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"FormatText ChecksumName = bar_color \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
 	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,384) just = [ center top ] }\n"
 	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = black scale = (70,15) just = [ center top ] rgba = [ 0 0 0 90 ] }\n"
@@ -1514,7 +1255,7 @@ static const char *s_demented_scripts =
 	"CreateScreenElement { Type = SpriteElement parent = current_menu_anchor id = mm_building texture = mm_building just = [ left top ] pos = (0,62) scale = (1.2,1.25) z_priority = -3 alpha = 1 }\n"
 	"make_mainmenu_clouds\n"
 	"kill_start_key_binding\n"
-	"SetScreenElementProps { id = career_dif_vmenu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = career_options_menu_exit new_menu_script = desktop_demented_menu focus = 7 } } ] }\n"
+	"SetScreenElementProps { id = career_dif_vmenu event_handlers = [ { pad_back generic_menu_pad_back params = { callback = career_options_menu_exit new_menu_script = desktop_demented_menu focus = 6 } } ] }\n"
 	"DesktopDementedText\n"
 	"make_main_menu_item { text = <text9> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 9 focus = 0 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 1 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Every time of day is swapped for a random one: morning, evening or night\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
@@ -1522,8 +1263,12 @@ static const char *s_demented_scripts =
 	"SetScreenElementProps { id = { current_menu child = 2 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Text and the HUD get random colours, one colour for all the panels. The special bar and the screen stay as they are\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text11> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 11 focus = 2 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 3 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Goal dialogue and other voice lines play a different line of about the same length\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
-	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 7 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Back to the modifiers\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text12> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 12 focus = 3 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 4 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sound effects play other sounds, from THUG and from the extra sound folders you added\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = <text13> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 13 focus = 4 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 5 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"The words in on-screen text are shuffled around. Menus stay readable\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 6 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Back to the modifiers\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"FormatText ChecksumName = bar_color \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
 	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,384) just = [ center top ] }\n"
 	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = black scale = (70,15) just = [ center top ] rgba = [ 0 0 0 90 ] }\n"
@@ -1578,30 +1323,12 @@ static const char *s_demented_scripts =
 	"desktop_demented_roll\n"
 	"endif\n"
 	"DesktopDementedDialogShown\n"
-	"DesktopDementedName\n"
-	"create_dialog_box { title = \"DEMENTED\" title_font = testtitle text = <dealt_text> pos = (320,240) just = [ center center ] "
-	"text_rgba = [ 88 105 112 128 ] text_dims = (400,0) line_spacing = 0.8 "
-	"buttons = [ { font = small text = \"OK\" pad_choose_script = desktop_demented_go } ] delay_input }\n"
+	// no debriefing box (Marcus): straight on, View Stats in the pause menu shows the deal
+	"desktop_demented_go\n"
 	"endscript\n"
 	"script desktop_demented_go\n"
 	"dialog_box_exit\n"
 	"show_intro_2\n"
-	"endscript\n"
-	"script desktop_demented_auto\n"
-	"GetArraySize <goals>\n"
-	"<i> = 0\n"
-	"begin\n"
-	"<g> = ( <goals> [ <i> ] )\n"
-	"GoalManager_GetGoalParams name = <g>\n"
-	"if GotParam trigger_obj_id\n"
-	"if IsAlive name = <trigger_obj_id>\n"
-	"goal_accept_trigger goal_id = <g> force_start\n"
-	"return\n"
-	"endif\n"
-	"endif\n"
-	"RemoveParameter trigger_obj_id\n"
-	"<i> = ( <i> + 1 )\n"
-	"repeat <array_size>\n"
 	"endscript\n"
 	// View Stats: laid out like the game's own Game Progress screen
 	"script desktop_demented_stats\n"
@@ -1700,8 +1427,20 @@ static const char *s_demented_scripts =
 	"desktop_demented_hud_off\n"
 	"SetScreenElementLock id = root_window off\n"
 	"CreateScreenElement { type = ContainerElement parent = root_window id = desktop_demented_hud pos = (0,0) just = [ left top ] }\n"
-	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_time font = newtimerfont text = \"0:00\" pos = (628,438) just = [ right bottom ] scale = 0.55 rgba = [ 128 128 128 70 ] z_priority = -1 }\n"
-	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_lives font = small text = \" \" pos = (628,414) just = [ right bottom ] scale = 0.6 rgba = [ 128 128 128 80 ] z_priority = -1 }\n"
+	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_time font = newtimerfont text = \"0:00\" pos = (634,468) just = [ right bottom ] scale = 0.55 rgba = [ 128 128 128 70 ] z_priority = -1 }\n"
+	"CreateScreenElement { type = TextElement parent = desktop_demented_hud id = desktop_demented_lives font = small text = \" \" pos = (30,416) just = [ center top ] scale = 0.6 rgba = [ 128 128 128 90 ] z_priority = -1 }\n"
+	"endscript\n"
+	// one life: the goal givers' star (model arrow), same bob and spin, on screen
+	"script desktop_demented_star\n"
+	"if ScreenElementExists id = <id>\n"
+	"DestroyScreenElement id = <id>\n"
+	"endif\n"
+	"if GotParam pos\n"
+	"if ScreenElementExists id = desktop_demented_hud\n"
+	"SetScreenElementLock id = desktop_demented_hud off\n"
+	"CreateScreenElement { type = Element3D parent = desktop_demented_hud id = <id> model = \"arrow\" pos = <pos> CameraZ = -6 scale = 0.022 rgba = <rgba> AngleY = <AngleY> AngVelY = 0.08 HoverParams = { Amp = 9.5 Freq = 1.2 } }\n"
+	"endif\n"
+	"endif\n"
 	"endscript\n"
 	"script desktop_demented_hud_off\n"
 	"if ScreenElementExists id = desktop_demented_hud\n"
@@ -1873,9 +1612,9 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 			++nb;
 		}
 		VLOG( "MUS", "pause menu: %d items hidden in Demented", nb );
-		Ecrit w2; w2.eol(); compile_q( w2, ( scripts_extras() + s_demented_scripts ).c_str());
+		Ecrit w2; w2.eol(); compile_q( w2, s_demented_scripts );
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
-		VLOG( "MUS", "pause menu: Extras added" );
+		VLOG( "MUS", "pause menu: Demented items added" );
 		return;
 	}
 }
@@ -3037,4 +2776,110 @@ extern "C" int custom_music_open( int i )
 	const int ok = cm_open( s_pistes[i].chemin.c_str());
 	VLOG( "MUS", "custom music: %s %s - %s", ok ? "playing" : "could not open", s_pistes[i].bande.c_str(), s_pistes[i].titre.c_str());
 	return ok;
+}
+
+// --- Sound Salad's extra pool ----------------------------------------------------
+//
+// Loose .wav files Marcus adds from other games: data\<anything>\custom\sounds
+// (data\thps3\custom\sounds first). Paths go back relative to data, the way
+// the engine's File::Open takes them; soundfx.cpp loads one the first time a
+// swap lands on it.
+static std::vector<std::string> s_sfx_extra;
+static bool s_sfx_extra_lu = false;
+
+static bool est_wav( const std::string &n )
+{
+	if( n.size() <= 4 ) return false;
+	std::string e = n.substr( n.size() - 4 );
+	for( size_t i = 0; i < e.size(); ++i ) e[i] = (char)tolower((unsigned char)e[i] );
+	return e == ".wav";
+}
+
+#ifdef _WIN32
+static void sfx_extra_parcourt( const std::string &plein, const std::string &rel, int prof )
+{
+	WIN32_FIND_DATAA d;
+	HANDLE h = FindFirstFileA(( plein + "\\*" ).c_str(), &d );
+	if( h == INVALID_HANDLE_VALUE ) return;
+	do
+	{
+		const std::string nom = d.cFileName;
+		if( nom == "." || nom == ".." || nom.find( '?' ) != std::string::npos ) continue;
+		if( d.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) { if( prof < 3 ) sfx_extra_parcourt( plein + "\\" + nom, rel + "\\" + nom, prof + 1 ); }
+		else if( est_wav( nom )) s_sfx_extra.push_back( rel + "\\" + nom );
+	}
+	while( FindNextFileA( h, &d ));
+	FindClose( h );
+}
+static void sfx_extra_jeux( const std::string &data, std::vector<std::string> &jeux )
+{
+	WIN32_FIND_DATAA d;
+	HANDLE h = FindFirstFileA(( data + "\\*" ).c_str(), &d );
+	if( h == INVALID_HANDLE_VALUE ) return;
+	do
+		if(( d.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ) && strcmp( d.cFileName, "." ) && strcmp( d.cFileName, ".." )) jeux.push_back( d.cFileName );
+	while( FindNextFileA( h, &d ));
+	FindClose( h );
+}
+#else
+static void sfx_extra_parcourt( const std::string &plein, const std::string &rel, int prof )
+{
+	DIR *d = opendir( plein.c_str());
+	if( !d ) return;
+	while( struct dirent *e = readdir( d ))
+	{
+		const std::string nom = e->d_name;
+		if( nom == "." || nom == ".." ) continue;
+		struct stat st;
+		if( stat(( plein + "/" + nom ).c_str(), &st )) continue;
+		if( S_ISDIR( st.st_mode )) { if( prof < 3 ) sfx_extra_parcourt( plein + "/" + nom, rel + "\\" + nom, prof + 1 ); }
+		else if( est_wav( nom )) s_sfx_extra.push_back( rel + "\\" + nom );
+	}
+	closedir( d );
+}
+static void sfx_extra_jeux( const std::string &data, std::vector<std::string> &jeux )
+{
+	DIR *d = opendir( data.c_str());
+	if( !d ) return;
+	while( struct dirent *e = readdir( d ))
+		if( e->d_name[0] != '.' ) jeux.push_back( e->d_name );
+	closedir( d );
+}
+#endif
+
+static void sfx_extra_lit( void )
+{
+	if( s_sfx_extra_lu ) return;
+	s_sfx_extra_lu = true;
+	char *base = SDL_GetBasePath();
+	const std::string data = std::string( base ? base : "" ) + "data";
+	SDL_free( base );
+	std::vector<std::string> jeux;
+	sfx_extra_jeux( data, jeux );
+	std::sort( jeux.begin(), jeux.end());
+	for( size_t i = 0; i < jeux.size(); ++i )
+	{
+#ifdef _WIN32
+		const std::string plein = data + "\\" + jeux[i] + "\\custom\\sounds";
+#else
+		const std::string plein = data + "/" + jeux[i] + "/custom/sounds";
+#endif
+		const size_t avant = s_sfx_extra.size();
+		sfx_extra_parcourt( plein, jeux[i] + "\\custom\\sounds", 0 );
+		std::sort( s_sfx_extra.begin() + avant, s_sfx_extra.end());
+		if( s_sfx_extra.size() > avant )
+			VLOG( "SND", "sound salad: %d extra sounds in data\\%s\\custom\\sounds", (int)( s_sfx_extra.size() - avant ), jeux[i].c_str());
+	}
+}
+
+extern "C" int desktop_sfx_extra_count( void )
+{
+	sfx_extra_lit();
+	return (int)s_sfx_extra.size();
+}
+
+extern "C" const char *desktop_sfx_extra_path( int i )
+{
+	sfx_extra_lit();
+	return ( i >= 0 && i < (int)s_sfx_extra.size()) ? s_sfx_extra[i].c_str() : NULL;
 }

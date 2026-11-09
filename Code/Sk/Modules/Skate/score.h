@@ -131,7 +131,6 @@ public:
 
 	void 							Reset();
 #ifdef THUG_DESKTOP
-	void							desktop_detail( bool bail );	// practice readout
 #endif
 
 	Net::Conn* 						GetAssociatedNetworkConnection( void );

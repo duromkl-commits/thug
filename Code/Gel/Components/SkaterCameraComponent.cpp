@@ -29,7 +29,6 @@
 #include <sk/components/skaterstatecomponent.h>
 #ifdef THUG_DESKTOP
 namespace Obj { class CCompositeObject; }
-bool desktop_first_person( Obj::CCompositeObject *sk, Mth::Vector &pos, Mth::Matrix &m );
 #endif
 
 
@@ -860,8 +859,6 @@ void CSkaterCameraComponent::Update( void )
 		DesktopCameraWeight( p_cam_comp->GetCamera(), mpSkater->GetVel(), false, false,
 							 mpSkaterStateComponent && mpSkaterStateComponent->GetFlag( IS_BAILING ),
 							 instantly, cam_pos, frame_matrix );
-		// Extras: first person (SELECT), no camera collision.
-		desktop_fp = desktop_first_person( mpSkater, cam_pos, frame_matrix );
 	}
 #endif
 		

@@ -345,6 +345,13 @@ void CElement3d::AddModel(const char *p_model_name, uint32 skeleton_name, Mth::V
 		p_new_model->AddGeom(fullModelName.getString(), 0, true, texDictOffset);
 	}
 	
+#ifdef THUG_DESKTOP
+	// The star's textures are loaded grey (p_NxTexture.cpp, dxt1_gris): red
+	// again unless the script gave it a colour.
+	if (p_model_name && !stricmp(p_model_name, "arrow") && m_rgba.r == 128 && m_rgba.g == 128 && m_rgba.b == 128)
+		p_new_model->SetColor(128, 0, 0, m_rgba.a);
+	else
+#endif
 	p_new_model->SetColor(m_rgba.r,m_rgba.g,m_rgba.b,m_rgba.a);
 	
 	Dbg_MsgAssert(mp_models[m_num_models].mpModel==NULL,("mp_models[m_num_models].mpModel not NULL ?"));

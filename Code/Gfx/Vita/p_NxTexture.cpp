@@ -518,6 +518,46 @@ int LoadVitaTextureMemory( const void *p_data,
 }
 
 
+#ifdef THUG_DESKTOP
+// DXT1 blocks to grey: each endpoint becomes its brightest channel, keeping
+// the block's mode (c0 > c1 four colours, else three + transparent).
+static void dxt1_gris( unsigned char *p, uint32 taille )
+{
+	for( uint32 o = 0; o + 8 <= taille; o += 8 )
+	{
+		unsigned short c[2];
+		const unsigned short c0 = (unsigned short)( p[o] | ( p[o + 1] << 8 )), c1 = (unsigned short)( p[o + 2] | ( p[o + 3] << 8 ));
+		const bool quatre = c0 > c1;
+		for( int k = 0; k < 2; ++k )
+		{
+			const unsigned short v = k ? c1 : c0;
+			int l = v >> 11;
+			if((( v >> 6 ) & 31 ) > l ) l = ( v >> 6 ) & 31;
+			if(( v & 31 ) > l ) l = v & 31;
+			c[k] = (unsigned short)(( l << 11 ) | ((( l << 1 ) | ( l >> 4 )) << 5 ) | l );
+		}
+		unsigned int idx = p[o + 4] | ( p[o + 5] << 8 ) | ( p[o + 6] << 16 ) | ((unsigned int)p[o + 7] << 24 );
+		if( quatre && c[0] == c[1] ) idx = 0;	// would turn into three colours
+		else if( quatre != ( c[0] > c[1] ))
+		{
+			// order flipped: swap the endpoints and the indices that name them
+			const unsigned short x = c[0]; c[0] = c[1]; c[1] = x;
+			unsigned int n = 0;
+			for( int i = 0; i < 16; ++i )
+			{
+				unsigned int j = ( idx >> ( 2 * i )) & 3;
+				if( quatre ) j ^= 1;			// 0<->1, 2<->3
+				else if( j < 2 ) j ^= 1;		// 0<->1, middle and transparent stay
+				n |= j << ( 2 * i );
+			}
+			idx = n;
+		}
+		p[o] = c[0] & 255; p[o + 1] = c[0] >> 8; p[o + 2] = c[1] & 255; p[o + 3] = c[1] >> 8;
+		p[o + 4] = idx & 255; p[o + 5] = ( idx >> 8 ) & 255; p[o + 6] = ( idx >> 16 ) & 255; p[o + 7] = idx >> 24;
+	}
+}
+#endif
+
 static int load_texture_stream( SReader *p_rd, const char *p_label,
                                 Lst::HashTable< Nx::CTexture > *p_table )
 {
@@ -586,6 +626,15 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 				break;
 			}
 			rd( p_src, (int)data_size, 1, p_rd );
+#ifdef THUG_DESKTOP
+			// The goal givers' star (models/arrow): its two DXT1 textures are
+			// pure red, so a model colour could only darken them. Made grey
+			// here, and Element3d gives the arrow model red back unless the
+			// script asks for another colour (Demented lives, Random Colours).
+			if(( dxt == 1 ) && ((( checksum == 0x8454d094 ) && ( base_width == 64 ) && ( base_height == 128 ))
+			                 || (( checksum == 0xdfea5d0c ) && ( base_width == 32 ) && ( base_height == 32 ))))
+				dxt1_gris( p_src, data_size );
+#endif
 
 			// Niveaux suivants d'une texture DXT (hors DXT5, decodee) : envoyes
 			// tels quels, dans le meme format que le niveau 0. Les blocs DXT

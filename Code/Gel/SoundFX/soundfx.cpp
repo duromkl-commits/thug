@@ -29,6 +29,8 @@
 
 #ifdef THUG_DESKTOP
 extern "C" unsigned int desktop_chaos_son_graine( void );	// desktop_demented.cpp: 0 = off
+extern "C" int desktop_sfx_extra_count( void );	// custom_music.cpp: Sound Salad's extra .wavs
+extern "C" const char *desktop_sfx_extra_path( int i );
 #endif
 #include <core/defines.h>
 
@@ -1067,12 +1069,33 @@ uint32 CSfxManager::PlaySound( uint32 checksum, sVolume *p_vol, float pitch, uin
 				if( !WaveTable[i].platformWaveInfo.looping ) s_ids[n++] = i;
 			for( int i = 0; i < NumWavesInTable; i++ )
 				if( !WaveTable[i + PERM_WAVE_TABLE_MAX_ENTRIES].platformWaveInfo.looping ) s_ids[n++] = i + PERM_WAVE_TABLE_MAX_ENTRIES;
-			if( n > 1 )
+			uint32 h = ( checksum ^ graine ) * 0x9E3779B1u;
+			h ^= h >> 15;
+			// Some swaps land on the extra pool: loose .wavs from other
+			// games (data\<game>\custom\sounds), loaded the first time.
+			WaveTableEntry *p_x = NULL;
+			const int nx = desktop_sfx_extra_count();
+			if( nx > 0 && (( h >> 7 ) % 100u ) < 40u )
 			{
-				uint32 h = ( checksum ^ graine ) * 0x9E3779B1u;
-				h ^= h >> 15;
-				waveTableIndex = &WaveTable[s_ids[h % (uint32)n]];
+				static WaveTableEntry *s_x = NULL;
+				static unsigned char *s_x_etat = NULL;	// 0 not tried, 1 loaded, 2 failed
+				static int s_nx = 0;
+				if( !s_x ) { s_nx = nx; s_x = (WaveTableEntry *)calloc( nx, sizeof( WaveTableEntry )); s_x_etat = (unsigned char *)calloc( nx, 1 ); }
+				const int k = (int)((( h * 2654435761u ) >> 8 ) % (uint32)s_nx );
+				if( s_x && s_x_etat && s_x_etat[k] == 0 )
+				{
+					char nom[300];
+					snprintf( nom, sizeof( nom ), "@%s", desktop_sfx_extra_path( k ));
+					s_x[k] = *waveTableIndex;
+					s_x[k].platformWaveInfo.p_sound_data = NULL;
+					const bool ok = LoadSoundPlease( nom, 0, &s_x[k].platformWaveInfo, true ) && !s_x[k].platformWaveInfo.looping;
+					s_x_etat[k] = ok ? 1 : 2;
+					if( !ok ) Dbg_Message( "sound salad: could not load %s", nom );
+				}
+				if( s_x && s_x_etat && s_x_etat[k] == 1 ) p_x = &s_x[k];
 			}
+			if( p_x ) waveTableIndex = p_x;
+			else if( n > 1 ) waveTableIndex = &WaveTable[s_ids[h % (uint32)n]];
 		}
 	}
 #endif

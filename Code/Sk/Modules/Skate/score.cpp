@@ -24,8 +24,6 @@
 
 #include <sk/modules/skate/score.h>
 #ifdef THUG_DESKTOP
-void desktop_combo_end( int score, bool bail );	// desktop_extras_glue.cpp: combo stats
-void desktop_combo_detail( int score, int base, int mult, int n, const char *tricks, bool bail );	// desktop_modes_glue.cpp
 #endif
 
 #include <core/defines.h>
@@ -1002,10 +1000,6 @@ void Score::Land( void )
 	
 	// GLOOBY
 	int trick_score = m_scorePot * m_currentMult;
-#ifdef THUG_DESKTOP
-	desktop_detail( false );
-	desktop_combo_end( trick_score, false );	// Extras: combo stats
-#endif
 
 	Obj::CSkater* pSkater = skate_mod->GetSkaterById( m_skaterId );
 	Dbg_Assert( pSkater );
@@ -1189,20 +1183,6 @@ void Score::Land( void )
 }
 
 
-#ifdef THUG_DESKTOP
-// The combo's tricks as shown on screen, for the practice readout.
-void Score::desktop_detail( bool bail )
-{
-	char t[600];
-	t[0] = 0;
-	size_t n = 0;
-	for ( int i = 0; i < m_infoTab.GetSize() && n + 70 < sizeof( t ); i++ )
-	{
-		n += snprintf( t + n, sizeof( t ) - n, "%s", m_infoTab[i].trickTextFormatted );
-	}
-	desktop_combo_detail( m_scorePot * m_currentMult, m_scorePot, m_currentMult, m_currentTrick, t, bail );
-}
-#endif
 
 void Score::ForceSpecial( void )
 {
@@ -1218,10 +1198,6 @@ void Score::ForceSpecial( void )
 */
 void Score::Bail( bool clearScoreText )
 {
-#ifdef THUG_DESKTOP
-	if ( m_scorePot > 0 ) desktop_detail( true );
-	desktop_combo_end( 0, true );
-#endif    
 	// update trick history -- clear counts for this combo
 	for (int i = 0; i < m_historyTab.getSize(); i++)
 	{
