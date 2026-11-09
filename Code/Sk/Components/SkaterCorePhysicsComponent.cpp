@@ -55,17 +55,25 @@ extern "C" int desktop_mirror_steer( void );	// desktop_demented.cpp: Mirror / C
 struct DesktopSteerFlip
 {
 	CSkaterPad &p; bool on;
-	DesktopSteerFlip( CSkaterPad &pad ) : p( pad ), on( desktop_mirror_steer() != 0 ) { if( on ) swap(); }
+	bool epaules;	// the shoulder spin buttons too (air spins, skitch side steps)
+	DesktopSteerFlip( CSkaterPad &pad, bool e = false ) : p( pad ), on( desktop_mirror_steer() != 0 ), epaules( e ) { if( on ) swap(); }
 	~DesktopSteerFlip() { if( on ) swap(); }
-	void swap( void )
+	static void ech( CSkaterButton &a, CSkaterButton &b )
 	{
 		char t[sizeof( CSkaterButton )];
-		memcpy( t, (void *)&p.m_left, sizeof( t )); memcpy( (void *)&p.m_left, (void *)&p.m_right, sizeof( t )); memcpy( (void *)&p.m_right, t, sizeof( t ));
+		memcpy( t, (void *)&a, sizeof( t )); memcpy( (void *)&a, (void *)&b, sizeof( t )); memcpy( (void *)&b, t, sizeof( t ));
+	}
+	void swap( void )
+	{
+		ech( p.m_left, p.m_right );
+		if( epaules ) { ech( p.m_L1, p.m_R1 ); ech( p.m_L2, p.m_R2 ); }
 	}
 };
 #define DESKTOP_STEER_FLIP( pad ) DesktopSteerFlip desktop_steer_flip_( pad )
+#define DESKTOP_SPIN_FLIP( pad ) DesktopSteerFlip desktop_steer_flip_( pad, true )
 #else
 #define DESKTOP_STEER_FLIP( pad )
+#define DESKTOP_SPIN_FLIP( pad )
 #endif
 
 #define	FLAGEXCEPTION(X) GetObject()->SelfEvent(X)
@@ -2232,6 +2240,7 @@ void CSkaterCorePhysicsComponent::check_for_wall_push ( const Mth::Vector& start
 
 void CSkaterCorePhysicsComponent::move_to_skitch_point (   )						
 {
+	DESKTOP_SPIN_FLIP( mp_input_component->GetControlPad());
 	
 	CControlPad& control_pad = mp_input_component->GetControlPad();
 	
@@ -5399,7 +5408,7 @@ void CSkaterCorePhysicsComponent::do_in_air_physics (   )
 
 void CSkaterCorePhysicsComponent::handle_air_rotation (   )
 {
-	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
+	DESKTOP_SPIN_FLIP( mp_input_component->GetControlPad());
 	CControlPad& control_pad = mp_input_component->GetControlPad();		 
 
 	//////////////////////////////////////////////////////////////////////////////////

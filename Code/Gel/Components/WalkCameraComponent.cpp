@@ -9,8 +9,15 @@
 
 // Replace the entire contents of this file with the new file.
 #include <gel/components/gunslingerwalkcameracomponent.cpp>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_world( void );
+#endif
 
 #else
+
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_world( void );
+#endif
 
 #include <gel/components/walkcameracomponent.h>
 #include <core/math/slerp.h>
@@ -153,6 +160,9 @@ void CWalkCameraComponent::Update()
 	
 	// get input
 	float horiz_control = GetInputComponentFromObject(GetObject())->GetControlPad().m_scaled_rightX;
+#ifdef THUG_DESKTOP
+	if (desktop_mirror_world()) horiz_control = -horiz_control;	// Demented Mirror
+#endif
 
 	// restore camera position from last frame, previous to refocusing and collision detection
 	GetObject()->GetMatrix() = m_last_actual_matrix;
