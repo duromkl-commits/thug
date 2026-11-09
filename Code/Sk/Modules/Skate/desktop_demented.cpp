@@ -704,14 +704,14 @@ extern "C" unsigned int desktop_rando_voix( void )
 // the body ones need the real flags, put back when they end.
 enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_STATS_MAX, EV_STATS_RND,
        EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, EV_SONS,
-       EV_BOUTONS, EV_FRAGILE, EV_PERMA, EV_FANTOME, EV_SEISME, EV_ECHANGE, EV_SWITCH, EV_TAILLE, EV_YTP, EV_PRIME, EV_RUSH, NB_EV };
+       EV_BOUTONS, EV_FRAGILE, EV_PERMA, EV_FANTOME, EV_SEISME, EV_ECHANGE, EV_SWITCH, EV_TAILLE, EV_YTP, EV_PRIME, EV_RUSH, EV_LAG, NB_EV };
 static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
 	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
 	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD", "SOUND SALAD",
 	"NO BUTTON HINTS", "FRAGILE", "PERMA BAIL", "HEAVY GHOSTING", "EARTHQUAKE", "SWAPPED BUTTONS", "FORCED SWITCH",
-	"TINY/GIANT", "YTP DIALOGUE", "BOUNTY", "PED RUSH" };
+	"TINY/GIANT", "YTP DIALOGUE", "BOUNTY", "PED RUSH", "LAG" };
 // 0: never (Marcus: no moon gravity, and nothing that just helps the player: maxed stats, always special, perfect balance)
-static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3, 6, 5, 5, 5, 5, 5, 6, 4 };
+static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3, 6, 5, 5, 5, 5, 5, 6, 4, 5 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
 static float s_ev_duree[NB_EV];		// how long it was rolled for (Earthquake's ease in/out)
 // Tiny/Giant: the skater's scale while it lasts
@@ -781,9 +781,20 @@ static void ev_temps( void )
 
 // Fragile / Perma Bail events: a red banner like "Out of bounds!" that stays
 // up while it lasts (Marcus)
+// Swapped Buttons (Marcus): two random buttons trade places, named on screen
+static int s_echange_a = 0, s_echange_b = 3;	// 0 X 1 Circle 2 Square 3 Triangle 4 L1 5 R1 6 L2 7 R2
+static const char *s_noms_boutons[8] = { "X", "CIRCLE", "SQUARE", "TRIANGLE", "L1", "R1", "L2", "R2" };
+static char s_echange_texte[48] = "";
 static const char *ev_banniere_id( int e )
 {
-	return e == EV_PERMA ? "desktop_chaos_perma" : ( e == EV_SEISME ? "desktop_chaos_seisme" : "desktop_chaos_fragile" );
+	switch( e )
+	{
+		case EV_PERMA: return "desktop_chaos_perma";
+		case EV_SEISME: return "desktop_chaos_seisme";
+		case EV_ECHANGE: return "desktop_chaos_echange";
+		case EV_LAG: return "desktop_chaos_lag";
+		default: return "desktop_chaos_fragile";
+	}
 }
 static void ev_banniere( int e, bool on )
 {
@@ -791,8 +802,14 @@ static void ev_banniere( int e, bool on )
 	p.AddChecksum( "id", crc( ev_banniere_id( e )));
 	if( on )
 	{
-		p.AddString( "text", e == EV_PERMA ? "PERMA BAIL" : ( e == EV_SEISME ? "EARTHQUAKE!!!" : "FRAGILE" ));
-		p.AddPair( "pos", 320.0f, e == EV_PERMA ? 80.0f : ( e == EV_SEISME ? 140.0f : 110.0f ));
+		const char *t = "FRAGILE";
+		float y = 110.0f;
+		if( e == EV_PERMA ) { t = "PERMA BAIL"; y = 80.0f; }
+		if( e == EV_SEISME ) { t = "EARTHQUAKE!!!"; y = 140.0f; }
+		if( e == EV_ECHANGE ) { t = s_echange_texte; y = 170.0f; }
+		if( e == EV_LAG ) { t = "LAG!!!"; y = 200.0f; }
+		p.AddString( "text", t );
+		p.AddPair( "pos", 320.0f, y );
 	}
 	Script::RunScript( on ? "desktop_chaos_banner" : "desktop_chaos_banner_off", &p );
 }
@@ -980,7 +997,7 @@ static void ev_fin( int e )
 	if( e == EV_FLIP ) s_flip = false;
 	if( e == EV_REVERSE ) s_inverse = false;
 	if( e == EV_SCRAMBLE || e == EV_BOUTONS ) ++s_txt_gen;	// back to plain text
-	if( e == EV_FRAGILE || e == EV_PERMA || e == EV_SEISME ) ev_banniere( e, false );
+	if( e == EV_FRAGILE || e == EV_PERMA || e == EV_SEISME || e == EV_ECHANGE || e == EV_LAG ) ev_banniere( e, false );
 	if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
 	if( e == EV_SLOW || e == EV_FAST ) ev_temps();
 	if( ev_drapeau( e )) ev_corps();
@@ -1048,7 +1065,15 @@ static void ev_lancer( Game::CGoalManager *gm )
 			s_ev_reste[e] = duree;
 			s_ev_duree[e] = duree;
 			if( e == EV_FLIP ) s_flip = true;
-			if( e == EV_SEISME ) ev_banniere( e, true );	// the only label besides FRAGILE / PERMA BAIL (Marcus)
+			if( e == EV_SEISME || e == EV_LAG ) ev_banniere( e, true );	// labels Marcus asked for
+			if( e == EV_ECHANGE )
+			{
+				s_echange_a = (int)hasard( 8 );
+				s_echange_b = (int)hasard( 7 );
+				if( s_echange_b >= s_echange_a ) ++s_echange_b;
+				snprintf( s_echange_texte, sizeof( s_echange_texte ), "%s SWAPPED WITH %s!", s_noms_boutons[s_echange_a], s_noms_boutons[s_echange_b] );
+				ev_banniere( e, true );
+			}
 			if( e == EV_TAILLE ) { s_taille = hasard( 2 ) ? 2.0f : 0.4f; ev_taille_appliquer( s_taille ); }
 			if( e == EV_PRIME ) { prime_lancer(); s_ev_reste[e] = s_ev_duree[e] = prime_duree(); }
 			if( e == EV_RUSH ) { rush_lancer(); s_ev_reste[e] = s_ev_duree[e] = 15.0f; }
@@ -1086,6 +1111,8 @@ static void chaos_maj( float dt, bool pause, bool film )
 			if( s_ev_reste[EV_FRAGILE] > 0.0f && !element( crc( "desktop_chaos_fragile" ))) ev_banniere( EV_FRAGILE, true );
 			if( s_ev_reste[EV_PERMA] > 0.0f && !element( crc( "desktop_chaos_perma" ))) ev_banniere( EV_PERMA, true );
 			if( s_ev_reste[EV_SEISME] > 0.0f && !element( crc( "desktop_chaos_seisme" ))) ev_banniere( EV_SEISME, true );
+			if( s_ev_reste[EV_ECHANGE] > 0.0f && !element( crc( "desktop_chaos_echange" ))) ev_banniere( EV_ECHANGE, true );
+			if( s_ev_reste[EV_LAG] > 0.0f && !element( crc( "desktop_chaos_lag" ))) ev_banniere( EV_LAG, true );
 			// kid mode / big head refreshes put the scale back: Tiny/Giant again
 			if( s_ev_reste[EV_TAILLE] > 0.0f ) ev_taille_appliquer( s_taille );
 		}
@@ -1210,6 +1237,29 @@ extern "C" float desktop_chaos_seisme( void )
 }
 
 // shim_input_audio.cpp: Swapped Buttons (ollie <-> grind), not in menus
+// shim_input_audio.cpp: the two buttons swapped (indices as s_noms_boutons)
+extern "C" int desktop_chaos_echange( int *a, int *b )
+{
+	*a = s_echange_a; *b = s_echange_b;
+	return chaos_on() && s_ev_reste[EV_ECHANGE] > 0.0f && !s_menu_seul;
+}
+
+// shim_gl.cpp: LAG!!! (Marcus): the frame rate wanders between 5 and 20 fps
+// while it lasts (0 = off). Menus run normally.
+extern "C" int desktop_chaos_lag( void )
+{
+	static int fps = 12;
+	static unsigned n = 0;
+	if( !chaos_on() || s_ev_reste[EV_LAG] <= 0.0f || s_menu_seul ) return 0;
+	if( ++n % 4 == 0 )	// a new speed every few frames, so it stutters unevenly
+	{
+		fps += (int)( melanger( n * 0x9E3779B1u ^ s_graine_chaos ) % 9 ) - 4;
+		if( fps < 5 ) fps = 5;
+		if( fps > 20 ) fps = 20;
+	}
+	return fps;
+}
+
 extern "C" int desktop_chaos_boutons( void )
 {
 	return chaos_on() && s_ev_reste[EV_ECHANGE] > 0.0f && !s_menu_seul;
@@ -1439,7 +1489,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 {
 	if( !in || n < 2 ) return 0;
 	// Demented's own notices stay readable (lives, time, the red banners)
-	static const char *s_propres[] = { "-1 LIFE", "+1 LIFE", "OUT OF TIME", "TIME EXTEND", "FRAGILE", "PERMA BAIL", "Missing trick", "EARTHQUAKE", "\\c0\\c0" };
+	static const char *s_propres[] = { "-1 LIFE", "+1 LIFE", "OUT OF TIME", "TIME EXTEND", "FRAGILE", "PERMA BAIL", "Missing trick", "EARTHQUAKE", "SWAPPED WITH", "LAG!!!", "\\c0\\c0" };
 	for( int i = 0; i < (int)( sizeof( s_propres ) / sizeof( s_propres[0] )); ++i )
 		if( strstr( in, s_propres[i] )) return 0;
 	// Word Salad randomizer: words shuffled, one seed per chapter, in play

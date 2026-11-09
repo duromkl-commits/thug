@@ -18,6 +18,7 @@
 
 #ifdef THUG_DESKTOP
 extern "C" double desktop_frame_step( void );	// desktop/src/shim_gl.cpp
+extern "C" int desktop_chaos_lag( void );	// desktop_demented.cpp
 extern "C" int desktop_max_fps( void );		// desktop/src/desktop_runtime.cpp
 #endif
 
@@ -148,7 +149,11 @@ void	OncePerRender()
 
 	float diff = (float)dt / 16666.667f;
 	// Issue #17 : toute image longue est tracee (hors chargements, > 1 s).
+#ifdef THUG_DESKTOP
+	if(( dt > 50000 ) && ( dt < 1000000 ) && !desktop_chaos_lag())	// not during the Chaos LAG!!! event
+#else
 	if(( dt > 50000 ) && ( dt < 1000000 ))
+#endif
 		VLOG( "PERF", "image longue : %.1f ms", (float)dt / 1000.0f );
 	s_render_buffer[s_render_index] = diff;
 	if( ++s_render_index == vSMOOTH_N )

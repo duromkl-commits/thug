@@ -36,6 +36,7 @@ extern "C" void vita_log_printf( const char *sys, const char *fmt, ... );
 
 bool cg_to_glsl( const char *p_src, bool vertex, std::string &out, std::string &err );
 extern "C" void desktop_pump_events( void );
+extern "C" int desktop_chaos_lag( void );	// desktop_demented.cpp: Chaos LAG!!! fps, 0 when off
 
 // -- Loaded entry points ----------------------------------------------------------
 #define DESKTOP_GL_DEFINE( type, name ) type dgl_##name = NULL;
@@ -684,6 +685,19 @@ extern "C" void vglSwapBuffers( GLboolean )
 	}
 
 	cadence_attendre();
+	{
+		// Demented Chaos LAG!!!: frames held to 5-20 fps (the game steps by the
+		// real time, so it's choppy, not slowed down)
+		static Uint64 s_lag_der = 0;
+		const int lag = desktop_chaos_lag();
+		const Uint64 f = SDL_GetPerformanceFrequency(), t = SDL_GetPerformanceCounter();
+		if( lag > 0 && s_lag_der )
+		{
+			const Uint64 voulu = f / (Uint64)lag;
+			if( t - s_lag_der < voulu ) SDL_Delay( (Uint32)(( voulu - ( t - s_lag_der )) * 1000 / f ));
+		}
+		s_lag_der = SDL_GetPerformanceCounter();
+	}
 	SDL_GL_SwapWindow( s_window );
 	cadence_mesure();
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );

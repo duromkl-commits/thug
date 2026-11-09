@@ -152,7 +152,7 @@ static unsigned char axis_to_byte( Sint16 v )
 }
 
 extern "C" int desktop_mirror_input( void );	// desktop_demented.cpp
-extern "C" int desktop_chaos_boutons( void );	// Chaos Swapped Buttons: ollie <-> grind
+extern "C" int desktop_chaos_echange( int *a, int *b );	// Chaos Swapped Buttons: two random buttons
 
 extern "C" int sceCtrlPeekBufferPositive( int, SceCtrlData *d, int )
 {
@@ -229,12 +229,17 @@ extern "C" int sceCtrlPeekBufferPositive( int, SceCtrlData *d, int )
 		if( g ) b |= SCE_CTRL_RIGHT;
 		if( dr ) b |= SCE_CTRL_LEFT;
 	}
-	if( desktop_chaos_boutons())
 	{
-		const unsigned x = b & SCE_CTRL_CROSS, t = b & SCE_CTRL_TRIANGLE;
-		b &= ~( SCE_CTRL_CROSS | SCE_CTRL_TRIANGLE );
-		if( x ) b |= SCE_CTRL_TRIANGLE;
-		if( t ) b |= SCE_CTRL_CROSS;
+		int ia = 0, ib = 0;
+		if( desktop_chaos_echange( &ia, &ib ) && ia >= 0 && ia < 8 && ib >= 0 && ib < 8 )
+		{
+			static const unsigned m[8] = { SCE_CTRL_CROSS, SCE_CTRL_CIRCLE, SCE_CTRL_SQUARE, SCE_CTRL_TRIANGLE,
+			                               DESKTOP_PAD_L1, DESKTOP_PAD_R1, SCE_CTRL_LTRIGGER, SCE_CTRL_RTRIGGER };
+			const unsigned x = b & m[ia], t = b & m[ib];
+			b &= ~( m[ia] | m[ib] );
+			if( x ) b |= m[ib];
+			if( t ) b |= m[ia];
+		}
 	}
 	desktop_pad_record( b, d->lx, d->ly, d->rx, d->ry );	// extras read it too
 	d->buttons = b;
