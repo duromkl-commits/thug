@@ -743,8 +743,14 @@ extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte )
 	return 1;
 }
 
-extern "C" int desktop_noms_extra_count( void );		// custom_music.cpp: data\custom\names.txt
-extern "C" const char *desktop_noms_extra( int i );
+extern "C" int desktop_noms_extra_count( int famille );		// custom_music.cpp: data\custom\(last-)names.txt
+extern "C" const char *desktop_noms_extra( int famille, int i );
+
+// Random Names: last names it knows (not "Way" or "Song": ordinary words)
+static const char *s_noms_famille[] = { "Hawk", "Sparrow", "Margera", "Mullen", "Burnquist", "Vallely", "Reynolds",
+	"Glifberg", "Saari", "Thomas", "Campbell", "Rowley", "Lasek", "Koston", "Muska", "Peralta", "Hosoi", "Caballero",
+	"Rodriguez", "Steamer", "Sheckler", "Dyrdek", "Templeton", "Gonzalez", "Moore", "Sanchez" };
+static const int NB_NOMS_FAMILLE = (int)( sizeof( s_noms_famille ) / sizeof( s_noms_famille[0] ));
 
 // Chaos: people's names swapped for each other (the same swap all run), and
 // now and then a word with two letters traded. Same input, same output, so
@@ -801,14 +807,32 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 			{
 				if( noms )
 				{
-					const int nx = desktop_noms_extra_count();
+					const int nx = desktop_noms_extra_count( 0 );
 					const uint32 h = melanger((uint32)i * 0x9E3779B1u ^ s_rando_graine ^ 0x1f83d9abu );
 					const uint32 k = h % (uint32)( NB_NOMS_CHAOS + nx );
-					rempl = k < (uint32)NB_NOMS_CHAOS ? s_noms_chaos[k] : desktop_noms_extra( (int)k - NB_NOMS_CHAOS );
+					rempl = k < (uint32)NB_NOMS_CHAOS ? s_noms_chaos[k] : desktop_noms_extra( 0, (int)k - NB_NOMS_CHAOS );
 					if( !rempl ) rempl = s_noms_chaos[i];
 				}
 				else rempl = s_noms_chaos[s_perm_noms[i]];
 			}
+		}
+		for( int i = 0; noms && i < NB_NOMS_FAMILLE && !rempl; ++i )
+		{
+			const char *nm = s_noms_famille[i];
+			if( (int)strlen( nm ) != l ) continue;
+			bool ok = true;
+			for( int k = 0; k < l && ok; ++k )
+			{
+				char c = d[k];
+				if( majuscules && c >= 'A' && c <= 'Z' && k > 0 ) c = (char)( c - 'A' + 'a' );
+				ok = c == nm[k];
+			}
+			if( !ok ) continue;
+			const int nx = desktop_noms_extra_count( 1 );
+			const uint32 h = melanger((uint32)i * 0x85ebca6bu ^ s_rando_graine ^ 0x5be0cd19u );
+			const uint32 k = h % (uint32)( NB_NOMS_FAMILLE + nx );
+			rempl = k < (uint32)NB_NOMS_FAMILLE ? s_noms_famille[k] : desktop_noms_extra( 1, (int)k - NB_NOMS_FAMILLE );
+			if( !rempl ) rempl = nm;
 		}
 		if( rempl )
 		{

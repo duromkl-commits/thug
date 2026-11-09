@@ -2782,22 +2782,13 @@ extern "C" int custom_music_open( int i )
 
 // --- Random Names' extra pool --------------------------------------------------
 //
-// data\custom\names.txt: one name per line (# comments), added to the stock
-// list of names the Random Names randomizer picks from.
-static std::vector<std::string> s_noms_extra;
+// data\custom\names.txt and last-names.txt: one name per line (# comments),
+// added to the stock first and last names the Random Names randomizer picks from.
+static std::vector<std::string> s_noms_extra[2];	// first names, last names
 static bool s_noms_extra_lu = false;
 
-static void noms_extra_lit( void )
+static void noms_fichier( const std::string &chemin, std::vector<std::string> &v )
 {
-	if( s_noms_extra_lu ) return;
-	s_noms_extra_lu = true;
-	char *base = SDL_GetBasePath();
-#ifdef _WIN32
-	const std::string chemin = std::string( base ? base : "" ) + "data\\custom\\names.txt";
-#else
-	const std::string chemin = std::string( base ? base : "" ) + "data/custom/names.txt";
-#endif
-	SDL_free( base );
 	FILE *f = fopen( chemin.c_str(), "rb" );
 	if( !f ) return;
 	char l[256];
@@ -2806,25 +2797,53 @@ static void noms_extra_lit( void )
 		size_t n = strlen( l );
 		while( n && ( l[n - 1] == '\n' || l[n - 1] == '\r' || l[n - 1] == ' ' || l[n - 1] == '\t' )) l[--n] = 0;
 		char *d = l;
+		if((unsigned char)d[0] == 0xef && (unsigned char)d[1] == 0xbb && (unsigned char)d[2] == 0xbf ) d += 3;	// UTF-8 mark
 		while( *d == ' ' || *d == '\t' ) ++d;
 		if( !*d || *d == '#' || strlen( d ) > 40 ) continue;
-		if((unsigned char)d[0] == 0xef && (unsigned char)d[1] == 0xbb && (unsigned char)d[2] == 0xbf ) d += 3;	// UTF-8 mark
-		if( *d ) s_noms_extra.push_back( d );
+		// SMITH -> Smith (McX, O'X kept capitalised)
+		bool maj = true;
+		for( char *q = d; *q; ++q ) if( *q >= 'a' && *q <= 'z' ) { maj = false; break; }
+		if( maj )
+			for( char *q = d + 1; *q; ++q )
+			{
+				const char p = q[-1];
+				const bool debut = p == '\'' || p == '-' || p == ' ' || ( q - d == 2 && ( d[0] == 'M' && d[1] == 'C' ));
+				if( !debut && *q >= 'A' && *q <= 'Z' ) *q = (char)( *q - 'A' + 'a' );
+			}
+		if( d[0] == 'M' && d[1] == 'c' && d[2] >= 'a' && d[2] <= 'z' && maj ) d[2] = (char)( d[2] - 'a' + 'A' );
+		v.push_back( d );
 	}
 	fclose( f );
-	VLOG( "DSK", "random names: %d extra names in data\\custom\\names.txt", (int)s_noms_extra.size());
 }
 
-extern "C" int desktop_noms_extra_count( void )
+static void noms_extra_lit( void )
 {
-	noms_extra_lit();
-	return (int)s_noms_extra.size();
+	if( s_noms_extra_lu ) return;
+	s_noms_extra_lu = true;
+	char *base = SDL_GetBasePath();
+#ifdef _WIN32
+	const std::string dossier = std::string( base ? base : "" ) + "data\\custom\\";
+#else
+	const std::string dossier = std::string( base ? base : "" ) + "data/custom/";
+#endif
+	SDL_free( base );
+	noms_fichier( dossier + "names.txt", s_noms_extra[0] );
+	noms_fichier( dossier + "last-names.txt", s_noms_extra[1] );
+	VLOG( "DSK", "random names: %d first names, %d last names in data\\custom", (int)s_noms_extra[0].size(), (int)s_noms_extra[1].size());
 }
 
-extern "C" const char *desktop_noms_extra( int i )
+// famille 0: first names (names.txt), 1: last names (last-names.txt)
+extern "C" int desktop_noms_extra_count( int famille )
 {
 	noms_extra_lit();
-	return ( i >= 0 && i < (int)s_noms_extra.size()) ? s_noms_extra[i].c_str() : NULL;
+	return (int)s_noms_extra[famille ? 1 : 0].size();
+}
+
+extern "C" const char *desktop_noms_extra( int famille, int i )
+{
+	noms_extra_lit();
+	const std::vector<std::string> &v = s_noms_extra[famille ? 1 : 0];
+	return ( i >= 0 && i < (int)v.size()) ? v[i].c_str() : NULL;
 }
 
 // --- Sound Salad's extra pool ----------------------------------------------------
