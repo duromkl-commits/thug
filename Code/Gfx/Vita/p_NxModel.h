@@ -433,9 +433,11 @@ private:
 	virtual bool	plat_set_material_color( uint32 mat_checksum, int pass, Image::RGBA rgba );
 #ifdef THUG_DESKTOP
 public:
-	// every piece's vertex colours times f (0..1 each), from the raw colours
-	void			DesktopTeinte( const float f[3] );
+	// the goal star's texture recoloured: brightness x f (0..1 each), at the
+	// next render; NULL = its own texture back
+	void			DesktopTeinte( const float *f );
 private:
+	void			desktop_teinte_appliquer();
 #endif
 	// Issue #16 : la version de base est un STUB (NxGeom.cpp:488) -- les
 	// tatouages et logos du CAS restaient a leur place par defaut.

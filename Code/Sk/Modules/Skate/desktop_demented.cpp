@@ -464,6 +464,18 @@ extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, floa
 	}
 }
 
+// The goal givers' stars (Element3d.cpp): red, or with Random Colours a hue
+// of their own (not the lives overlay's). Returns the seed, 0 = stay red.
+extern "C" unsigned int desktop_rando_etoile( unsigned char *r, unsigned char *g, unsigned char *b )
+{
+	if( !rando_on( MOD_R_COULEURS ) || !s_rando_graine ) return 0;
+	float fr = 1.0f, fg = 0.0f, fb = 0.0f;
+	desktop_rando_teinte( 0x6a09e667, &fr, &fg, &fb );
+	*r = (unsigned char)( fr * 128.0f ); *g = (unsigned char)( fg * 128.0f ); *b = (unsigned char)( fb * 128.0f );
+	if( !*r && !*g && !*b ) *r = 1;
+	return s_rando_graine;
+}
+
 // Random Voices (p_music.cpp): voice streams swapped for another of about
 // the same length. 0 = off.
 extern "C" unsigned int desktop_rando_voix( void )
@@ -974,8 +986,10 @@ void DesktopDementedUpdate( Skate &mdl )
 		const int n = s_run.mods[MOD_LIVES] ? ( s_run.vies > 0 ? s_run.vies : 0 ) : 0;
 		const int miroir = 0;
 		const bool hud = s_run.hud;
-		float r = 1.0f, g = 0.0f, b = 0.0f;
-		if( rando_on( MOD_R_COULEURS )) desktop_rando_teinte( 0x510e527f, &r, &g, &b );
+		// olive green (Marcus's swatch, about 60,71,23 on the star's body),
+		// a random hue with Random Colours
+		float r = 0.40f, g = 0.47f, b = 0.15f;
+		if( rando_on( MOD_R_COULEURS )) { r = 1.0f; g = 0.0f; b = 0.0f; desktop_rando_teinte( 0x510e527f, &r, &g, &b ); }
 		const uint32 coul = ((uint32)( r * 128.0f ) << 16 ) | ((uint32)( g * 128.0f ) << 8 ) | (uint32)( b * 128.0f );
 		if( s_hud_neuf || n != s_n || miroir != s_miroir || coul != s_coul )
 		{
@@ -989,7 +1003,7 @@ void DesktopDementedUpdate( Skate &mdl )
 				{
 					// Inside the TV border (2D y runs -16..464 on screen), a few
 					// units from its left and bottom edges, then upwards.
-					p.AddPair( "pos", 14.0f, 450.0f - 25.0f * (float)i );
+					p.AddPair( "pos", 18.0f, 450.0f - 25.0f * (float)i );
 					Script::CArray *a = new Script::CArray;
 					a->SetSizeAndType( 4, ESYMBOLTYPE_INTEGER );
 					a->SetInteger( 0, (int)( r * 128.0f )); a->SetInteger( 1, (int)( g * 128.0f ));

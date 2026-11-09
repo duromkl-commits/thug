@@ -519,9 +519,33 @@ int LoadVitaTextureMemory( const void *p_data,
 
 
 #ifdef THUG_DESKTOP
-// DXT1 blocks to grey: each endpoint becomes its brightest channel, keeping
-// the block's mode (c0 > c1 four colours, else three + transparent).
-static void dxt1_gris( unsigned char *p, uint32 taille )
+// --- the goal star's recoloured copies --------------------------------------
+//
+// The star's textures are pure red DXT1 and its vertex colours override any
+// model colour, so a tint can only come from the texture itself. Level 0 is
+// kept at load; a copy gets each block's endpoints as brightness x colour.
+struct SEtoileTex { uint32 ck; uint32 w, h; std::vector<unsigned char> d; GLuint gl; };
+static std::vector<SEtoileTex> s_etoile_tex;
+struct SEtoileCopie { GLuint orig, copie; uint32 cle; };
+static std::vector<SEtoileCopie> s_etoile_copies;
+
+static void etoile_garde( uint32 ck, uint32 w, uint32 h, const unsigned char *p, uint32 n )
+{
+	for( size_t i = 0; i < s_etoile_tex.size(); ++i )
+		if( s_etoile_tex[i].ck == ck ) { s_etoile_tex[i].d.assign( p, p + n ); s_etoile_tex[i].w = w; s_etoile_tex[i].h = h; s_etoile_tex[i].gl = 0; return; }
+	SEtoileTex t; t.ck = ck; t.w = w; t.h = h; t.d.assign( p, p + n ); t.gl = 0;
+	s_etoile_tex.push_back( t );
+}
+
+static void etoile_gl( uint32 ck, GLuint gl )
+{
+	for( size_t i = 0; i < s_etoile_tex.size(); ++i )
+		if( s_etoile_tex[i].ck == ck && !s_etoile_tex[i].gl ) s_etoile_tex[i].gl = gl;
+}
+
+// each endpoint: its brightest channel, times f, back to 565, keeping the
+// block's mode (c0 > c1 four colours, else three + transparent)
+static void dxt1_teinte( unsigned char *p, uint32 taille, const float f[3] )
 {
 	for( uint32 o = 0; o + 8 <= taille; o += 8 )
 	{
@@ -531,16 +555,20 @@ static void dxt1_gris( unsigned char *p, uint32 taille )
 		for( int k = 0; k < 2; ++k )
 		{
 			const unsigned short v = k ? c1 : c0;
-			int l = v >> 11;
-			if((( v >> 6 ) & 31 ) > l ) l = ( v >> 6 ) & 31;
-			if(( v & 31 ) > l ) l = v & 31;
-			c[k] = (unsigned short)(( l << 11 ) | ((( l << 1 ) | ( l >> 4 )) << 5 ) | l );
+			float l = ( v >> 11 ) / 31.0f;
+			const float g = (( v >> 5 ) & 63 ) / 63.0f, b = ( v & 31 ) / 31.0f;
+			if( g > l ) l = g;
+			if( b > l ) l = b;
+			int r5 = (int)( l * f[0] * 31.0f + 0.5f ), g6 = (int)( l * f[1] * 63.0f + 0.5f ), b5 = (int)( l * f[2] * 31.0f + 0.5f );
+			if( r5 > 31 ) r5 = 31;
+			if( g6 > 63 ) g6 = 63;
+			if( b5 > 31 ) b5 = 31;
+			c[k] = (unsigned short)(( r5 << 11 ) | ( g6 << 5 ) | b5 );
 		}
 		unsigned int idx = p[o + 4] | ( p[o + 5] << 8 ) | ( p[o + 6] << 16 ) | ((unsigned int)p[o + 7] << 24 );
 		if( quatre && c[0] == c[1] ) idx = 0;	// would turn into three colours
 		else if( quatre != ( c[0] > c[1] ))
 		{
-			// order flipped: swap the endpoints and the indices that name them
 			const unsigned short x = c[0]; c[0] = c[1]; c[1] = x;
 			unsigned int n = 0;
 			for( int i = 0; i < 16; ++i )
@@ -555,6 +583,43 @@ static void dxt1_gris( unsigned char *p, uint32 taille )
 		p[o] = c[0] & 255; p[o + 1] = c[0] >> 8; p[o + 2] = c[1] & 255; p[o + 3] = c[1] >> 8;
 		p[o + 4] = idx & 255; p[o + 5] = ( idx >> 8 ) & 255; p[o + 6] = ( idx >> 16 ) & 255; p[o + 7] = idx >> 24;
 	}
+}
+
+// gl: a texture bound to a piece (the star's own, one of its copies, or any
+// other). f = NULL: the star's own texture back. Anything else comes back
+// unchanged.
+unsigned int DesktopTextureEtoile( unsigned int gl, const float *f )
+{
+	GLuint orig = gl;
+	for( size_t i = 0; i < s_etoile_copies.size(); ++i )
+		if( s_etoile_copies[i].copie == gl ) { orig = s_etoile_copies[i].orig; break; }
+	const SEtoileTex *t = NULL;
+	for( size_t i = 0; i < s_etoile_tex.size(); ++i )
+		if( s_etoile_tex[i].gl && s_etoile_tex[i].gl == orig ) t = &s_etoile_tex[i];
+	if( !t ) return gl;
+	if( !f ) return orig;
+	const uint32 cle = ((uint32)( f[0] * 255.0f ) << 16 ) | ((uint32)( f[1] * 255.0f ) << 8 ) | (uint32)( f[2] * 255.0f );
+	for( size_t i = 0; i < s_etoile_copies.size(); ++i )
+		if( s_etoile_copies[i].orig == orig && s_etoile_copies[i].cle == cle ) return s_etoile_copies[i].copie;
+	std::vector<unsigned char> d = t->d;
+	dxt1_teinte( &d[0], (uint32)d.size(), f );
+	GLuint c = 0;
+	glGenTextures( 1, &c );
+	glBindTexture( GL_TEXTURE_2D, c );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	envoi_dxt_prepare();
+	glCompressedTexImage2D( GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, (GLsizei)t->w, (GLsizei)t->h, 0, (GLsizei)d.size(), &d[0] );
+	noter_alpha_min( c, alpha_min_dxt1( &d[0], (unsigned int)d.size()));
+	SEtoileCopie e; e.orig = orig; e.copie = c; e.cle = cle;
+	s_etoile_copies.push_back( e );
+	if( s_etoile_copies.size() > 64 )
+	{
+		glDeleteTextures( 1, &s_etoile_copies[0].copie );	// oldest (a colour from chapters ago)
+		s_etoile_copies.erase( s_etoile_copies.begin());
+	}
+	VLOG( "TEX", "goal star copy %u -> %u (%.2f %.2f %.2f)", (unsigned)orig, (unsigned)c, f[0], f[1], f[2] );
+	return c;
 }
 #endif
 
@@ -627,13 +692,11 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			}
 			rd( p_src, (int)data_size, 1, p_rd );
 #ifdef THUG_DESKTOP
-			// The goal givers' star (models/arrow): its two DXT1 textures are
-			// pure red, so a model colour could only darken them. Made grey
-			// here, and Element3d gives the arrow model red back unless the
-			// script asks for another colour (Demented lives, Random Colours).
-			if(( dxt == 1 ) && ((( checksum == 0x8454d094 ) && ( base_width == 64 ) && ( base_height == 128 ))
+			// The goal givers' star (models/arrow): level 0 of its DXT1
+			// textures kept, for recoloured copies (DesktopTextureEtoile).
+			if(( level == 0 ) && ( dxt == 1 ) && ((( checksum == 0x8454d094 ) && ( base_width == 64 ) && ( base_height == 128 ))
 			                 || (( checksum == 0xdfea5d0c ) && ( base_width == 32 ) && ( base_height == 32 ))))
-				dxt1_gris( p_src, data_size );
+				etoile_garde( checksum, base_width, base_height, p_src, data_size );
 #endif
 
 			// Niveaux suivants d'une texture DXT (hors DXT5, decodee) : envoyes
@@ -793,6 +856,9 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			break;
 		}
 
+#ifdef THUG_DESKTOP
+		etoile_gl( checksum, gl_tex );
+#endif
 		// Chaine de mips : celle du fichier (DXT), ou regeneree par vitaGL.
 		if( gl_tex && ( levels > 1 ) && ( NxVita::g_vita_mip > 0 ))
 		{

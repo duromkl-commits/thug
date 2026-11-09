@@ -3677,29 +3677,41 @@ bool CVitaGeom::plat_set_material_color( uint32 mat_name_checksum, int pass, Ima
 }
 
 #ifdef THUG_DESKTOP
-// Element3d's goal star: its vertex colours replace glColor, so a model
-// colour never showed. The tint is baked into them instead, like the CAS
-// material colours above (and the lit copy, for rigid pieces).
-void CVitaGeom::DesktopTeinte( const float f[3] )
+// Element3d's goal star: its vertex colours replace glColor and its texture
+// is pure red, so the colour comes from a recoloured copy of the texture
+// (p_NxTexture.cpp DesktopTextureEtoile). Applied at the geom's next render,
+// when its pieces surely exist; f = NULL puts the star's own texture back.
+unsigned int DesktopTextureEtoile( unsigned int gl, const float *f );	// p_NxTexture.cpp
+struct SDesktopTeinteGeom { const CVitaGeom *g; float f[3]; bool orig; };
+static SDesktopTeinteGeom s_desktop_teintes[64];
+static int s_desktop_nteintes = 0;
+
+void CVitaGeom::DesktopTeinte( const float *f )
 {
-	if( !mp_mesh )
+	SDesktopTeinteGeom e; e.g = this; e.orig = !f;
+	e.f[0] = f ? f[0] : 1.0f; e.f[1] = f ? f[1] : 1.0f; e.f[2] = f ? f[2] : 1.0f;
+	for( int i = 0; i < s_desktop_nteintes; ++i )
+		if( s_desktop_teintes[i].g == this ) { s_desktop_teintes[i] = e; return; }
+	if( s_desktop_nteintes < 64 ) s_desktop_teintes[s_desktop_nteintes++] = e;
+}
+
+void CVitaGeom::desktop_teinte_appliquer()
+{
+	if( !s_desktop_nteintes || !mp_mesh || ( mp_mesh->NumPieces() <= 0 ))
 		return;
-	const float k[3] = { f[0], f[1], f[2] };	// 1 = as loaded (the star's material colour is neutral)
-	for( int i = 0; i < mp_mesh->NumPieces(); ++i )
+	for( int i = 0; i < s_desktop_nteintes; ++i )
 	{
-		SGpuMesh *p = const_cast< SGpuMesh * >( &mp_mesh->Pieces()[i] );
-		if( p->color_locked || !p->cbo || !p->p_couleurs_brutes )
+		if( s_desktop_teintes[i].g != this )
 			continue;
-		const unsigned char *p_up = NxVita::TeindreCouleursMateriau( p->p_couleurs_brutes, p->num_vertices, k );
-		glBindBuffer( GL_ARRAY_BUFFER, p->cbo );
-		glBufferData( GL_ARRAY_BUFFER, 4 * p->num_vertices, p_up, GL_STATIC_DRAW );
-		if( p->p_c_base && p->cbo_rig )
+		const SDesktopTeinteGeom e = s_desktop_teintes[i];
+		s_desktop_teintes[i] = s_desktop_teintes[--s_desktop_nteintes];
+		for( int k = 0; k < mp_mesh->NumPieces(); ++k )
 		{
-			memcpy( p->p_c_base, p_up, 4 * p->num_vertices );
-			glBindBuffer( GL_ARRAY_BUFFER, p->cbo_rig );
-			glBufferData( GL_ARRAY_BUFFER, 4 * p->num_vertices, p_up, GL_DYNAMIC_DRAW );
+			SGpuMesh *p = const_cast< SGpuMesh * >( &mp_mesh->Pieces()[k] );
+			if( p->texture )
+				p->texture = DesktopTextureEtoile( p->texture, e.orig ? NULL : e.f );
 		}
-		glBindBuffer( GL_ARRAY_BUFFER, 0 );
+		return;
 	}
 }
 
@@ -3707,12 +3719,13 @@ void DesktopTeinterModele( Nx::CModel *p_model, unsigned char r, unsigned char g
 {
 	if( !p_model )
 		return;
-	const float f[3] = { r / 128.0f > 1.0f ? 1.0f : r / 128.0f, g / 128.0f > 1.0f ? 1.0f : g / 128.0f, b / 128.0f > 1.0f ? 1.0f : b / 128.0f };
+	float f[3] = { r / 128.0f > 1.0f ? 1.0f : r / 128.0f, g / 128.0f > 1.0f ? 1.0f : g / 128.0f, b / 128.0f > 1.0f ? 1.0f : b / 128.0f };
+	const bool orig = ( r == 0 ) && ( g == 0 ) && ( b == 0 );	// 0,0,0 = the star's own red
 	for( int i = 0; i < p_model->GetNumGeoms(); ++i )
 	{
 		CVitaGeom *p_geom = static_cast< CVitaGeom * >( p_model->GetGeomByIndex( i ));
 		if( p_geom )
-			p_geom->DesktopTeinte( f );
+			p_geom->DesktopTeinte( orig ? NULL : f );
 	}
 }
 #endif
@@ -4622,6 +4635,9 @@ bool CVitaGeom::plat_render( Mth::Matrix *pRootMatrix,
 		}
 		sp_lum_inst  = g_vita_lum_instance ? mp_vita_lum : NULL;
 		s_lum_inst_n = m_vita_lum_n;
+#ifdef THUG_DESKTOP
+		desktop_teinte_appliquer();
+#endif
 		if( skin )
 			mp_mesh->DrawSkinned( ppBoneMatrices, numBones, m_vita_rgba,
 			                      (CVitaModelLights *)mp_vita_lights );

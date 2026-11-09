@@ -94,6 +94,8 @@ class CElement3d : public CScreenElement
 #ifdef THUG_DESKTOP
 	bool	m_desktop_ecran;	// desktop_screen_pos: placed with the real projection, 2D margin included
 	bool	m_desktop_propre;	// desktop_own_mesh: its own copy of the mesh, so its tint is its own
+	bool	m_desktop_etoile;	// model "arrow" (the goal star)
+	unsigned int m_desktop_cle;	// Random Colours seed its star colour was made for (0 = red)
 #endif
 	float 	m_scale_multiplier;
 	float 	m_max_scale;

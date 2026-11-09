@@ -36,6 +36,7 @@ namespace NxVita { bool GetDisplayedCamera( Mth::Matrix *p_mat, Mth::Vector *p_p
 #ifdef THUG_DESKTOP
 namespace NxVita { bool GetProjectionFocal( float *m0, float *m5 ); }
 namespace Nx { void DesktopTeinterModele( CModel *p_model, unsigned char r, unsigned char g, unsigned char b ); }
+extern "C" unsigned int desktop_rando_etoile( unsigned char *r, unsigned char *g, unsigned char *b );	// desktop_demented.cpp
 #endif
 
 namespace Front
@@ -214,6 +215,8 @@ CElement3d::CElement3d()
 #ifdef THUG_DESKTOP
 	m_desktop_ecran = false;
 	m_desktop_propre = false;
+	m_desktop_etoile = false;
+	m_desktop_cle = 0;
 #endif
 	for (int i=0; i<MAX_MODELS_PER_ELEMENT; ++i)
 	{
@@ -380,14 +383,27 @@ void CElement3d::AddModel(const char *p_model_name, uint32 skeleton_name, Mth::V
 	
 	p_new_model->SetColor(m_rgba.r,m_rgba.g,m_rgba.b,m_rgba.a);
 #ifdef THUG_DESKTOP
-	// The star's textures are loaded grey (p_NxTexture.cpp, dxt1_gris), and
-	// its vertex colours override a model colour: the tint goes into them.
-	// Red (the goal givers' stars, shared mesh) unless the script asked for
-	// a colour on its own copy.
+	// The star (models/arrow): pure red texture, vertex colours that override a
+	// model colour, so a colour is a recoloured copy of its texture. The HUD's
+	// own copies take the script's rgba; the goal givers' (one shared mesh)
+	// stay red unless Random Colours dyes them (update()).
 	if (p_model_name && !stricmp(p_model_name, "arrow"))
 	{
-		if (m_desktop_propre) Nx::DesktopTeinterModele(p_new_model, m_rgba.r, m_rgba.g, m_rgba.b);
-		else { Nx::DesktopTeinterModele(p_new_model, 128, 0, 0); p_new_model->SetColor(128, 0, 0, m_rgba.a); }
+		m_desktop_etoile = true;
+		m_desktop_cle = 0;
+		if (m_desktop_propre)
+		{
+			Nx::DesktopTeinterModele(p_new_model, m_rgba.r, m_rgba.g, m_rgba.b);
+			p_new_model->SetColor(128, 128, 128, m_rgba.a);
+		}
+		else
+		{
+			unsigned char r, g, b;
+			m_desktop_cle = desktop_rando_etoile(&r, &g, &b);
+			if (m_desktop_cle) Nx::DesktopTeinterModele(p_new_model, r, g, b);
+			else Nx::DesktopTeinterModele(p_new_model, 0, 0, 0);
+			p_new_model->SetColor(128, 128, 128, m_rgba.a);
+		}
 	}
 #endif
 	
@@ -776,6 +792,20 @@ void CElement3d::update()
 		return;
 	}
 		
+#ifdef THUG_DESKTOP
+	// goal givers' stars: Random Colours' colour follows its seed (per chapter)
+	if (m_desktop_etoile && !m_desktop_propre && m_num_models && mp_models[0].mpModel)
+	{
+		unsigned char r, g, b;
+		const unsigned int cle = desktop_rando_etoile(&r, &g, &b);
+		if (cle != m_desktop_cle)
+		{
+			m_desktop_cle = cle;
+			if (cle) Nx::DesktopTeinterModele(mp_models[0].mpModel, r, g, b);
+			else Nx::DesktopTeinterModele(mp_models[0].mpModel, 0, 0, 0);
+		}
+	}
+#endif
 	if (m_num_models)
 	{							
 		if (m_parent_object_name)
