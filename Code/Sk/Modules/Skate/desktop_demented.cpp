@@ -41,9 +41,12 @@
 #include <sk/objects/playerprofilemanager.h>
 #include <sk/objects/skatertricks.h>
 #include <sys/timer.h>
+#include <sk/objects/restart.h>
 #include "vita_log.h"
 
 bool DesktopThugZero( void );
+
+static void chaos_tout_finir( void );	// Chaos, below
 
 namespace
 {
@@ -73,6 +76,7 @@ static float s_auto_t = 0.0f;		// seconds with nothing going on (Auto starts a g
 static float s_reve_t = 0.0f;		// Chaos: time for its slow waves
 static float s_flip_t = 0.0f, s_flip_suivant = 90.0f;
 static bool  s_flip = false;		// Chaos: the world is mirrored right now
+static bool  s_inverse = false;		// Chaos: steering reversed (world as it is)
 static bool  s_menu = false;		// a menu or dialog is up (Mirror leaves the pad alone)
 
 // Chaos: names that get swapped for each other, the same way all run
@@ -307,6 +311,7 @@ static void fin_run( void )
 {
 	if( !s_run.actif ) return;
 	hud_off();
+	chaos_tout_finir();
 	ppm()->DesktopEndLend();
 	stats_rendre();
 	s_run.actif = false;
@@ -391,22 +396,193 @@ extern "C" int desktop_mirror_world( void )
 // menus keep their own directions.
 extern "C" int desktop_mirror_input( void )
 {
-	return desktop_mirror_world() && !s_menu;
+	if( !s_run.actif || !s_run.skater || s_run.fini || s_menu ) return 0;
+	return ( desktop_mirror_world() != 0 ) != ( s_run.mods[MOD_CHAOS] && s_inverse ) ? 1 : 0;
 }
 
 static bool chaos_on( void ) { return s_run.actif && s_run.skater && !s_run.fini && s_run.mods[MOD_CHAOS]; }
 
+// --- Chaos: curveballs ---------------------------------------------------------------
+// At random times (8 to 40 s apart, the clock stopped in menus and cutscenes)
+// something changes for a random while (10 to 30 s), sometimes two at once.
+// Cheats are faked through CSkaterCareer::GetCheat (desktop_chaos_cheat);
+// the body ones need the real flags, put back when they end.
+enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_STATS_MAX, EV_STATS_RND,
+       EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, NB_EV };
+static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
+	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
+	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?" };
+static const int s_ev_poids[NB_EV] = { 8, 8, 6, 7, 6, 6, 5, 4, 5, 5, 5, 4, 4, 4, 4, 6, 3 };
+static float s_ev_reste[NB_EV];		// seconds left, 0 = off
+static float s_ev_prochain = 20.0f;
+static float s_ev_stat = 0.0f;
+static bool  s_ev_corps = false;	// the body flags were changed (refresh owed)
+
+static const char *ev_drapeau( int e )
+{
+	switch( e )
+	{
+		case EV_KID: return "CHEAT_KID";
+		case EV_BIGHEAD: return "CHEAT_BIGHEAD";
+		case EV_GORILLA: return "CHEAT_GORILLA";
+		case EV_INVISIBLE: return "CHEAT_INVISIBLE";
+		default: return NULL;
+	}
+}
+
+static void ev_corps( void )
+{
+	Obj::CSkaterCareer *car = Mdl::Skate::Instance()->GetCareer();
+	if( !car ) return;
+	for( int e = EV_KID; e <= EV_INVISIBLE; ++e )
+	{
+		const int f = Script::GetInteger( crc( ev_drapeau( e )));
+		if( s_ev_reste[e] > 0.0f ) car->SetGlobalFlag( f ); else car->UnSetGlobalFlag( f );
+	}
+	if( Mdl::Skate::Instance()->GetLocalSkater()) Script::RunScript( "refresh_skater_model_for_cheats" );
+	s_ev_corps = true;
+}
+
+static void ev_stats( void )
+{
+	float v = 0.0f;
+	if( s_ev_reste[EV_STATS_0] > 0.0f ) v = 0.01f;
+	else if( s_ev_reste[EV_STATS_MAX] > 0.0f ) v = 13.0f;
+	else if( s_ev_reste[EV_STATS_RND] > 0.0f ) v = s_ev_stat;
+	Mdl::Skate::Instance()->SetStatOverride( v );
+}
+
+static void ev_temps( void )
+{
+	if( s_ev_reste[EV_SLOW] > 0.0f ) Tmr::SetSlomo( 0.55f );
+	else if( s_ev_reste[EV_FAST] > 0.0f ) Tmr::SetSlomo( 1.4f );
+	else Tmr::SetSlomo( 1.0f );
+}
+
+static void ev_fin( int e )
+{
+	if( s_ev_reste[e] <= 0.0f ) return;
+	s_ev_reste[e] = 0.0f;
+	if( e == EV_FLIP ) s_flip = false;
+	if( e == EV_REVERSE ) s_inverse = false;
+	if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
+	if( e == EV_SLOW || e == EV_FAST ) ev_temps();
+	if( ev_drapeau( e )) ev_corps();
+}
+
+static void chaos_tout_finir( void )
+{
+	bool rien = !s_flip && !s_inverse;
+	for( int e = 0; e < NB_EV; ++e ) if( s_ev_reste[e] > 0.0f ) { rien = false; break; }
+	if( rien && !s_ev_corps ) return;
+	for( int e = 0; e < NB_EV; ++e ) ev_fin( e );
+	s_flip = s_inverse = false;
+	Mdl::Skate::Instance()->SetStatOverride( 0.0f );
+	Tmr::SetSlomo( 1.0f );
+	if( s_ev_corps ) { ev_corps(); s_ev_corps = false; }
+}
+
+static void ev_teleport( void )
+{
+	std::vector<int> v;
+	int n = -1;
+	while(( n = Obj::GetRestartNode( 0, 0, n )) != -1 && v.size() < 200 ) v.push_back( n );
+	if( v.empty()) return;
+	Script::CStruct p;
+	p.AddInteger( "node_number", v[hasard( (uint32)v.size())] );
+	Script::RunScript( "desktop_demented_teleport", &p );
+}
+
+static void ev_lancer( Game::CGoalManager *gm )
+{
+	const bool goal = gm && gm->GetNumActiveGoals() > 0;
+	int total = 0, poids[NB_EV];
+	for( int e = 0; e < NB_EV; ++e )
+	{
+		poids[e] = s_ev_poids[e];
+		if( s_ev_reste[e] > 0.0f ) poids[e] = 0;
+		if( e == EV_TELEPORT && goal ) poids[e] = 0;	// a race or a combo line doesn't survive it
+		if(( e == EV_SLOW && s_ev_reste[EV_FAST] > 0.0f ) || ( e == EV_FAST && s_ev_reste[EV_SLOW] > 0.0f )) poids[e] = 0;
+		if( e >= EV_STATS_0 && e <= EV_STATS_RND && ( s_ev_reste[EV_STATS_0] > 0.0f || s_ev_reste[EV_STATS_MAX] > 0.0f || s_ev_reste[EV_STATS_RND] > 0.0f )) poids[e] = 0;
+		total += poids[e];
+	}
+	if( total <= 0 ) return;
+	int r = (int)hasard( total ), e = 0;
+	while( r >= poids[e] ) r -= poids[e++];
+	char t[48];
+	snprintf( t, sizeof( t ), "CHAOS: %s", s_ev_noms[e] );
+	const float duree = 10.0f + hasard( 21 );
+	switch( e )
+	{
+		case EV_TELEPORT: ev_teleport(); break;
+		case EV_NAMES:
+			for( int i = NB_NOMS_CHAOS - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ), x = s_perm_noms[i]; s_perm_noms[i] = s_perm_noms[k]; s_perm_noms[k] = x; }
+			s_graine_chaos = hasard( 0x7fffffff ) | 1;
+			break;
+		default:
+			s_ev_reste[e] = duree;
+			if( e == EV_FLIP ) s_flip = true;
+			if( e == EV_REVERSE ) s_inverse = true;
+			if( e == EV_STATS_RND ) { s_ev_stat = (float)hasard( 11 ); if( s_ev_stat == 0.0f ) s_ev_stat = 0.01f; snprintf( t, sizeof( t ), "CHAOS: STATS AT %d", (int)s_ev_stat ); }
+			if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
+			if( e == EV_SLOW || e == EV_FAST ) ev_temps();
+			if( ev_drapeau( e )) ev_corps();
+			break;
+	}
+	VLOG( "DSK", "demented chaos: %s (%.0f s)", t, duree );
+	panneau( t, "HUD_jumpgap", 0, 128, 60, 40 );
+}
+
+static void chaos_maj( float dt, bool pause, bool film )
+{
+	if( pause || film )
+	{
+		// slow/fast motion would run the menu and the cutscene too
+		if( s_ev_reste[EV_SLOW] > 0.0f || s_ev_reste[EV_FAST] > 0.0f ) Tmr::SetSlomo( 1.0f );
+		return;
+	}
+	ev_temps();
+	for( int e = 0; e < NB_EV; ++e )
+		if( s_ev_reste[e] > 0.0f )
+		{
+			s_ev_reste[e] -= dt;
+			if( s_ev_reste[e] <= 0.0f ) { s_ev_reste[e] = 0.01f; ev_fin( e ); }
+		}
+	if( s_menu ) return;
+	s_ev_prochain -= dt;
+	if( s_ev_prochain > 0.0f ) return;
+	s_ev_prochain = 8.0f + hasard( 33 );
+	Game::CGoalManager *gm = Game::GetGoalManager();
+	ev_lancer( gm );
+	if( hasard( 100 ) < 25 ) ev_lancer( gm );	// a double
+}
+
+// CSkaterCareer::GetCheat (desktop_extras_glue.cpp desktop_chaos_cheat)
+bool desktop_demented_cheat( uint32 cheat )
+{
+	if( !chaos_on()) return false;
+	if( s_ev_reste[EV_MOON] > 0.0f && cheat == crc( "CHEAT_MOON" )) return true;
+	if( s_ev_reste[EV_SPECIAL] > 0.0f && cheat == crc( "CHEAT_ALWAYS_SPECIAL" )) return true;
+	if( s_ev_reste[EV_PERFECT] > 0.0f && ( cheat == crc( "CHEAT_PERFECT_RAIL" ) || cheat == crc( "CHEAT_PERFECT_MANUAL" ))) return true;
+	return false;
+}
+
+// SkaterCorePhysicsComponent: air gravity multiplier
+extern "C" float desktop_demented_gravity( void )
+{
+	return ( chaos_on() && s_ev_reste[EV_HEAVY] > 0.0f ) ? 1.7f : 1.0f;
+}
+
 // Chaos: the field of view breathes.
 extern "C" float desktop_chaos_fov( void )
 {
-	if( !chaos_on()) return 1.0f;
-	return 1.0f + 0.07f * sinf( s_reve_t * 0.6f ) + 0.03f * sinf( s_reve_t * 1.7f );
+	return 1.0f;	// Marcus: no screen effects, gameplay curveballs instead
 }
 
 // Chaos: a slow wave over the picture and colours drifting round the wheel.
 extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte )
 {
-	if( !chaos_on()) return 0;
+	return 0;	// Marcus: no wobble or hue drift
 	*amp = 0.0035f * ( 0.6f + 0.4f * sinf( s_reve_t * 0.21f ));
 	*t = s_reve_t;
 	*teinte = 0.45f * sinf( s_reve_t * 0.11f );
@@ -598,18 +774,9 @@ void DesktopDementedUpdate( Skate &mdl )
 	if( !pause ) s_reve_t += dt;
 	s_menu = pause || element( crc( "current_menu_anchor" )) || element( crc( "dialog_box_anchor" ))
 		|| element( crc( "goal_start_dialog" )) || element( crc( "speech_box_anchor" ));
-	// Chaos: the world mirrors itself now and then
-	if( s_run.mods[MOD_CHAOS] && !pause && !film && !s_run.fini )
-	{
-		s_flip_t += dt;
-		if( s_flip_t > s_flip_suivant )
-		{
-			s_flip_t = 0.0f;
-			s_flip = !s_flip;
-			s_flip_suivant = s_flip ? 25.0f + hasard( 50 ) : 60.0f + hasard( 120 );
-			panneau( "THE WORLD FLIPS", "HUD_jumpgap", 0, 110, 70, 128 );
-		}
-	}
+	// Chaos: curveballs at random times
+	if( s_run.mods[MOD_CHAOS] && !s_run.fini ) chaos_maj( dt, pause, film );
+	else chaos_tout_finir();
 	// Auto: a few seconds with no goal going and nothing on screen, then a
 	// random goal whose giver is around gets started for you
 	if( s_run.mods[MOD_AUTO] && !s_run.fini )
@@ -724,6 +891,8 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;
 	}
 	s_auto_t = 0.0f; s_reve_t = 0.0f; s_flip_t = 0.0f; s_flip_suivant = 60.0f + hasard( 90 ); s_flip = false;
+	chaos_tout_finir();
+	s_ev_prochain = 15.0f + hasard( 30 );
 	s_graine_chaos = hasard( 0x7fffffff ) | 1;
 	for( int i = 0; i < NB_NOMS_CHAOS; ++i ) s_perm_noms[i] = i;
 	for( int i = NB_NOMS_CHAOS - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ), x = s_perm_noms[i]; s_perm_noms[i] = s_perm_noms[k]; s_perm_noms[k] = x; }

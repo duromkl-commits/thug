@@ -267,9 +267,10 @@ static void fp_modele( Obj::CCompositeObject *sk, bool cache )
 
 // CSkaterCareer::GetCheat: true while chaos mode fakes that cheat.
 bool desktop_practice_cheat( uint32 cheat );	// desktop_modes_glue.cpp
+bool desktop_demented_cheat( uint32 cheat );	// desktop_demented.cpp: Demented's Chaos
 bool desktop_chaos_cheat( uint32 cheat )
 {
-	if( desktop_practice_cheat( cheat )) return true;
+	if( desktop_practice_cheat( cheat ) || desktop_demented_cheat( cheat )) return true;
 	return s_ch_actif >= 0 && s_chaos[s_ch_actif].cheat && crc( s_chaos[s_ch_actif].cheat ) == cheat;
 }
 

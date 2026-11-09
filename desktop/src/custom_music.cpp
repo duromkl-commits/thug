@@ -1480,10 +1480,10 @@ static const char *s_demented_scripts =
 	"SetScreenElementProps { id = { current_menu child = 6 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"The world is flipped left to right, and so are your controls\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = <text7> pad_choose_script = desktop_demented_flip pad_choose_params = { i = 7 focus = 6 } }\n"
 	"SetScreenElementProps { id = { current_menu child = 7 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Names get swapped, words come out wrong, the picture wobbles and the world flips now and then\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
-	"make_main_menu_item { text = \"Start Run\" pad_choose_script = desktop_demented_start pad_choose_params = { surprise = 0 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 8 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Random skater, random stats\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"make_main_menu_item { text = \"SURPRISE ME!\" pad_choose_script = desktop_demented_start pad_choose_params = { surprise = 1 } }\n"
-	"SetScreenElementProps { id = { current_menu child = 9 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Like Start Run, but every modifier is rolled at random. You find out what you got when you're dealt\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"SetScreenElementProps { id = { current_menu child = 8 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Like Start Run, but every modifier is rolled at random. You find out what you got when you're dealt\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
+	"make_main_menu_item { text = \"Start Run\" pad_choose_script = desktop_demented_start pad_choose_params = { surprise = 0 } }\n"
+	"SetScreenElementProps { id = { current_menu child = 9 } event_handlers = [ { focus difficulty_menu_item_focus params = { description = \"Sick goals, 3 lives: a failed goal costs one, a new chapter gives one. Random skater, random stats\" } } { unfocus difficulty_menu_item_unfocus } ] replace_handlers }\n"
 	"FormatText ChecksumName = bar_color \"%i_HIGHLIGHTED_TEXT_COLOR\" i = ( THEME_PREFIXES [ current_theme_prefix ] )\n"
 	"CreateScreenElement { Type = ContainerElement parent = current_menu_anchor id = diff_desc_box internal_just = [ center top ] pos = (315,384) just = [ center top ] }\n"
 	"CreateScreenElement { Type = SpriteElement parent = diff_desc_box texture = black scale = (70,15) just = [ center top ] rgba = [ 0 0 0 90 ] }\n"
@@ -1588,6 +1588,9 @@ static const char *s_demented_scripts =
 	"endscript\n"
 	"script desktop_demented_info_row\n"
 	"CreateScreenElement { Type = TextBlockElement parent = current_menu_anchor font = small text = <text> pos = <pos> dims = (390,0) just = [ center top ] internal_just = [ center top ] scale = 0.75 line_spacing = 0.8 rgba = [ 88 105 112 128 ] z_priority = 3 allow_expansion }\n"
+	"endscript\n"
+	"script desktop_demented_teleport\n"
+	"ResetSkaters node_number = <node_number>\n"
 	"endscript\n"
 	"script desktop_demented_stats_exit\n"
 	"if ScreenElementExists id = current_menu_anchor\n"
@@ -2830,6 +2833,10 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_debut( qb, j, m, "RetryCurrentGoal", "if DesktopDemented\nreturn\nendif\n" );
 	// one goal at a time in Demented: no new goal offers while one runs
 	patch_debut( qb, j, m, "goal_got_trigger", "if DesktopDemented\nif GoalManager_HasActiveGoals\nreturn\nendif\nendif\n" );
+	// Demented (Marcus): no Set Restart / Goto Cust Restart in the pause options,
+	// and coming back from Watch Cutscenes doesn't freeze the game
+	patch_debut( qb, j, m, "create_options_menu", "if DesktopDemented\nNoCustomRestarts = 1\nendif\n" );
+	patch_debut( qb, j, m, "watch_cutscene_done", "if DesktopDemented\nDebounce X 0.5\npause_menu_gradient on\ncreate_watch_cutscenes_menu\nreturn\nendif\n" );
 	// the skater is dealt before the first intro, so it's in it
 	patch_debut( qb, j, m, "play_first_cutscene", "if DesktopDementedNeedsDeal\ndesktop_demented_roll\nendif\n" );
 	// View Tricks (Demented) goes back to the pause menu

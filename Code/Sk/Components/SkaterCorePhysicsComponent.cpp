@@ -5,6 +5,9 @@
 //* CREATION DATE:  3/21/3
 //****************************************************************************
 
+#ifdef THUG_DESKTOP
+extern "C" float desktop_demented_gravity( void );	// desktop_demented.cpp
+#endif
 #include <sk/objects/rail.h>
 #include <sk/objects/skatercareer.h>
 #include <sk/objects/gap.h>
@@ -3885,6 +3888,9 @@ float CSkaterCorePhysicsComponent::get_air_gravity (   )
 		gravity *= GetPhysicsFloat(CRCD(0xec128f0, "moon_gravity"));
 		g_CheatsEnabled = true;
 	}
+#ifdef THUG_DESKTOP
+	gravity *= desktop_demented_gravity();	// Demented's Chaos: heavy gravity
+#endif
 	 
 	return gravity;
 } 
