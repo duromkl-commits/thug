@@ -2555,6 +2555,12 @@ float g_vita_plan_loin = 100000.0f;
 extern "C" void desktop_ssao_projection( float f, float aspect, float znear, float zfar );
 extern "C" void desktop_ssao( void );
 extern "C" void desktop_post( void );
+extern "C" void desktop_portrait_grab( void );
+// Portrait camera (desktop_portraits.cpp): while set, the world and the
+// models are drawn from this eye, looking at this point, with this
+// vertical field of view.
+bool  g_desktop_portrait_cam = false;
+float g_desktop_portrait_eye[3], g_desktop_portrait_at[3], g_desktop_portrait_vfov = 16.0f;
 #endif
 
 static void set_projection( float fov_deg, float aspect, float znear, float zfar )
@@ -2628,8 +2634,38 @@ bool RefreshViewFromCamera( void )
 	if( !p_cam )
 		return false;
 
-	Mth::Matrix &cm  = p_cam->GetMatrix();
-	Mth::Vector &pos = p_cam->GetPos();
+	Mth::Matrix cm  = p_cam->GetMatrix();
+	Mth::Vector pos = p_cam->GetPos();
+#ifdef THUG_DESKTOP
+	if( g_desktop_portrait_cam )
+	{
+		// Same layout as the game camera: rows right, up, back (the view
+		// looks down -back). Handedness copied from the real camera.
+		Mth::Vector eye( g_desktop_portrait_eye[0], g_desktop_portrait_eye[1], g_desktop_portrait_eye[2] );
+		Mth::Vector at( g_desktop_portrait_at[0], g_desktop_portrait_at[1], g_desktop_portrait_at[2] );
+		Mth::Vector back = eye - at;
+		back[3] = 0.0f;
+		back.Normalize();
+		Mth::Vector haut( 0.0f, 1.0f, 0.0f, 0.0f );
+		Mth::Vector droite = Mth::CrossProduct( haut, back );
+		droite.Normalize();
+		Mth::Vector r0 = cm[0], r1 = cm[1], r2 = cm[2];
+		r0[3] = r1[3] = r2[3] = 0.0f;
+		if( Mth::DotProduct( Mth::CrossProduct( r0, r1 ), r2 ) < 0.0f )
+			droite = -droite;
+		haut = Mth::CrossProduct( back, droite );
+		if( Mth::DotProduct( haut, Mth::Vector( 0.0f, 1.0f, 0.0f, 0.0f )) < 0.0f )
+			haut = -haut;
+		haut.Normalize();
+		for( int c = 0; c < 3; ++c )
+		{
+			cm[0][c] = droite[c];
+			cm[1][c] = haut[c];
+			cm[2][c] = back[c];
+		}
+		pos = eye;
+	}
+#endif
 
 	float v[16];
 	for( int c = 0; c < 3; ++c )
@@ -2842,6 +2878,13 @@ void SetWorldProjection( void )
 			      p_cam ? p_cam->GetHFOV() : -1.0f, aspect, v );
 		}
 	}
+#ifdef THUG_DESKTOP
+	if( g_desktop_portrait_cam )
+	{
+		set_projection( g_desktop_portrait_vfov, aspect, 4.0f, g_vita_plan_loin );
+		return;
+	}
+#endif
 	set_projection( v, aspect, 4.0f, g_vita_plan_loin );
 }
 
@@ -5606,6 +5649,10 @@ void RenderWorld( void )
 				VLOG( "CAM", "meme frame : ecart orientation %.4f", sqrtf( d ));
 			memcpy( v, s_view_models, sizeof( v ));
 		}
+#ifdef THUG_DESKTOP
+		else if( g_desktop_portrait_cam && s_cam_models_ok )
+			memcpy( v, s_view_models, sizeof( v ));
+#endif
 
 		glLoadMatrixf( v );
 		memcpy( s_cur_view, v, sizeof( s_cur_view ));
@@ -6860,6 +6907,7 @@ void RenderWorld( void )
 		// down: roads, grass and decals are blended "opaques" drawn in the
 		// translucent passes, and after the opaque pass they missed it.
 		desktop_ssao();
+		desktop_portrait_grab();
 		desktop_post();
 #endif
 	}

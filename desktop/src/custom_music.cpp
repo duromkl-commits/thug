@@ -1765,6 +1765,92 @@ static void patch_quitter( const unsigned char *qb, const std::vector<Jeton> &j,
 	}
 }
 
+// Main menu Options (create_setup_options_menu): "Build Portraits" before
+// Credits. It clears the menu, poses every skater in turn for the portrait
+// camera (desktop_portraits.cpp) and brings the menu back when done.
+static const char *s_portrait_scripts =
+	"script desktop_build_portraits\n"
+	"if ScreenElementExists id = current_menu_anchor\n"
+	"DestroyScreenElement id = current_menu_anchor\n"
+	"endif\n"
+	"KillSpawnedScript name = skaterDoOptionsTricks\n"
+	"Change in_options_menu = 0\n"
+	"select_skater_get_current_skater_name\n"
+	"if NOT DesktopBuildPortraits restore = <current_skater>\n"
+	"launch_setup_options_menu\n"
+	"endif\n"
+	"endscript\n"
+	"script desktop_portrait_pose\n"
+	"SelectCurrentSkater name = <name>\n"
+	"GetCurrentSkaterProfileIndex\n"
+	"RefreshSkaterModel profile = <currentSkaterProfileIndex> skater = 0 no_board = no_board\n"
+	"MakeSkaterGoto SkateshopAI params = { }\n"
+	"skater : SwitchOffBoard\n"
+	"skater : Obj_SetLightAmbientColor r = 73 g = 70 b = 80\n"
+	"skater : Obj_SetLightDiffuseColor Index = 0 r = 110 g = 125 b = 155\n"
+	"skater : Obj_SetLightDiffuseColor Index = 1 r = 10 g = 3 b = 5\n"
+	"skater : Obj_SetLightDirection Index = 0 heading = skater_select_light0_heading pitch = 350\n"
+	"skater : Obj_SetLightDirection Index = 1 heading = skater_select_light1_heading pitch = 270\n"
+	"endscript\n"
+	"script desktop_portrait_progress\n"
+	"if ScreenElementExists id = desktop_portrait_text\n"
+	"SetScreenElementProps id = desktop_portrait_text text = <text>\n"
+	"else\n"
+	"CreateScreenElement { Type = TextElement parent = root_window id = desktop_portrait_text font = small text = <text> pos = (620,440) just = [ right bottom ] scale = 0.8 rgba = [ 128 128 128 128 ] z_priority = 100 }\n"
+	"endif\n"
+	"endscript\n"
+	"script desktop_portrait_done\n"
+	"if ScreenElementExists id = desktop_portrait_text\n"
+	"DestroyScreenElement id = desktop_portrait_text\n"
+	"endif\n"
+	"launch_setup_options_menu\n"
+	"desktop_toast text = <text>\n"
+	"endscript\n";
+
+static void patch_portraits_menu( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "create_setup_options_menu" ), cible = crc( "options_credits" ), item = crc( "theme_menu_add_item" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		size_t b = k + 2;
+		while( b < j.size() && qb[j[b].pos] != T_ENDSCRIPT && !est_nom( qb, j[b], cible )) ++b;
+		if( b >= j.size() || qb[j[b].pos] == T_ENDSCRIPT ) { VLOG( "MUS", "options menu: Credits not found" ); return; }
+		while( b > k && !est_nom( qb, j[b], item )) --b;
+		if( b == k ) return;
+		Ecrit w1; compile_q( w1, s_portrait_scripts );
+		m.push_back( Modif{ j[k].pos, 0, w1.o } );
+		Ecrit w2; compile_q( w2, "theme_menu_add_item { text = \"Build Portraits\" id = options_desktop_portraits pad_choose_script = desktop_build_portraits centered no_bg }\n" );
+		m.push_back( Modif{ j[b].pos, 0, w2.o } );
+		VLOG( "MUS", "options menu: Build Portraits added" );
+		return;
+	}
+}
+
+// Skater select head strip: a built portrait replaces SS_<first_name>.
+static void patch_portraits_select( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "select_skater_menu_add_hmenu_items" ), ft = crc( "FormatText" ), hs = crc( "headshot" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		int nb = 0;
+		for( size_t b = k + 2; b + 3 < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+		{
+			if( !est_nom( qb, j[b], ft ) || !est_nom( qb, j[b + 3], hs )) continue;
+			size_t f = b;
+			while( f < j.size() && qb[j[f].pos] != T_EOL && qb[j[f].pos] != T_EOLNUM ) ++f;
+			if( f >= j.size()) break;
+			Ecrit w; compile_q( w, "DesktopPortrait name = <name>\n" );
+			m.push_back( Modif{ j[f].pos + j[f].taille, 0, w.o } );
+			++nb;
+			b = f;
+		}
+		VLOG( "MUS", "skater select: %d portrait hooks", nb );
+		return;
+	}
+}
+
 // Story Mode menu (create_career_options_menu, skateshop.qb): the Pro Skater
 // 1-4 careers listed greyed out (not ported yet) above an Underground label,
 // ahead of THUG's own Level Select / Continue / Start New / Load items.
@@ -2589,6 +2675,8 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_niveaux( qb, j, m );
 	patch_air_shuffle( qb, j, m );
 	patch_quitter( qb, j, m );
+	patch_portraits_menu( qb, j, m );
+	patch_portraits_select( qb, j, m );
 	patch_pause_extras( qb, j, m );
 	patch_pause_live( qb, j, m );
 	patch_view_tricks( qb, j, m );

@@ -35,6 +35,7 @@ extern "C" uint8_t *vgl_reserve_data_pool( uint32_t size );
 
 #include "vita_log.h"
 #include "p_NxTexture.h"
+#include <gfx/NxTexMan.h>
 
 namespace NxVita
 {
@@ -1082,3 +1083,35 @@ void NxVita::CompteTextures( int *p_tex, unsigned int *p_texels, int *p_dicts )
 	*p_texels = Nx::s_texels_vivants;
 	*p_dicts  = Nx::s_dicts_vivants;
 }
+
+#ifdef THUG_DESKTOP
+// Portraits (desktop_portraits.cpp): an RGBA image made at run time, put in
+// the sprite dictionary under <checksum> so a SpriteElement can name it.
+// <w> x <h> is the size the menus see (the headshot icons are 64 x 64); the
+// pixels can be finer (<pw> x <ph>). Called again for the same checksum, it
+// refreshes the pixels in place, so elements already showing it update too.
+bool DesktopSpriteFromRGBA( uint32 checksum, const unsigned char *rgba, int pw, int ph, int w, int h )
+{
+	Nx::CTexDict *p_dict = Nx::CTexDictManager::sp_sprite_tex_dict;
+	if( !p_dict || !rgba || pw <= 0 || ph <= 0 )
+		return false;
+	Nx::CVitaTexture *p_tex = (Nx::CVitaTexture *)p_dict->GetTexture( checksum );
+	GLuint gl_tex = p_tex ? p_tex->GetGLTexture() : 0;
+	if( !gl_tex )
+		glGenTextures( 1, &gl_tex );
+	glBindTexture( GL_TEXTURE_2D, gl_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, pw, ph, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba );
+	glBindTexture( GL_TEXTURE_2D, 0 );
+	if( p_tex )
+		return true;
+	p_tex = new Nx::CVitaTexture;
+	p_tex->SetGLTexture( gl_tex, (uint16)w, (uint16)h, false, checksum );
+	p_tex->SetPerm( true );
+	p_dict->GetTexLookup()->PutItem( checksum, p_tex );
+	return true;
+}
+#endif

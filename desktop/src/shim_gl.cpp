@@ -1985,3 +1985,129 @@ static GLuint desktop_fantome( void )
 	glViewport( vp[0], vp[1], vp[2], vp[3] );
 	return s_fant_tex[dst];
 }
+
+// -- Portrait capture (desktop_portraits.cpp) -----------------------------------
+// Called after the SSAO pass, before bloom/haze and before any UI: the world
+// as rendered, cropped to a square at the centre of the frame (the portrait
+// camera aims the skater's head there), box-filtered to PORTRAIT_N. Colour
+// is RGB, depth is the raw [0,1] depth (minimum over each box, so thin hair
+// and ears keep their silhouette).
+static bool s_portrait_want = false, s_portrait_ready = false;
+static int  s_portrait_n = 0;
+static std::vector<unsigned char> s_portrait_rgb;
+static std::vector<float> s_portrait_dep;
+
+extern "C" void desktop_portrait_request( int n )
+{
+	s_portrait_n = n;
+	s_portrait_want = true;
+	s_portrait_ready = false;
+}
+
+extern "C" int desktop_portrait_result( unsigned char *rgb, float *dep )
+{
+	if( !s_portrait_ready )
+		return 0;
+	s_portrait_ready = false;
+	const size_t np = (size_t)s_portrait_n * s_portrait_n;
+	memcpy( rgb, &s_portrait_rgb[0], np * 3 );
+	memcpy( dep, &s_portrait_dep[0], np * sizeof( float ));
+	return 1;
+}
+
+extern "C" void desktop_portrait_grab( void )
+{
+	if( !s_portrait_want || !s_window || !on_screen())
+		return;
+	if( !dep_pret())
+	{
+		s_portrait_want = false;
+		return;
+	}
+	s_portrait_want = false;
+	const int n = s_portrait_n;
+	const int side = s_rt_h < s_rt_w ? s_rt_h : s_rt_w;
+	const int x0 = ( s_rt_w - side ) / 2, y0 = ( s_rt_h - side ) / 2;
+
+	copier_profondeur();
+	std::vector<unsigned char> col( (size_t)side * side * 4 );
+	std::vector<float> dep( (size_t)side * side );
+	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo );
+	dgl_glBindFramebuffer_real( GL_DRAW_FRAMEBUFFER, s_fbo_resolve );
+	dgl_glBlitFramebuffer( 0, 0, s_rt_w, s_rt_h, 0, 0, s_rt_w, s_rt_h, GL_COLOR_BUFFER_BIT, GL_NEAREST );
+	glPixelStorei( GL_PACK_ALIGNMENT, 1 );
+	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_fbo_resolve );
+	glReadPixels( x0, y0, side, side, GL_RGBA, GL_UNSIGNED_BYTE, &col[0] );
+	dgl_glBindFramebuffer_real( GL_READ_FRAMEBUFFER, s_ao_dep_fbo );
+	glReadPixels( x0, y0, side, side, GL_DEPTH_COMPONENT, GL_FLOAT, &dep[0] );
+	glPixelStorei( GL_PACK_ALIGNMENT, 4 );
+	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_fbo );
+
+	s_portrait_rgb.assign( (size_t)n * n * 3, 0 );
+	s_portrait_dep.assign( (size_t)n * n, 1.0f );
+	for( int y = 0; y < n; ++y )
+	{
+		// GL rows run bottom up; the portrait is stored top down.
+		const int sy0 = ( n - 1 - y ) * side / n, sy1 = ( n - y ) * side / n;
+		for( int x = 0; x < n; ++x )
+		{
+			const int sx0 = x * side / n, sx1 = ( x + 1 ) * side / n;
+			unsigned r = 0, g = 0, b = 0, k = 0;
+			float dmin = 1.0f;
+			for( int sy = sy0; sy < sy1; ++sy )
+				for( int sx = sx0; sx < sx1; ++sx )
+				{
+					const size_t i = (size_t)sy * side + sx;
+					r += col[i * 4]; g += col[i * 4 + 1]; b += col[i * 4 + 2]; ++k;
+					if( dep[i] < dmin ) dmin = dep[i];
+				}
+			if( !k ) k = 1;
+			unsigned char *o = &s_portrait_rgb[( (size_t)y * n + x ) * 3];
+			o[0] = (unsigned char)( r / k ); o[1] = (unsigned char)( g / k ); o[2] = (unsigned char)( b / k );
+			s_portrait_dep[(size_t)y * n + x] = dmin;
+		}
+	}
+	s_portrait_ready = true;
+}
+
+// Portrait files: portraits\<key>.raw ("TPR1", width, height, RGBA rows)
+// next to the exe, plus <key>.png to look at.
+static std::string portrait_chemin( unsigned int key, const char *ext )
+{
+	char *base = SDL_GetBasePath();
+	std::string dossier = std::string( base ? base : "" ) + "portraits";
+	SDL_free( base );
+#ifdef _WIN32
+	CreateDirectoryA( dossier.c_str(), NULL );
+#else
+	mkdir( dossier.c_str(), 0755 );
+#endif
+	char nom[32];
+	snprintf( nom, sizeof( nom ), "/%08x.%s", key, ext );
+	return dossier + nom;
+}
+
+extern "C" int desktop_portrait_save( unsigned int key, const unsigned char *rgba, int w, int h )
+{
+	FILE *f = fopen( portrait_chemin( key, "raw" ).c_str(), "wb" );
+	if( !f ) return 0;
+	const int en_tete[3] = { 0x31525054, w, h };
+	bool ok = fwrite( en_tete, sizeof( en_tete ), 1, f ) == 1
+	       && fwrite( rgba, (size_t)w * h * 4, 1, f ) == 1;
+	ok = ( fclose( f ) == 0 ) && ok;
+	stbi_flip_vertically_on_write( 0 );
+	stbi_write_png( portrait_chemin( key, "png" ).c_str(), w, h, 4, rgba, w * 4 );
+	return ok ? 1 : 0;
+}
+
+extern "C" int desktop_portrait_load( unsigned int key, unsigned char *rgba, int w, int h )
+{
+	FILE *f = fopen( portrait_chemin( key, "raw" ).c_str(), "rb" );
+	if( !f ) return 0;
+	int en_tete[3] = { 0, 0, 0 };
+	const bool ok = fread( en_tete, sizeof( en_tete ), 1, f ) == 1
+	             && en_tete[0] == 0x31525054 && en_tete[1] == w && en_tete[2] == h
+	             && fread( rgba, (size_t)w * h * 4, 1, f ) == 1;
+	fclose( f );
+	return ok ? 1 : 0;
+}
