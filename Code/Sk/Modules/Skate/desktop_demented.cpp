@@ -933,7 +933,11 @@ void DesktopDementedUpdate( Skate &mdl )
 	if( !pause && !s_run.fini ) s_run.t += dt;
 	if( !pause && !film && !s_run.fini && s_run.mods[MOD_TIME] )
 	{
+		const float avant = s_run.reste;
 		s_run.reste -= dt;
+		// once the clock is red (under 15 s): the goal timers' beep, once a second
+		if( s_run.reste > 0.0f && s_run.reste < 15.0f && (int)avant > (int)s_run.reste )
+			Script::RunScript( CRCD( 0xcfc7c3ad, "timer_runout_beep" ));
 		if( s_run.reste <= 0.0f )
 		{
 			s_run.reste = 0.0f;
