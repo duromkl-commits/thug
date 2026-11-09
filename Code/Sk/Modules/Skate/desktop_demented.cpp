@@ -420,8 +420,8 @@ enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_
 static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
 	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
 	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD" };
-// 0: never (Marcus: nothing that just helps the player: maxed stats, always special, perfect balance)
-static const int s_ev_poids[NB_EV] = { 8, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7 };
+// 0: never (Marcus: no moon gravity, and nothing that just helps the player: maxed stats, always special, perfect balance)
+static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
 static float s_ev_prochain = 20.0f;
 static float s_ev_stat = 0.0f;
