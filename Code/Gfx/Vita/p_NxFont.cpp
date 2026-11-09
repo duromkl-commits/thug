@@ -555,6 +555,7 @@ static void lot_glyphe( float x0, float y0, float x1, float y1,
 extern "C" unsigned int desktop_rando_couleurs( void );
 extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b );
 #endif
+static unsigned int s_cle_texte = 0;
 static void couleur_texte( const Image::RGBA &c, float kc )
 {
 	float cr = (float)c.r / kc, cg = (float)c.g / kc;
@@ -566,7 +567,7 @@ static void couleur_texte( const Image::RGBA &c, float kc )
 #ifdef THUG_DESKTOP
 	// Demented Random Colours: every text colour gets another hue
 	if( desktop_rando_couleurs())
-		desktop_rando_teinte( 0x51ed270bu ^ ( c.r | ( c.g << 8 ) | ( c.b << 16 )), &cr, &cg, &cb );
+		desktop_rando_teinte( s_cle_texte, &cr, &cg, &cb );	// per text: an animated colour keeps its hue
 #endif
 	if(( cr == s_lot_rgba[0] ) && ( cg == s_lot_rgba[1] ) && ( cb == s_lot_rgba[2] ) && ( ca == s_lot_rgba[3] ))
 		return;
@@ -652,6 +653,7 @@ void RenderText2D( float pri )
 
 		lot_texture( p_font->GetTexture());
 
+		s_cle_texte = (unsigned int)(size_t)p * 2654435761u;
 		Image::RGBA c = p->Color();
 		const float kc = g_vita_mx2 ? 255.0f : 128.0f;	// mx2 (#52)
 		couleur_texte( c, kc );
@@ -678,9 +680,15 @@ void RenderText2D( float pri )
 				{
 					const int d = Nx::dehex( q[1] );
 					if(( d <= 0 ) || ( d > 16 ) || p->ColorOverride())
+					{
+						s_cle_texte = (unsigned int)(size_t)p * 2654435761u;
 						couleur_texte( c, kc );
+					}
 					else
+					{
+						s_cle_texte = (unsigned int)(size_t)p * 2654435761u ^ (unsigned int)d * 0x9e3779b9u;
 						couleur_texte( p_font->GetRGBATableEntry( d - 1 ), kc );
+					}
 				}
 				g = p_font->ParseTag( &q, &p_gfont );
 				if( !g ) continue;

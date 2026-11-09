@@ -45,7 +45,8 @@
 #define ENGINE_2D_Y_MARGIN	16.0f
 
 #ifdef THUG_DESKTOP
-extern "C" unsigned int desktop_rando_couleurs( void );
+#include <core/crc.h>
+extern "C" unsigned int desktop_rando_hud( void );
 extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b );
 #endif
 #define SCREEN_W	960.0f
@@ -299,15 +300,25 @@ void RenderSprites2D( float bas, float haut )
 		if( cb > 1.0f ) cb = 1.0f;
 		if( ca > 1.0f ) ca = 1.0f;
 #ifdef THUG_DESKTOP
-		// Demented Random Colours: coloured HUD pieces (a vertex colour with
-		// some hue, or untextured) get another hue; pictures (grey vertex
-		// colour) and anything near full screen (fades, backdrops) stay.
-		if( desktop_rando_couleurs() && (( x1 - x0 ) < 0.5f * SCREEN_W || ( y1 - y0 ) < 0.5f * SCREEN_H ))
+		// Demented Random Colours on the in-game HUD (not while a menu is up):
+		// every panel piece takes the SAME random hue, so connected pieces
+		// match (Marcus); the balance meter and arrow get their own; the
+		// special bar stays as it is (it flickered); fades and anything near
+		// full screen too. Hues are fixed per chapter, never per colour, so
+		// an animated colour doesn't jump around.
+		if( desktop_rando_hud() && !(( x1 - x0 ) >= 0.8f * SCREEN_W && ( y1 - y0 ) >= 0.8f * SCREEN_H ))
 		{
-			const int mx = c.r > c.g ? ( c.r > c.b ? c.r : c.b ) : ( c.g > c.b ? c.g : c.b );
-			const int mn = c.r < c.g ? ( c.r < c.b ? c.r : c.b ) : ( c.g < c.b ? c.g : c.b );
-			if( !p_tex || mx - mn > 12 )
-				desktop_rando_teinte( (unsigned int)gl_tex * 2654435761u ^ ( c.r | ( c.g << 8 ) | ( c.b << 16 )), &cr, &cg, &cb );
+			static uint32 s_meter = 0, s_fleche = 0, s_barre = 0, s_special = 0;
+			if( !s_meter )
+			{
+				s_meter = Crc::GenerateCRCFromString( "balancemeter" ); s_fleche = Crc::GenerateCRCFromString( "balancearrow_glow" );
+				s_barre = Crc::GenerateCRCFromString( "specialbar" ); s_special = Crc::GenerateCRCFromString( "special" );
+			}
+			const uint32 t = p_tex ? p_tex->GetChecksum() : 0;
+			if( t == s_meter || t == s_fleche )
+				desktop_rando_teinte( 0x3c6ef372u, &cr, &cg, &cb );
+			else if( t != s_barre && t != s_special )
+				desktop_rando_teinte( 0xbb67ae85u, &cr, &cg, &cb );
 		}
 #endif
 

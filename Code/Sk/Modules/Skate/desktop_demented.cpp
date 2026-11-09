@@ -433,6 +433,12 @@ extern "C" unsigned int desktop_rando_couleurs( void )
 	return rando_on( MOD_R_COULEURS ) ? s_rando_graine : 0;
 }
 
+// HUD sprites: only in play, not in a menu (pictures there stay as they are)
+extern "C" unsigned int desktop_rando_hud( void )
+{
+	return ( rando_on( MOD_R_COULEURS ) && !s_menu ) ? s_rando_graine : 0;
+}
+
 extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b )
 {
 	const float mx = *r > *g ? ( *r > *b ? *r : *b ) : ( *g > *b ? *g : *b );
@@ -939,8 +945,9 @@ void DesktopDementedUpdate( Skate &mdl )
 					Script::CStruct p;
 					p.AddArrayPointer( "goals", a );
 					Script::SpawnScript( "desktop_demented_auto", &p );
+					VLOG( "DSK", "demented auto: %d goals to pick from", (int)v.size());
 				}
-				else delete a;
+				else { delete a; VLOG( "DSK", "demented auto: no goal with a giver to start" ); }
 			}
 		}
 	}
