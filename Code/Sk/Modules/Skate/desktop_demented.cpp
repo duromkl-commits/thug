@@ -95,9 +95,15 @@ static bool  s_menu = false;		// a menu or dialog is up (Mirror leaves the pad a
 // Chaos: names that get swapped for each other, the same way all run
 static const char *s_noms_chaos[] = { "Eric", "Mindy", "Kyle", "Paulie", "Chad", "Tony", "Bob", "Andrew",
 	"Bam", "Rodney", "Paul", "Arto", "Mike", "Jamie", "Rune", "Steve", "Mark", "Geoff", "Kareem", "Stevie",
-	"Bucky", "Elissa", "Peralta", "Muska", "Eddie", "Iggy", "Stacey", "Ryan", "Daewon", "Ali", "Johnny", "Gene", "Rob", "Ace", "Peter" };
+	"Bucky", "Elissa", "Peralta", "Muska", "Eddie", "Iggy", "Stacey", "Ryan", "Daewon", "Ali", "Johnny", "Gene", "Rob", "Ace", "Peter",
+	// the added skaters (skater_roster.py) and the team / contest names
+	"Skeezo", "Ralphie", "Bender", "Jordan", "Stacy", "Todd", "Jim", "Andre", "Smiley", "Dan", "Cooper", "Clyde",
+	"Christina", "Nate", "Diego", "Tom", "Charlie", "Udo", "Smitty", "Natlie", "Perry", "Twiggy", "Denny", "Kozar",
+	"Hough", "Furlow", "Scotty", "Sean", "Barak", "Shane", "Ricky", "Robby", "Alf", "Ian", "Michael", "Kevin",
+	"Christian", "Natas" };
 static const int NB_NOMS_CHAOS = (int)( sizeof( s_noms_chaos ) / sizeof( s_noms_chaos[0] ));
-static int s_perm_noms[64];
+typedef char verif_noms_chaos[ NB_NOMS_CHAOS <= 128 ? 1 : -1 ];
+static int s_perm_noms[128];
 static uint32 s_graine_chaos = 1;
 
 // Time Extend: seconds on the clock at the start, per goal, per chapter, after a lost life.
@@ -749,7 +755,10 @@ extern "C" const char *desktop_noms_extra( int famille, int i );
 // Random Names: last names it knows (not "Way" or "Song": ordinary words)
 static const char *s_noms_famille[] = { "Hawk", "Sparrow", "Margera", "Mullen", "Burnquist", "Vallely", "Reynolds",
 	"Glifberg", "Saari", "Thomas", "Campbell", "Rowley", "Lasek", "Koston", "Muska", "Peralta", "Hosoi", "Caballero",
-	"Rodriguez", "Steamer", "Sheckler", "Dyrdek", "Templeton", "Gonzalez", "Moore", "Sanchez", "Turbo", "Simmons", "Williams", "Gonzales", "Boulala", "Stanley", "Frehley", "Criss" };
+	"Rodriguez", "Steamer", "Sheckler", "Dyrdek", "Templeton", "Gonzalez", "Moore", "Sanchez", "Turbo", "Simmons", "Williams", "Gonzales", "Boulala", "Stanley", "Frehley", "Criss",
+	"Flores", "Meronek", "Conley", "Kirks", "Russell", "Grebe", "Albright", "Wiser", "Kostelnik", "Gaskell", "Kopp",
+	"Ikeda", "Kondo", "Okui", "Bremner", "Buchli", "Clements", "Fawler", "Slade", "Harlow", "Hancock", "Thornton",
+	"Bartlett", "Kang", "Kelly", "Carrera", "Qbert", "Kaupas" };
 static const int NB_NOMS_FAMILLE = (int)( sizeof( s_noms_famille ) / sizeof( s_noms_famille[0] ));
 
 // Chaos: people's names swapped for each other (the same swap all run), and
