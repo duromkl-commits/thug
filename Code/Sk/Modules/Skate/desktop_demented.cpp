@@ -1145,7 +1145,22 @@ void DesktopDementedUpdate( Skate &mdl )
 		if( s_run.reste <= 0.0f )
 		{
 			s_run.reste = 0.0f;
-			if( s_run.mods[MOD_LIVES] && s_run.vies > 1 )
+			// mid-goal (Marcus): the goal is failed, and the failed goal
+			// takes the life (desktop_demented_goal), not the clock
+			uint32 en_cours = 0;
+			Game::CGoalManager *gm = Game::GetGoalManager();
+			for( int i = 0; gm && i < gm->GetNumGoals() && !en_cours; ++i )
+			{
+				Game::CGoal *g = gm->GetGoalByIndex( i );
+				if( g && g->IsActive()) en_cours = g->GetGoalId();
+			}
+			if( en_cours )
+			{
+				VLOG( "DSK", "demented: out of time in goal %s, goal failed", Script::FindChecksumName( en_cours ));
+				s_run.reste = TE_RECHARGE;
+				gm->LoseGoal( en_cours );
+			}
+			else if( s_run.mods[MOD_LIVES] && s_run.vies > 1 )
 			{
 				--s_run.vies;
 				s_run.reste = TE_RECHARGE;
