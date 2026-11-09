@@ -109,7 +109,7 @@ static uint32 s_graine_chaos = 1;
 
 // Time Extend: seconds on the clock at the start, per goal, per chapter, after a lost life.
 // Guesses, to tune once it has been played.
-static const float TE_DEPART = 10.0f, TE_CHAPITRE = 120.0f, TE_RECHARGE = 60.0f;
+static const float TE_DEPART = 60.0f, TE_CHAPITRE = 120.0f, TE_RECHARGE = 60.0f;
 static const float TE_GOAL_MIN = 45.0f, TE_GOAL_MAX = 120.0f, TE_GOAL_SANS = 60.0f;	// the menu's choices
 
 struct Run
