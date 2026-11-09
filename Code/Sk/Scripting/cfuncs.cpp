@@ -168,7 +168,6 @@
 #ifdef THUG_DESKTOP
 #include "custom_music.h"
 #ifdef THUG_DESKTOP
-extern "C" void desktop_anim_notee( unsigned int jeu, unsigned int anim );	// desktop_demented.cpp
 #endif
 #endif
 
@@ -3411,11 +3410,6 @@ bool ScriptLoadAnim( Script::CStruct *pParams, Script::CScript *pScript )
 		use_pip = true;
 	}
 
-#ifdef THUG_DESKTOP
-	{
-		desktop_anim_notee( ass_man->GetReferenceChecksum(), descChecksum );
-	}
-#endif
 	return ass_man->LoadAnim( p_asset_filename, descChecksum, ass_man->GetReferenceChecksum(), async, use_pip );
 }
 

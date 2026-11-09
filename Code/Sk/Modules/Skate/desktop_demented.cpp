@@ -69,15 +69,16 @@ static uint32 hasard( uint32 n )
 	return n ? (uint32)( ( x >> 16 ) % n ) : 0;
 }
 
-enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_AUTO, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
-       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };
-static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Auto", "Mirror", "Chaos", "Surprise",
-                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Goal Givers", "Random Animations" };
+enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
+       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
+static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
+                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
 static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
 // thing keeps its random replacement until the next chapter.
 static uint32 s_rando_graine = 1;
+static uint32 s_modeles_graine = 1;	// Random Models: one roll for the whole run
 static uint32 s_niv_log = 0;	// level of the last goal dump (reset each run)
 static uint32 melanger( uint32 x )
 {
@@ -108,7 +109,7 @@ static uint32 s_graine_chaos = 1;
 
 // Time Extend: seconds on the clock at the start, per goal, per chapter, after a lost life.
 // Guesses, to tune once it has been played.
-static const float TE_DEPART = 300.0f, TE_CHAPITRE = 120.0f, TE_RECHARGE = 60.0f;
+static const float TE_DEPART = 10.0f, TE_CHAPITRE = 120.0f, TE_RECHARGE = 60.0f;
 static const float TE_GOAL_MIN = 45.0f, TE_GOAL_MAX = 120.0f, TE_GOAL_SANS = 60.0f;	// the menu's choices
 
 struct Run
@@ -484,9 +485,11 @@ extern "C" unsigned int desktop_rando_etoile( unsigned char *r, unsigned char *g
 
 // --- experimental randomizers (Marcus: "I just wanna see if it crashes") ---
 
-// Random Goal Givers: a goal giver's appearance swapped for another human
-// ped / pro profile (same skeleton, its own anims kept). modelcomponent.cpp
-// Obj_InitModelFromProfile. Returns the profile structure name, 0 = as is.
+// Random Models: a goal giver's or story character's appearance swapped for
+// another human ped / pro profile (same skeleton, its own anims kept).
+// modelcomponent.cpp Obj_InitModelFromProfile. Keyed on who it is (the
+// body / head desc_id), rolled once per run: Eric stays the same stand-in
+// all story long, in cutscenes too (desktop_rando_cutscene).
 static const char *s_donneurs[] = { "Ped_Skeezo", "Ped_Ralphie", "Ped_Bender", "Ped_Jordan", "Ped_Eric", "Ped_Bum_01",
 	"Ped_Crackhead_01", "Ped_Drugdealer_01", "Ped_Drugdealer_02", "Ped_Drugdealer_03", "Ped_FactoryWorker_01",
 	"Ped_FactoryWorker_02", "Ped_Security_Train", "Ped_Street_Warrior_01", "Ped_Street_Warrior_02", "Ped_Street_Warrior_03",
@@ -498,6 +501,28 @@ static const char *s_donneurs[] = { "Ped_Skeezo", "Ped_Ralphie", "Ped_Bender", "
 	"Ped_Bartender", "Ped_Film", "Ped_Surfer", "Ped_KISS_Paul", "Ped_KISS_Peter", "Ped_KISS_Ace", "Ped_KISS_Gene",
 	"PedPro_Hawk", "PedPro_Koston", "PedPro_Burnquist", "PedPro_Lasek", "PedPro_Mullen", "PedPro_Muska", "PedPro_Margera",
 	"PedPro_Rodrigez", "PedPro_Reynolds", "PedPro_Vallely" };
+
+// Story characters with a cutscene head: the head's skeleton in the .cut,
+// and the in-game ped profile. (Manager_Head is shared by several people,
+// Rowley has no ped: those two stay as they are in cutscenes.)
+static const char *s_perso_cut[][2] = { { "eric_head", "Ped_Eric" }, { "hawk_head", "PedPro_Hawk" },
+	{ "lasek_head", "PedPro_Lasek" }, { "muska_head", "PedPro_Muska" }, { "magera_head", "PedPro_Margera" },
+	{ "head_peralta", "Ped_Peralta" }, { "head_trooper", "Ped_Trooper" } };
+static const int NB_PERSO_CUT = (int)( sizeof( s_perso_cut ) / sizeof( s_perso_cut[0] ));
+
+// who an appearance is: its body's desc_id, else its head's
+static uint32 qui( Script::CStruct *app )
+{
+	if( !app ) return 0;
+	static const char *s_parties[] = { "ped_body", "ped_m_head", "ped_f_head" };
+	for( int i = 0; i < 3; ++i )
+	{
+		Script::CStruct *p = NULL;
+		uint32 d = 0;
+		if( app->GetStructure( crc( s_parties[i] ), &p, Script::NO_ASSERT ) && p && p->GetChecksum( crc( "desc_id" ), &d, Script::NO_ASSERT ) && d ) return d;
+	}
+	return 0;
+}
 
 static bool est_donneur( uint32 id )
 {
@@ -512,20 +537,56 @@ static bool est_donneur( uint32 id )
 	return false;
 }
 
-extern "C" unsigned int desktop_rando_donneur( unsigned int obj_id )
+static bool est_perso( uint32 cle )
 {
-	if( !rando_on( MOD_R_DONNEURS ) || !est_donneur( obj_id )) return 0;
+	for( int i = 0; i < NB_PERSO_CUT && cle; ++i )
+		if( qui( Script::GetStructure( crc( s_perso_cut[i][1] ), Script::NO_ASSERT )) == cle ) return true;
+	return false;
+}
+
+// the stand-in for 'cle' this run (a profile name checksum), 0 = none
+static uint32 remplacant( uint32 cle, const char **p_nom )
+{
+	if( !cle ) return 0;
 	const int n = (int)( sizeof( s_donneurs ) / sizeof( s_donneurs[0] ));
-	uint32 h = melanger( obj_id ^ s_rando_graine ^ 0x2545f491u );
+	uint32 h = melanger( cle ^ s_modeles_graine ^ 0x2545f491u );
 	for( int essai = 0; essai < 8; ++essai, h = melanger( h + 1 ))
 	{
 		const uint32 c = crc( s_donneurs[h % (uint32)n] );
-		if( Script::GetStructure( c, Script::NO_ASSERT ))
+		Script::CStruct *p = Script::GetStructure( c, Script::NO_ASSERT );
+		if( p && qui( p ) != cle )
 		{
-			VLOG( "DSK", "random goal givers: %s -> %s", Script::FindChecksumName( obj_id ), s_donneurs[h % (uint32)n] );
+			if( p_nom ) *p_nom = s_donneurs[h % (uint32)n];
 			return c;
 		}
 	}
+	return 0;
+}
+
+extern "C" unsigned int desktop_rando_donneur( unsigned int obj_id, void *p_app )
+{
+	if( !rando_on( MOD_R_DONNEURS )) return 0;
+	const uint32 cle = qui( (Script::CStruct *)p_app );
+	if( !cle || !( est_perso( cle ) || est_donneur( obj_id ))) return 0;
+	const char *nom = "";
+	const uint32 r = remplacant( cle, &nom );
+	if( r ) VLOG( "DSK", "random models: %s (%s) -> %s", Script::FindChecksumName( obj_id ), Script::FindChecksumName( cle ), nom );
+	return r;
+}
+
+// cutscenedetails.cpp: a cutscene head's skeleton -> the profile its
+// character wears this run, 0 = as is
+extern "C" unsigned int desktop_rando_cutscene( unsigned int squelette_tete )
+{
+	if( !rando_on( MOD_R_DONNEURS )) return 0;
+	for( int i = 0; i < NB_PERSO_CUT; ++i )
+		if( crc( s_perso_cut[i][0] ) == squelette_tete )
+		{
+			const char *nom = "";
+			const uint32 r = remplacant( qui( Script::GetStructure( crc( s_perso_cut[i][1] ), Script::NO_ASSERT )), &nom );
+			if( r ) VLOG( "DSK", "random models: cutscene %s -> %s", s_perso_cut[i][0], nom );
+			return r;
+		}
 	return 0;
 }
 
@@ -539,51 +600,6 @@ extern "C" const char *desktop_rando_marqueur( const char *p_nom, unsigned int i
 	for( int i = 0; i < 5 && !marqueur; ++i ) marqueur = !stricmp( p_nom, s_m[i] );
 	if( !marqueur && stricmp( p_nom, "Special_Arrow" )) return NULL;
 	return s_m[melanger( id ^ s_rando_graine ^ 0x9b05688cu ) % 5u];
-}
-
-// Random Animations: every anim a set loads is noted (cfuncs.cpp LoadAnim);
-// a human skater / ped / goal giver playing one gets another of the same set.
-struct SJeuAnims { uint32 jeu; std::vector<uint32> anims; };
-static std::vector<SJeuAnims> s_jeux_anims;
-
-extern "C" void desktop_anim_notee( unsigned int jeu, unsigned int anim )
-{
-	if( !jeu || !anim ) return;
-	for( size_t i = 0; i < s_jeux_anims.size(); ++i )
-		if( s_jeux_anims[i].jeu == jeu )
-		{
-			std::vector<uint32> &v = s_jeux_anims[i].anims;
-			for( size_t k = 0; k < v.size(); ++k ) if( v[k] == anim ) return;
-			v.push_back( anim );
-			return;
-		}
-	SJeuAnims j; j.jeu = jeu; j.anims.push_back( anim );
-	s_jeux_anims.push_back( j );
-}
-
-extern "C" unsigned int desktop_rando_anim( unsigned int jeu, unsigned int anim )
-{
-	if( !rando_on( MOD_R_ANIMS ) || !anim ) return anim;
-	Mdl::Skate &mdl = *Mdl::Skate::Instance();
-	if(( mdl.GetMovieManager() && mdl.GetMovieManager()->IsRolling()) || ( mdl.GetObjectAnimManager() && mdl.GetObjectAnimManager()->IsRolling())) return anim;	// cutscenes stay
-	static uint32 s_jeu_vu = 0; static bool s_humain = false;
-	if( jeu != s_jeu_vu )
-	{
-		s_jeu_vu = jeu;
-		char b[96];
-		snprintf( b, sizeof( b ), "%s", Script::FindChecksumName( jeu ));
-		for( char *q = b; *q; ++q ) if( *q >= 'A' && *q <= 'Z' ) *q = (char)( *q - 'A' + 'a' );
-		s_humain = strstr( b, "human" ) || strstr( b, "ped_" );
-	}
-	if( !s_humain ) return anim;
-	for( size_t i = 0; i < s_jeux_anims.size(); ++i )
-		if( s_jeux_anims[i].jeu == jeu )
-		{
-			const std::vector<uint32> &v = s_jeux_anims[i].anims;
-			if( v.size() < 2 ) return anim;
-			return v[melanger( anim ^ s_rando_graine ^ 0x7137449bu ) % (uint32)v.size()];
-		}
-	return anim;
 }
 
 // Random Voices (p_music.cpp): voice streams swapped for another of about
@@ -893,11 +909,13 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 	// Word Salad randomizer: words shuffled, one seed per chapter, in play
 	// only (a paused menu is built while the game is paused, and stays plain)
 	const bool mots = rando_on( MOD_R_MOTS ) && !Mdl::FrontEnd::Instance()->GamePaused();
-	// Random Names randomizer: every known name becomes one from the pool
-	// (the stock list + data\custom\names.txt), one seed per chapter
-	const bool noms = rando_on( MOD_R_NOMS );
+	// ... and every known name becomes one from the pool (the stock list +
+	// data\custom\names.txt), one seed per chapter, menus included
+	const bool noms = rando_on( MOD_R_MOTS );
 	const bool chaos = chaos_on();
-	if( !chaos && !noms )
+	// Obscure modifier: button icons blanked in play (menus keep theirs)
+	const bool obscur = rando_on( MOD_OBSCURE ) && !Mdl::FrontEnd::Instance()->GamePaused();
+	if( !chaos && !noms && !obscur )
 	{
 		if( !mots ) return 0;
 		strncpy( out, in, n - 1 );
@@ -911,7 +929,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		if( *p == '\\' )
 		{
 			// No Button Hints event: \bN / \mN icons become "?"
-			if( chaos && s_ev_reste[EV_BOUTONS] > 0.0f && ( p[1] == 'b' || p[1] == 'B' || p[1] == 'm' || p[1] == 'M' ) && p[2] )
+			if((( chaos && s_ev_reste[EV_BOUTONS] > 0.0f ) || obscur ) && ( p[1] == 'b' || p[1] == 'B' || p[1] == 'm' || p[1] == 'M' ) && p[2] )
 			{
 				out[o++] = ' ';	// blank, not "?" (Marcus)
 				p += 3;
@@ -1220,16 +1238,16 @@ bool ScriptDesktopDemented( Script::CStruct *pParams, Script::CScript *pScript )
 	return s_run.actif;
 }
 
-// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives, 3 Time Extend, 4 Fragile, 5 Auto, 6 Mirror, 7 Chaos, 8 Surprise)
+// @script | DesktopDementedToggle | desktop: flips Demented modifier i (0 Perma Bail, 1 Zero, 2 Lives, 3 Time Extend, 4 Fragile, 5 Obscure, 6 Mirror, 7 Chaos, 8 Surprise)
 bool ScriptDesktopDementedToggle( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	int i = -1;
 	pParams->GetInteger( crc( "i" ), &i, Script::NO_ASSERT );
-	if( i == MOD_AUTO ) return true;	// Auto removed (Marcus)
 	int v = -1;
 	if( pParams->GetInteger( crc( "set" ), &v, Script::NO_ASSERT ) && i >= 0 && i < NB_MODS && i != MOD_LIVES )
 		s_arme[i] = v != 0;		// SURPRISE ME! / Start Run
 	else if( i >= 0 && i < NB_MODS && i != MOD_LIVES ) s_arme[i] = !s_arme[i];	// lives are always on
+	s_arme[MOD_R_NOMS] = s_arme[MOD_R_ANIMS] = false;
 	return true;
 }
 
@@ -1253,21 +1271,22 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.actif = true;
 	for( int i = 0; i < NB_MODS; ++i ) s_run.mods[i] = s_arme[i];
 	s_run.mods[MOD_LIVES] = true;	// not a modifier (Marcus): every run has lives
-	s_run.mods[MOD_AUTO] = false;	// removed (Marcus)
 	if( s_run.mods[MOD_SURPRISE] )
 	{
 		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 0, 30, 30, 0, 50, 40, 40, 35, 25, 40, 0, 0 };	// the experimental ones never
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 25, 30, 30, 0, 50, 40, 40, 35, 25, 0, 0, 0 };	// Random Models (experimental) never
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;
 	}
+	s_run.mods[MOD_R_NOMS] = s_run.mods[MOD_R_ANIMS] = false;
 	s_reve_t = 0.0f; s_flip_t = 0.0f; s_flip_suivant = 60.0f + hasard( 90 ); s_flip = false;
 	chaos_tout_finir();
 	s_ev_prochain = 15.0f + hasard( 30 );
 	s_graine_chaos = hasard( 0x7fffffff ) | 1;
 	s_niv_log = 0;
 	s_rando_graine = hasard( 0x7fffffff ) | 1;
+	s_modeles_graine = hasard( 0x7fffffff ) | 1;
 	for( int i = 0; i < NB_NOMS_CHAOS; ++i ) s_perm_noms[i] = i;
 	for( int i = NB_NOMS_CHAOS - 1; i > 0; --i ) { const int k = (int)hasard( i + 1 ), x = s_perm_noms[i]; s_perm_noms[i] = s_perm_noms[k]; s_perm_noms[k] = x; }
 	s_run.skater = 0;
@@ -1286,9 +1305,9 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	{
 		if( s_run.mods[MOD_ZERO] ) car->SetGlobalFlag( 511 ); else car->UnSetGlobalFlag( 511 );
 	}
-	VLOG( "DSK", "demented: new run, perma %d zero %d time %d fragile %d auto %d mirror %d chaos %d surprise %d",
+	VLOG( "DSK", "demented: new run, perma %d zero %d time %d fragile %d obscure %d mirror %d chaos %d surprise %d",
 		s_run.mods[MOD_PERMA], s_run.mods[MOD_ZERO], s_run.mods[MOD_TIME], s_run.mods[MOD_FRAGILE],
-		s_run.mods[MOD_AUTO], s_run.mods[MOD_MIRROR], s_run.mods[MOD_CHAOS], s_run.mods[MOD_SURPRISE] );
+		s_run.mods[MOD_OBSCURE], s_run.mods[MOD_MIRROR], s_run.mods[MOD_CHAOS], s_run.mods[MOD_SURPRISE] );
 	return true;
 }
 

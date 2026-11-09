@@ -9,7 +9,7 @@
 #include <psp2/kernel/processmgr.h>
 #include "vita_log.h"
 #ifdef THUG_DESKTOP
-extern "C" unsigned int desktop_rando_donneur( unsigned int obj_id );	// desktop_demented.cpp
+extern "C" unsigned int desktop_rando_donneur( unsigned int obj_id, void *p_app );	// desktop_demented.cpp
 extern "C" int desktop_mirror_world( void );
 #endif
 #endif
@@ -1366,9 +1366,9 @@ CBaseComponent::EMemberFunctionResult CModelComponent::CallMemberFunction( uint3
 				Script::CStruct* pAppearanceParams;
 				pParams->GetStructure( CRCD(0x456d28d1,"struct"), &pAppearanceParams, Script::ASSERT );
 #ifdef THUG_DESKTOP
-				// Demented's Random Goal Givers (experimental)
+				// Demented's Random Models (experimental)
 				{
-					const uint32 autre = GetObject() ? desktop_rando_donneur( GetObject()->GetID()) : 0;
+					const uint32 autre = GetObject() ? desktop_rando_donneur( GetObject()->GetID(), pAppearanceParams ) : 0;
 					Script::CStruct *p_autre = autre ? Script::GetStructure( autre, Script::NO_ASSERT ) : NULL;
 					if ( p_autre ) pAppearanceParams = p_autre;
 				}

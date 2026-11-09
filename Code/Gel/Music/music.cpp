@@ -47,6 +47,8 @@ extern "C" void vita_log_printf( const char *sys, const char *fmt, ... );
 #include <gel/components/streamcomponent.h>
 
 #include <sk/modules/skate/skate.h>
+#include <gel/components/modelcomponent.h>
+#include <gel/object/compositeobject.h>
 #include <sk/modules/skate/gamemode.h>
 
 #include <gfx/debuggfx.h>
@@ -781,6 +783,10 @@ bool _StartPreLoadedMusicStream( float volume )
 
 #define MIN_STREAM_VOL		2.0f
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_salade_permise( int oui );	// Vita/p_music.cpp
+#endif
+
 
 
 uint32 PlayStreamFromObject( Obj::CStreamComponent *pComponent, uint32 streamNameChecksum, float dropoff, float volume,
@@ -843,7 +849,18 @@ uint32 PlayStreamFromObject( Obj::CStreamComponent *pComponent, uint32 streamNam
 	
 	// K: The 'false' on the end means do not record the call in the replay, because this
 	// call to PlayStreamFromObject has already been recorded.
+#ifdef THUG_DESKTOP
+	// Sound Salad only swaps lines spoken by a ped / goal giver: not the
+	// skater, not level ambience (traffic, crowds, birds: model-less emitters)
+	{
+		Obj::CCompositeObject *p_o = pComponent->GetObject();
+		desktop_salade_permise( p_o && p_o->GetType() != SKATE_TYPE_SKATER && p_o->GetComponent( CRC_MODEL ) ? 1 : 0 );
+	}
+#endif
 	uint32 uniqueID = PlayStream( streamNameChecksum, &vol, pitch, priority, controlID, false );
+#ifdef THUG_DESKTOP
+	desktop_salade_permise( 0 );
+#endif
 	if ( uniqueID )
 	{
 		Dbg_MsgAssert( ( ( gLastStreamChannelPlayed >= 0 ) && ( gLastStreamChannelPlayed < MAX_STREAMS_PER_OBJECT ) ), ( "Tell Matt to fix object streams" ) );

@@ -54,6 +54,9 @@
 #include <gfx/nxlight.h>
 
 #include <sk/objects/skaterprofile.h>
+#ifdef THUG_DESKTOP
+extern "C" unsigned int desktop_rando_cutscene( unsigned int squelette_tete );	// desktop_demented.cpp
+#endif
 #include <gfx/modelappearance.h>
 #include <sys/mem/memman.h>
 #include <sys/timer.h>
@@ -3928,6 +3931,32 @@ bool CCutsceneData::create_objects( uint32* pData )
 		// done with temp struct
 		delete pNodeData;
 	}
+
+#ifdef THUG_DESKTOP
+	// Demented's Random Models: a story character's cutscene body wears the
+	// ped profile they got this run, and their cutscene head goes (the
+	// profile brings its own head). Same skeleton as the peds.
+	for ( int i = 0; i < m_numObjects; i++ )
+	{
+		SCutsceneObjectInfo* pHeadInfo = &m_objects[i];
+		if ( !( pHeadInfo->m_flags & vCUTSCENEOBJECTFLAGS_ISHEAD ) || ( pHeadInfo->m_flags & vCUTSCENEOBJECTFLAGS_ISSKATER ) )
+			continue;
+		const uint32 profil = desktop_rando_cutscene( pHeadInfo->m_skeletonName );
+		Script::CStruct* pProfil = profil ? Script::GetStructure( profil, Script::NO_ASSERT ) : NULL;
+		SCutsceneObjectInfo* pBodyInfo = get_object_info( pHeadInfo->m_objectName - 1 );
+		if ( !pProfil || !pBodyInfo || pBodyInfo->m_doPlayerSubstitution || !pBodyInfo->mp_object || !pHeadInfo->mp_object )
+			continue;
+		Obj::CModelComponent* pBody = GetModelComponentFromObject( pBodyInfo->mp_object );
+		Obj::CModelComponent* pHead = GetModelComponentFromObject( pHeadInfo->mp_object );
+		if ( !pBody || !pHead || !pBody->GetModel() || !pHead->GetModel() || !GetSkeletonComponentFromObject( pBodyInfo->mp_object ) )
+			continue;
+		Gfx::CModelAppearance theAppearance;
+		theAppearance.Load( pProfil, true );
+		pBody->InitModelFromProfile( &theAppearance, true, 0, Script::GenerateCRC( "create_ped_model_from_appearance" ) );
+		pBody->GetModel()->SetBoundingSphere( Mth::Vector(0.0f,0.0f,0.0f,50000.0f) );
+		pHead->GetModel()->ClearGeoms();
+	}
+#endif
 
 	// apply cas scaling to the appropriate parts
 	for ( int i = 0; i < m_numObjects; i++ )

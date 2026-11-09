@@ -653,7 +653,12 @@ void RenderText2D( float pri )
 
 		lot_texture( p_font->GetTexture());
 
-		s_cle_texte = (unsigned int)(size_t)p * 2654435761u;
+		// Random Colours key: the font and the draw priority, never the text
+		// object (the trick panel remakes its texts every frame in a manual,
+		// so a per-object key made the hue flash)
+		unsigned int cle_base;
+		{ float fp = p->GetPri(); unsigned int ip; memcpy( &ip, &fp, sizeof( ip )); cle_base = ( ip ^ (unsigned int)(size_t)p_font ) * 2654435761u; }
+		s_cle_texte = cle_base;
 		Image::RGBA c = p->Color();
 		const float kc = g_vita_mx2 ? 255.0f : 128.0f;	// mx2 (#52)
 		couleur_texte( c, kc );
@@ -681,12 +686,12 @@ void RenderText2D( float pri )
 					const int d = Nx::dehex( q[1] );
 					if(( d <= 0 ) || ( d > 16 ) || p->ColorOverride())
 					{
-						s_cle_texte = (unsigned int)(size_t)p * 2654435761u;
+						s_cle_texte = cle_base;
 						couleur_texte( c, kc );
 					}
 					else
 					{
-						s_cle_texte = (unsigned int)(size_t)p * 2654435761u ^ (unsigned int)d * 0x9e3779b9u;
+						s_cle_texte = cle_base ^ (unsigned int)d * 0x9e3779b9u;
 						couleur_texte( p_font->GetRGBATableEntry( d - 1 ), kc );
 					}
 				}

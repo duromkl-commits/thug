@@ -700,10 +700,12 @@ extern "C" const char *desktop_sfx_extra_path( int i );
 
 // Sound Salad: some voice lines play a loose .wav from the extra pool
 // (THPS3's sounds etc.) instead. Only dialogue: sound effects stay stock.
+static int s_salade_permise = 0;	// set by PlayStreamFromObject (music.cpp) for a ped's line
+extern "C" void desktop_salade_permise( int oui ) { s_salade_permise = oui; }
 static const char *salade_voix( uint32 checksum )
 {
 	const unsigned int g = desktop_chaos_son_graine();
-	if( !g ) return NULL;
+	if( !g || !s_salade_permise ) return NULL;
 	const int nx = desktop_sfx_extra_count();
 	if( nx <= 0 ) return NULL;
 	uint32 h = checksum ^ g;
