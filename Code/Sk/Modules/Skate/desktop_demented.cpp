@@ -1007,7 +1007,7 @@ void DesktopDementedUpdate( Skate &mdl )
 				{
 					// Inside the TV border (2D y runs -16..464 on screen), a few
 					// units from its left and bottom edges, then upwards.
-					p.AddPair( "pos", 18.0f, 450.0f - 25.0f * (float)i );
+					p.AddPair( "pos", 22.0f, 450.0f - 25.0f * (float)i );
 					Script::CArray *a = new Script::CArray;
 					a->SetSizeAndType( 4, ESYMBOLTYPE_INTEGER );
 					a->SetInteger( 0, (int)( r * 128.0f )); a->SetInteger( 1, (int)( g * 128.0f ));

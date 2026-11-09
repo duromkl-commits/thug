@@ -694,6 +694,28 @@ extern "C" void desktop_voice_wav( uint32 checksum, const char *p_vita_path )
 	snprintf( s_wav_chemin[k], sizeof( s_wav_chemin[k] ), "%s", p_vita_path );
 }
 
+extern "C" unsigned int desktop_chaos_son_graine( void );	// desktop_demented.cpp: Sound Salad, 0 = off
+extern "C" int desktop_sfx_extra_count( void );			// custom_music.cpp: data\<game>\custom\sounds
+extern "C" const char *desktop_sfx_extra_path( int i );
+
+// Sound Salad: some voice lines play a loose .wav from the extra pool
+// (THPS3's sounds etc.) instead. Only dialogue: sound effects stay stock.
+static const char *salade_voix( uint32 checksum )
+{
+	const unsigned int g = desktop_chaos_son_graine();
+	if( !g ) return NULL;
+	const int nx = desktop_sfx_extra_count();
+	if( nx <= 0 ) return NULL;
+	uint32 h = checksum ^ g;
+	h ^= h >> 16; h *= 0x7feb352dU; h ^= h >> 15; h *= 0x846ca68bU; h ^= h >> 16;
+	if(( h % 100u ) >= 40u ) return NULL;
+	const char *r = desktop_sfx_extra_path((int)(( h >> 8 ) % (uint32)nx ));
+	if( !r ) return NULL;
+	static char s_chemin[300];
+	snprintf( s_chemin, sizeof( s_chemin ), "ux0:data/thug/Data/%s", r );
+	return s_chemin;
+}
+
 static const char *wav_de( uint32 checksum )
 {
 	for( int i = 0; i < s_wav_n; ++i )
@@ -960,18 +982,27 @@ static bool vdemarre( uint32 checksum, int s, bool ok )
 	if( p_e ) p_e = vrando( p_e );	// Demented Random Voices
 #endif
 #ifdef THUG_DESKTOP
-	if( !p_e && wav_de( checksum ))
+	const char *p_salade = salade_voix( checksum );
+	const char *p_wav = p_salade ? p_salade : wav_de( checksum );
+	short *mem_salade = NULL;
+	int n_salade = 0, hz_salade = 0;
+	if( p_salade && !( mem_salade = wav_charge( p_salade, &n_salade, &hz_salade )))
 	{
-		int n = 0, hz = 0;
-		short *mem = wav_charge( wav_de( checksum ), &n, &hz );
+		VLOG( "PCM", "sound salad: could not read %s", p_salade );
+		p_wav = wav_de( checksum );	// the line as it would have played
+	}
+	if(( mem_salade || !p_e ) && p_wav )
+	{
+		int n = n_salade, hz = hz_salade;
+		short *mem = mem_salade ? mem_salade : wav_charge( p_wav, &n, &hz );
 		if( !mem )
 		{
-			VLOG( "PCM", "bail voice %s: could not read it", wav_de( checksum ));
+			VLOG( "PCM", "voice wav %s: could not read it", p_wav );
 			return false;
 		}
 		static int n_log;
 		if( n_log++ < 20 )
-			VLOG( "PCM", "bail voice %s: %d frames at %d Hz, pitch %d%%", wav_de( checksum ), n, hz, (int)( s_flux[s].vitesse * 100.0 ));
+			VLOG( "PCM", "voice wav %s: %d frames at %d Hz, pitch %d%%", p_wav, n, hz, (int)( s_flux[s].vitesse * 100.0 ));
 		SFlux &F = s_flux[s];
 		sceKernelLockMutex( F.mutex, 1, NULL );
 		vlibere( F );

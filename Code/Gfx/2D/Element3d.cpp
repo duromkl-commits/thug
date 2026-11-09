@@ -793,6 +793,18 @@ void CElement3d::update()
 	}
 		
 #ifdef THUG_DESKTOP
+	// HUD stars: the model is loaded while the properties are read, before
+	// rgba may be, so their colour is (re)applied here once it is known
+	if (m_desktop_etoile && m_desktop_propre && m_num_models && mp_models[0].mpModel)
+	{
+		const unsigned int cle = 0x80000000u | ((unsigned int)m_rgba.r << 16) | ((unsigned int)m_rgba.g << 8) | (unsigned int)m_rgba.b;
+		if (cle != m_desktop_cle)
+		{
+			m_desktop_cle = cle;
+			Nx::DesktopTeinterModele(mp_models[0].mpModel, m_rgba.r ? m_rgba.r : 1, m_rgba.g, m_rgba.b);
+			mp_models[0].mpModel->SetColor(128, 128, 128, m_rgba.a);
+		}
+	}
 	// goal givers' stars: Random Colours' colour follows its seed (per chapter)
 	if (m_desktop_etoile && !m_desktop_propre && m_num_models && mp_models[0].mpModel)
 	{
