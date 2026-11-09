@@ -933,7 +933,14 @@ void DesktopDementedUpdate( Skate &mdl )
 	if( s_run.mods[MOD_AUTO] && !s_run.fini )
 	{
 		Game::CGoalManager *gm = Game::GetGoalManager();
-		if( !gm || gm->GetNumActiveGoals() > 0 || film || s_menu ) { if( s_auto_t > 0.0f ) s_auto_t = 0.0f; }
+		// Not in the first seconds of a level: the story activates its own
+		// opening goal then, and force_start (GoalManager_DeactivateAllGoals)
+		// would kill it and stall the chapter. Any active goal counts.
+		static uint32 s_auto_niv = 0;
+		static float s_auto_niv_t = 0.0f;
+		if( niveau != s_auto_niv ) { s_auto_niv = niveau; s_auto_niv_t = 0.0f; }
+		if( !film && !pause ) s_auto_niv_t += dt;
+		if( !gm || s_auto_niv_t < 8.0f || gm->GetNumActiveGoals( true ) > 0 || film || s_menu ) { if( s_auto_t > 0.0f ) s_auto_t = 0.0f; }
 		else
 		{
 			s_auto_t += dt;
