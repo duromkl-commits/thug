@@ -44,6 +44,7 @@
 #include <sys/timer.h>
 #include <gel/object/compositeobjectmanager.h>
 #include <sk/objects/restart.h>
+#include <sk/scripting/nodearray.h>
 #include <sk/components/skaterstatecomponent.h>
 #include <sk/components/skatercorephysicscomponent.h>
 #include <sk/components/skaterflipandrotatecomponent.h>
@@ -88,9 +89,9 @@ static uint32 hasard( uint32 n )
 }
 
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
-       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
+       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, MOD_R_CUTS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
-                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
+                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations", "Random Cutscenes" };
 static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
@@ -1147,6 +1148,26 @@ extern "C" float desktop_chaos_seisme( void )
 	return q > 0.0f ? q : 0.0f;
 }
 
+// cutscenedetails.cpp: Random Cutscenes (Marcus). 0 = off, else this
+// cutscene's seed (per chapter, like the other randomizers)
+extern "C" unsigned int desktop_rando_cuts( unsigned int nom )
+{
+	return rando_on( MOD_R_CUTS ) ? ( melanger( s_rando_graine ^ nom ^ 0xc075c3e5u ) | 1 ) : 0;
+}
+
+// a random spot of the level for a Random Cutscene: one of its restart points
+extern "C" int desktop_rando_cut_lieu( unsigned int graine, float *xyz )
+{
+	std::vector<int> v;
+	int n = -1;
+	while(( n = Obj::GetRestartNode( 0, 0, n )) != -1 && v.size() < 400 ) v.push_back( n );
+	if( v.empty()) return 0;
+	Mth::Vector p;
+	SkateScript::GetPosition( v[melanger( graine ) % (uint32)v.size()], &p );
+	xyz[0] = p[X]; xyz[1] = p[Y]; xyz[2] = p[Z];
+	return 1;
+}
+
 // shim_input_audio.cpp: Swapped Buttons (ollie <-> grind), not in menus
 extern "C" int desktop_chaos_boutons( void )
 {
@@ -1847,7 +1868,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	if( s_run.mods[MOD_SURPRISE] )
 	{
 		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 25, 30, 30, 0, 50, 40, 40, 35, 25, 0, 0, 0 };	// Random Models (experimental) never
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 25, 30, 30, 0, 50, 40, 40, 35, 25, 0, 0, 0, 35 };	// Random Models (experimental) never
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;

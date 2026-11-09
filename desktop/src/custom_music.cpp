@@ -1271,6 +1271,7 @@ static const char *s_demented_scripts =
 	"make_main_menu_item { text = <text12> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 12 focus = 3 } }\n"
 	"make_main_menu_item { text = <text13> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 13 focus = 4 } }\n"
 	"make_main_menu_item { text = <text15> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 15 focus = 5 } }\n"
+	"make_main_menu_item { text = <text17> pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 17 focus = 6 } }\n"
 	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 7 } }\n"
 	"FireEvent Type = focus target = current_menu_anchor\n"
 	"if NOT ( <focus> = 0 )\n"
