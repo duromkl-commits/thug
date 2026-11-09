@@ -38,6 +38,9 @@
 #include <gel/components/statsmanagercomponent.h>
 
 #include <objects/manual.h>
+#ifdef THUG_DESKTOP
+extern "C" float desktop_chaos_seisme( void );	// desktop_demented.cpp
+#endif
 #include <objects/rail.h>
 #include <objects/skaterprofile.h>
 
@@ -438,6 +441,20 @@ void CManual::DoManualPhysics()
 	float ManualInstableRate=mpSkaterBalanceTrickComponent->GetBalanceStat(CRCD(0xa9fef5ab,"Instable_Rate"));
 	float ManualBase = mpSkaterBalanceTrickComponent->GetBalanceStat(CRCD(0xb6a634f3,"Instable_base")); 
 	float ManualInstability = ManualBase + (mManualTime * ManualInstableRate);
+#ifdef THUG_DESKTOP
+	// Demented Chaos EARTHQUAKE!!!: manuals and grinds drift harder and get jolted
+	{
+		const float q = desktop_chaos_seisme();
+		if( q > 0.0f )
+		{
+			ManualInstability *= 1.0f + 1.5f * q;
+			static uint32 s_g = 0x9e3779b9u;
+			s_g ^= s_g << 13; s_g ^= s_g >> 17; s_g ^= s_g << 5;
+			const float r = (float)( s_g & 0xffff ) / 32767.5f - 1.0f;
+			mManualLean += scale_with_frame_length( frame_length, r * q * 80.0f );
+		}
+	}
+#endif
 
 	
 	// the more you lean, the more you lean

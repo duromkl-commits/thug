@@ -51,6 +51,11 @@ static Script::CStruct   *sp_histoire = NULL;	// THUG's story, set aside
 static bool               s_zero = false;		// THUG Zero flag, set aside
 static int                s_ouverts = 0;
 static bool               s_a_sauver = false;
+// THUG's story keeps its progress in career global flags too: kept aside on
+// the way in and put back on the way out, so nothing the THPS4 scripts set
+// leaks into the story (Marcus saw story goals vanish after a PS4 visit)
+enum { NB_DRAPEAUX = 512 };
+static bool               s_drapeaux[NB_DRAPEAUX];
 
 static int niveau( uint32 load_script )
 {
@@ -101,6 +106,7 @@ static void entre( void )
 	gm->DesktopExport( sp_histoire );
 	Obj::CSkaterCareer *c = Mdl::Skate::Instance()->GetCareer();
 	s_zero = c->GetGlobalFlag( DRAPEAU_ZERO );
+	for( int i = 0; i < NB_DRAPEAUX; ++i ) s_drapeaux[i] = c->GetGlobalFlag( i );
 	c->UnSetGlobalFlag( DRAPEAU_ZERO );
 
 	unsigned n = 0;
@@ -125,6 +131,17 @@ static void sort( void )
 	sp_histoire = NULL;
 	drapeaux( 0 );
 	Obj::CSkaterCareer *c = Mdl::Skate::Instance()->GetCareer();
+	int change = 0;
+	for( int i = 0; i < NB_DRAPEAUX; ++i )
+	{
+		if( i >= DRAPEAU && i < DRAPEAU + NB ) continue;
+		const bool v = c->GetGlobalFlag( i );
+		if( i != DRAPEAU_ZERO && v != s_drapeaux[i] )
+		{
+			if( change++ < 40 ) VLOG( "PS4", "career out: global flag %d was %d, now %d (put back)", i, s_drapeaux[i], v );
+		}
+		if( s_drapeaux[i] ) c->SetGlobalFlag( i ); else c->UnSetGlobalFlag( i );
+	}
 	if( s_zero ) c->SetGlobalFlag( DRAPEAU_ZERO );
 	s_actif = false;
 	s_a_sauver = false;

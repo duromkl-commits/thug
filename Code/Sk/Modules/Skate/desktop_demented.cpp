@@ -44,6 +44,12 @@
 #include <sys/timer.h>
 #include <gel/object/compositeobjectmanager.h>
 #include <sk/objects/restart.h>
+#include <sk/components/skaterstatecomponent.h>
+#include <sk/components/skatercorephysicscomponent.h>
+#include <sk/components/skaterflipandrotatecomponent.h>
+#include <gel/components/modelcomponent.h>
+#include <gel/components/pedlogiccomponent.h>
+#include <gfx/nxmodel.h>
 #include "vita_log.h"
 
 bool DesktopThugZero( void );
@@ -57,9 +63,21 @@ static uint32 crc( const char *t ) { return Script::GenerateCRC( t ); }
 // Our own generator: the C library's rand() gets reseeded by other code
 // (two runs in a row were dealt the same skater). Seeded once from the
 // wall clock and the high-res timer, then never touched by anyone else.
+//
+// Seeds (Marcus): a run's rolls come from streams seeded by its code, so
+// the same code deals the same skater, modifiers (Surprise), randomizer
+// seeds and Chaos picks. s_hx points at the stream in use.
+static uint64 s_x_libre = 0, s_x_run = 1, s_x_deal = 1, s_x_chaos = 1;
+static uint64 *s_hx = &s_x_libre;
+struct Flux
+{
+	uint64 *avant;
+	Flux( uint64 *p ) : avant( s_hx ) { s_hx = p; }
+	~Flux() { s_hx = avant; }
+};
 static uint32 hasard( uint32 n )
 {
-	static uint64 x = 0;
+	uint64 &x = *s_hx;
 	if( !x )
 	{
 		x = (uint64)time( NULL ) * 0x9E3779B97F4A7C15ull ^ (uint64)Tmr::GetTime() * 0xBF58476D1CE4E5B9ull ^ 0xD1B54A32D192ED03ull;
@@ -133,8 +151,31 @@ struct Run
 	bool	stats_gardees;
 	// starter tricks: (key combo, trick) pairs and (special slot, trick)
 	std::vector<uint32> depart_cles, depart_tricks;
+	char	code[24];		// the run's seed code (View Stats)
+	bool	daily;			// a Daily Run
+	uint64	graine;			// from the code
+	bool	nouveau;		// a life was lost: a new skater is dealt once it's safe
+	int		primes;			// Chaos bounties beaten (they scale up)
 };
 static Run s_run;
+
+// Seeds: the code picked in the Demented menu (empty = a random one), or a Daily Run
+static char s_code_choisi[24] = "";
+static bool s_daily_arme = false;
+static uint64 graine_de( const char *c )
+{
+	uint64 h = 0xcbf29ce484222325ull;
+	for( ; *c; ++c ) { h ^= (unsigned char)*c; h *= 0x100000001b3ull; }
+	return h ? h : 1;
+}
+static uint64 sous_graine( uint64 g, uint64 k )
+{
+	uint64 z = g + k * 0x9E3779B97F4A7C15ull;
+	z = ( z ^ ( z >> 30 )) * 0xBF58476D1CE4E5B9ull;
+	z = ( z ^ ( z >> 27 )) * 0x94D049BB133111EBull;
+	z ^= z >> 31;
+	return z ? z : 1;
+}
 
 static const char *s_stats[10] = { "air", "run", "ollie", "speed", "spin", "switch",
 	"flip_speed", "rail_balance", "lip_balance", "manual_balance" };
@@ -344,33 +385,18 @@ static void fin_run( void )
 
 static void resume( char *o, int n, bool gagne )
 {
-	char t[32], mods[200] = "";
+	// Marcus: how it ended (the reason line above), time, chapter, goals,
+	// bails, lives. No modifier list (too long with many on).
+	char t[32];
 	temps( t, sizeof( t ), s_run.t );
-	for( int i = 0; i < NB_MODS; ++i )
-		if( s_run.mods[i] && i != MOD_LIVES )
-		{
-			const size_t l = strlen( mods );
-			snprintf( mods + l, sizeof( mods ) - l, "%s%s", l ? ", " : "", s_mod_noms[i] );
-		}
-	char vies[96] = "";
-	if( s_run.mods[MOD_LIVES] ) snprintf( vies, sizeof( vies ), "\\c0Lives left: \\c2%d\\n", s_run.vies );
-	if( s_run.mods[MOD_TIME] )
-	{
-		char g[32]; temps( g, sizeof( g ), s_run.gagne_temps );
-		const size_t l = strlen( vies );
-		snprintf( vies + l, sizeof( vies ) - l, "\\c0Time extended: \\c2%s\\n", g );
-	}
 	snprintf( o, n,
-		"\\c0Skater: \\c2%s\\n"
 		"\\c0Time: \\c2%s\\n"
 		"\\c0Chapter: \\c2%d\\n"
 		"\\c0Goals beaten: \\c2%d\\n"
 		"\\c0Goals failed: \\c2%d\\n"
 		"\\c0Bails: \\c2%d\\n"
-		"%s"
-		"\\c0Modifiers: \\c2%s",
-		s_run.nom, t, s_run.chapitre_max + 1, s_run.gagnes, s_run.perdus, s_run.bails, vies,
-		mods[0] ? mods : "None" );
+		"\\c0Lives left: \\c2%d",
+		t, s_run.chapitre_max + 1, s_run.gagnes, s_run.perdus, s_run.bails, s_run.vies );
 	(void)gagne;
 }
 
@@ -618,14 +644,29 @@ extern "C" unsigned int desktop_rando_voix( void )
 // the body ones need the real flags, put back when they end.
 enum { EV_MOON, EV_HEAVY, EV_FLIP, EV_REVERSE, EV_SLOW, EV_FAST, EV_STATS_0, EV_STATS_MAX, EV_STATS_RND,
        EV_KID, EV_BIGHEAD, EV_GORILLA, EV_INVISIBLE, EV_SPECIAL, EV_PERFECT, EV_TELEPORT, EV_NAMES, EV_SCRAMBLE, EV_SONS,
-       EV_BOUTONS, EV_FRAGILE, EV_PERMA, EV_FANTOME, NB_EV };
+       EV_BOUTONS, EV_FRAGILE, EV_PERMA, EV_FANTOME, EV_SEISME, EV_ECHANGE, EV_SWITCH, EV_TAILLE, EV_YTP, EV_PRIME, EV_RUSH, NB_EV };
 static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WORLD FLIPS", "STEERING REVERSED",
 	"SLOW MOTION", "FAST FORWARD", "STATS DRAINED", "STATS MAXED", "STATS AT %d", "KID MODE", "BIG HEAD",
 	"GORILLA ARMS", "INVISIBLE", "ALWAYS SPECIAL", "PERFECT BALANCE", "TELEPORTED", "WHO'S WHO?", "WORD SALAD", "SOUND SALAD",
-	"NO BUTTON HINTS", "FRAGILE", "PERMA BAIL", "HEAVY GHOSTING" };
+	"NO BUTTON HINTS", "FRAGILE", "PERMA BAIL", "HEAVY GHOSTING", "EARTHQUAKE", "SWAPPED BUTTONS", "FORCED SWITCH",
+	"TINY/GIANT", "YTP DIALOGUE", "BOUNTY", "PED RUSH" };
 // 0: never (Marcus: no moon gravity, and nothing that just helps the player: maxed stats, always special, perfect balance)
-static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3, 6 };
+static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3, 6, 5, 5, 5, 5, 5, 6, 4 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
+static float s_ev_duree[NB_EV];		// how long it was rolled for (Earthquake's ease in/out)
+// Tiny/Giant: the skater's scale while it lasts
+static float s_taille = 1.0f;
+// Bounty: kind (0 combo, 1 grind metres, 2 points), target, progress
+static int   s_prime_type = 0;
+static int   s_prime_but = 0;
+static float s_prime_fait = 0.0f;
+static Mth::Vector s_prime_pos;
+static bool  s_prime_pos_ok = false;
+// Ped Rush: the peds charging the skater, and each one's wait after a hit
+enum { RUSH_MAX = 5 };
+static uint32 s_rush_id[RUSH_MAX];
+static float  s_rush_pause[RUSH_MAX];
+static int    s_rush_n = 0;
 static float s_ev_prochain = 20.0f;
 static float s_ev_stat = 0.0f;
 static bool  s_ev_corps = false;	// the body flags were changed (refresh owed)
@@ -679,16 +720,195 @@ static void ev_temps( void )
 
 // Fragile / Perma Bail events: a red banner like "Out of bounds!" that stays
 // up while it lasts (Marcus)
+static const char *ev_banniere_id( int e )
+{
+	return e == EV_PERMA ? "desktop_chaos_perma" : ( e == EV_SEISME ? "desktop_chaos_seisme" : "desktop_chaos_fragile" );
+}
 static void ev_banniere( int e, bool on )
 {
 	Script::CStruct p;
-	p.AddChecksum( "id", crc( e == EV_PERMA ? "desktop_chaos_perma" : "desktop_chaos_fragile" ));
+	p.AddChecksum( "id", crc( ev_banniere_id( e )));
 	if( on )
 	{
-		p.AddString( "text", e == EV_PERMA ? "PERMA BAIL" : "FRAGILE" );
-		p.AddPair( "pos", 320.0f, e == EV_PERMA ? 80.0f : 110.0f );
+		p.AddString( "text", e == EV_PERMA ? "PERMA BAIL" : ( e == EV_SEISME ? "EARTHQUAKE!!!" : "FRAGILE" ));
+		p.AddPair( "pos", 320.0f, e == EV_PERMA ? 80.0f : ( e == EV_SEISME ? 140.0f : 110.0f ));
 	}
 	Script::RunScript( on ? "desktop_chaos_banner" : "desktop_chaos_banner_off", &p );
+}
+
+static Obj::CSkater *skater_local( void ) { return Mdl::Skate::Instance()->GetLocalSkater(); }
+
+// Tiny/Giant: the drawn model only (collision stays the same)
+static void ev_taille_appliquer( float k )
+{
+	Obj::CSkater *sk = skater_local();
+	if( !sk ) return;
+	Obj::CModelComponent *mc = GetModelComponentFromObject( sk );
+	Nx::CModel *m = mc ? mc->GetModel() : NULL;
+	if( !m ) return;
+	if( k == 1.0f )
+	{
+		m->SetScale( Mth::Vector( 1.0f, 1.0f, 1.0f ));
+		Script::RunScript( "refresh_skater_model_for_cheats" );	// kid mode and the profile's own scale back
+		return;
+	}
+	m->SetScale( Mth::Vector( k, k, k ));
+	m->EnableScaling( true );
+}
+
+// Bounty (Marcus): a challenge out of goals, its text only, a goal-style
+// clock; the first is a 500,000 combo and each one beaten makes the next
+// bigger. Reward +1 life, or +30 s with Time Extend (half the time).
+static int arrondi( double v, int pas ) { int r = (int)( v / pas + 0.5 ) * pas; return r < pas ? pas : r; }
+static void milliers( char *o, int n, int v )
+{
+	char t[24]; snprintf( t, sizeof( t ), "%d", v );
+	const int l = (int)strlen( t );
+	int k = 0;
+	for( int i = 0; i < l && k < n - 1; ++i )
+	{
+		if( i && ( l - i ) % 3 == 0 && k < n - 1 ) o[k++] = ',';
+		if( k < n - 1 ) o[k++] = t[i];
+	}
+	o[k] = 0;
+}
+static float prime_duree( void ) { return s_prime_type == 2 ? 90.0f : 60.0f; }
+static void prime_texte( char *o, int n )
+{
+	char c[24];
+	milliers( c, sizeof( c ), s_prime_but );
+	// the \c0\c0 lead keeps Word Salad and Obscure off it (desktop_chaos_text)
+	if( s_prime_type == 0 ) snprintf( o, n, "\\c0\\c0Land a %s point combo", c );
+	else if( s_prime_type == 1 ) snprintf( o, n, "\\c0\\c0Grind %dm", s_prime_but );
+	else snprintf( o, n, "\\c0\\c0Score %s points", c );
+}
+static void prime_affiche( bool on )
+{
+	Front::CTextElement *e = (Front::CTextElement *)element( crc( "desktop_prime_texte" ));
+	Front::CTextElement *h = (Front::CTextElement *)element( crc( "desktop_prime_temps" ));
+	char t[96];
+	if( on ) prime_texte( t, sizeof( t )); else snprintf( t, sizeof( t ), " " );
+	if( e ) e->SetText( t );
+	if( h )
+	{
+		char c[32] = " ";
+		if( on ) temps( c, sizeof( c ), s_ev_reste[EV_PRIME] + 0.999f );
+		h->SetText( c );
+		Image::RGBA col( 128, 128, 128, 110 );
+		if( on && s_ev_reste[EV_PRIME] < 10.0f ) col = Image::RGBA( 128, 24, 16, 120 );
+		h->SetRGBA( col );
+	}
+}
+static void prime_lancer( void )
+{
+	const int k = s_run.primes;
+	s_prime_type = (int)hasard( 3 );
+	double f = 1.0;
+	for( int i = 0; i < k; ++i ) f *= 1.4;
+	if( s_prime_type == 0 ) s_prime_but = arrondi( 500000.0 * f, 50000 );
+	else if( s_prime_type == 1 ) { s_prime_but = arrondi( 200.0 + 75.0 * k, 25 ); if( s_prime_but > 2000 ) s_prime_but = 2000; }
+	else s_prime_but = arrondi( 2000000.0 * f, 250000 );
+	if( s_prime_but > 2000000000 ) s_prime_but = 2000000000;
+	s_prime_fait = 0.0f;
+	s_prime_pos_ok = false;
+	Script::RunScript( "desktop_prime_pop" );
+	prime_affiche( true );
+}
+static void prime_gagne( void )
+{
+	++s_run.primes;
+	s_ev_reste[EV_PRIME] = 0.0f;
+	prime_affiche( false );
+	Script::RunScript( "Goal_Success_Message_Sound" );
+	if( s_run.mods[MOD_TIME] && hasard( 2 )) temps_plus( 30.0f, "TIME EXTEND" );
+	else if( s_run.mods[MOD_LIVES] ) { ++s_run.vies; panneau( "+1 LIFE", "GoalGood02", 0, 70, 128, 60 ); }
+	VLOG( "DSK", "demented chaos: bounty %d beaten (%d so far)", s_prime_but, s_run.primes );
+}
+
+// Ped Rush: the nearest peds charge; touching the skater knocks them down
+// like a ped's shove, with the multiplayer slap. Never with Perma Bail or
+// Fragile on (Marcus: too evil).
+static bool rush_permis( void )
+{
+	return !s_run.mods[MOD_PERMA] && !s_run.mods[MOD_FRAGILE] && s_ev_reste[EV_PERMA] <= 0.0f && s_ev_reste[EV_FRAGILE] <= 0.0f;
+}
+static bool est_donneur_obj( uint32 id )
+{
+	Game::CGoalManager *gm = Game::GetGoalManager();
+	for( int i = 0; gm && i < gm->GetNumGoals(); ++i )
+	{
+		Game::CGoal *g = gm->GetGoalByIndex( i );
+		uint32 t = 0;
+		if( g && g->GetParams() && g->GetParams()->GetChecksum( crc( "trigger_obj_id" ), &t, Script::NO_ASSERT ) && t == id ) return true;
+	}
+	return false;
+}
+static void rush_lancer( void )
+{
+	s_rush_n = 0;
+	Obj::CSkater *sk = skater_local();
+	if( !sk ) return;
+	const Mth::Vector ici = sk->GetPos();
+	float d2[RUSH_MAX];
+	Lst::Search<Obj::CObject> sh;
+	Obj::CCompositeObject *o = (Obj::CCompositeObject *)sh.FirstItem( Obj::CCompositeObjectManager::Instance()->GetRefObjectList());
+	for( ; o; o = (Obj::CCompositeObject *)sh.NextItem())
+	{
+		Obj::CPedLogicComponent *pl = GetPedLogicComponentFromObject( o );
+		if( !pl || pl->DesktopIsSkater() || !GetMotionComponentFromObject( o ) || est_donneur_obj( o->GetID())) continue;
+		const float d = ( o->m_pos - ici ).LengthSqr();
+		if( d > 2400.0f * 2400.0f ) continue;	// about 60 m
+		int k = s_rush_n < RUSH_MAX ? s_rush_n++ : -1;
+		if( k < 0 ) { int pire = 0; for( int i = 1; i < RUSH_MAX; ++i ) if( d2[i] > d2[pire] ) pire = i; if( d >= d2[pire] ) continue; k = pire; }
+		s_rush_id[k] = o->GetID(); d2[k] = d; s_rush_pause[k] = 0.0f;
+	}
+	for( int i = 0; i < s_rush_n; ++i )
+	{
+		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id[i] );
+		if( p ) p->SwitchScript( crc( "desktop_ped_rush" ), NULL );
+	}
+	VLOG( "DSK", "demented chaos: ped rush, %d peds", s_rush_n );
+}
+static void rush_fin( void )
+{
+	for( int i = 0; i < s_rush_n; ++i )
+	{
+		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id[i] );
+		if( p ) p->SwitchScript( crc( "desktop_ped_rush_end" ), NULL );
+	}
+	s_rush_n = 0;
+}
+static void rush_maj( float dt )
+{
+	Obj::CSkater *sk = skater_local();
+	if( !sk ) return;
+	const Mth::Vector ici = sk->GetPos();
+	Obj::CSkaterStateComponent *st = GetSkaterStateComponentFromObject( sk );
+	const bool a_terre = st && !st->GetFlag( Obj::IS_BAILING ) && st->GetDriving() == false;
+	for( int i = 0; i < s_rush_n; ++i )
+	{
+		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id[i] );
+		if( !p ) continue;
+		if( s_rush_pause[i] > 0.0f ) { s_rush_pause[i] -= dt; continue; }
+		Obj::CPedLogicComponent *pl = GetPedLogicComponentFromObject( p );
+		if( !pl ) continue;
+		Mth::Vector d = ici - p->m_pos;
+		const float h = d[Y];
+		d[Y] = 0.0f;
+		const float l = d.Length();
+		if( l < 40.0f && h > -30.0f && h < 60.0f )
+		{
+			s_rush_pause[i] = 2.5f;
+			if( a_terre )
+			{
+				p->SwitchScript( crc( "desktop_ped_rush_hit" ), NULL );
+				Script::RunScript( "desktop_ped_rush_slap" );
+				sk->SwitchScript( crc( "PedKnockDown" ), NULL );
+			}
+			continue;
+		}
+		pl->DesktopRush( ici, 300.0f * dt );	// about 17 mph: you can outskate them
+	}
 }
 
 static void ev_fin( int e )
@@ -698,10 +918,13 @@ static void ev_fin( int e )
 	if( e == EV_FLIP ) s_flip = false;
 	if( e == EV_REVERSE ) s_inverse = false;
 	if( e == EV_SCRAMBLE || e == EV_BOUTONS ) ++s_txt_gen;	// back to plain text
-	if( e == EV_FRAGILE || e == EV_PERMA ) ev_banniere( e, false );
+	if( e == EV_FRAGILE || e == EV_PERMA || e == EV_SEISME ) ev_banniere( e, false );
 	if( e >= EV_STATS_0 && e <= EV_STATS_RND ) ev_stats();
 	if( e == EV_SLOW || e == EV_FAST ) ev_temps();
 	if( ev_drapeau( e )) ev_corps();
+	if( e == EV_TAILLE ) { s_taille = 1.0f; ev_taille_appliquer( 1.0f ); }
+	if( e == EV_RUSH ) rush_fin();
+	if( e == EV_PRIME ) prime_affiche( false );
 }
 
 static void chaos_tout_finir( void )
@@ -715,6 +938,7 @@ static void chaos_tout_finir( void )
 	Mdl::Skate::Instance()->SetStatOverride( 0.0f );
 	Tmr::SetSlomo( 1.0f );
 	if( s_ev_corps ) { ev_corps(); s_ev_corps = false; }
+	s_rush_n = 0;
 }
 
 static void ev_teleport( void )
@@ -737,6 +961,9 @@ static void ev_lancer( Game::CGoalManager *gm )
 		poids[e] = s_ev_poids[e];
 		if( s_ev_reste[e] > 0.0f ) poids[e] = 0;
 		if( e == EV_TELEPORT && goal ) poids[e] = 0;	// a race or a combo line doesn't survive it
+		if( e == EV_PRIME && goal ) poids[e] = 0;		// bounties only out of goals (Marcus)
+		if( e == EV_RUSH && !rush_permis()) poids[e] = 0;	// not with Perma Bail / Fragile (Marcus)
+		if(( e == EV_PERMA || e == EV_FRAGILE ) && s_ev_reste[EV_RUSH] > 0.0f ) poids[e] = 0;
 		if(( e == EV_SLOW && s_ev_reste[EV_FAST] > 0.0f ) || ( e == EV_FAST && s_ev_reste[EV_SLOW] > 0.0f )) poids[e] = 0;
 		if( e >= EV_STATS_0 && e <= EV_STATS_RND && ( s_ev_reste[EV_STATS_0] > 0.0f || s_ev_reste[EV_STATS_MAX] > 0.0f || s_ev_reste[EV_STATS_RND] > 0.0f )) poids[e] = 0;
 		total += poids[e];
@@ -757,7 +984,12 @@ static void ev_lancer( Game::CGoalManager *gm )
 			break;
 		default:
 			s_ev_reste[e] = duree;
+			s_ev_duree[e] = duree;
 			if( e == EV_FLIP ) s_flip = true;
+			if( e == EV_SEISME ) ev_banniere( e, true );	// the only label besides FRAGILE / PERMA BAIL (Marcus)
+			if( e == EV_TAILLE ) { s_taille = hasard( 2 ) ? 2.0f : 0.4f; ev_taille_appliquer( s_taille ); }
+			if( e == EV_PRIME ) { prime_lancer(); s_ev_reste[e] = s_ev_duree[e] = prime_duree(); }
+			if( e == EV_RUSH ) rush_lancer();
 			if( e == EV_REVERSE ) s_inverse = true;
 			if( e == EV_SONS ) s_son_graine = hasard( 0x7fffffff ) | 1;
 			if( e == EV_BOUTONS ) ++s_txt_gen;
@@ -791,8 +1023,74 @@ static void chaos_maj( float dt, bool pause, bool film )
 			s_verif = 0.0f;
 			if( s_ev_reste[EV_FRAGILE] > 0.0f && !element( crc( "desktop_chaos_fragile" ))) ev_banniere( EV_FRAGILE, true );
 			if( s_ev_reste[EV_PERMA] > 0.0f && !element( crc( "desktop_chaos_perma" ))) ev_banniere( EV_PERMA, true );
+			if( s_ev_reste[EV_SEISME] > 0.0f && !element( crc( "desktop_chaos_seisme" ))) ev_banniere( EV_SEISME, true );
+			// kid mode / big head refreshes put the scale back: Tiny/Giant again
+			if( s_ev_reste[EV_TAILLE] > 0.0f ) ev_taille_appliquer( s_taille );
 		}
 	}
+	Obj::CSkater *sk = skater_local();
+	// Forced Switch: on the ground, rolling regular, the stance flips to switch
+	if( s_ev_reste[EV_SWITCH] > 0.0f && sk )
+	{
+		Obj::CSkaterStateComponent *st = GetSkaterStateComponentFromObject( sk );
+		Obj::CSkaterCorePhysicsComponent *ph = GetSkaterCorePhysicsComponentFromObject( sk );
+		Obj::CSkaterFlipAndRotateComponent *fr = GetSkaterFlipAndRotateComponentFromObject( sk );
+		if( st && ph && fr && st->GetState() == Obj::GROUND && !st->GetPhysicsState() && !st->DoingTrick()
+			&& !st->GetFlag( Obj::IS_BAILING ) && !ph->IsSwitched())
+			fr->ToggleFlipState();
+	}
+	// Bounty: its clock, and the grind / points counts
+	if( s_ev_reste[EV_PRIME] > 0.0f )
+	{
+		Game::CGoalManager *gm = Game::GetGoalManager();
+		if( gm && gm->GetNumActiveGoals() > 0 )
+		{
+			// into a goal: the bounty is dropped, no fail sound (Marcus)
+			s_ev_reste[EV_PRIME] = 0.0f;
+			prime_affiche( false );
+		}
+		else
+		{
+			if( s_prime_type == 1 && sk )
+			{
+				Obj::CSkaterStateComponent *st = GetSkaterStateComponentFromObject( sk );
+				const Mth::Vector ici = sk->GetPos();
+				if( st && st->GetState() == Obj::RAIL )
+				{
+					if( s_prime_pos_ok )
+					{
+						const float d = ( ici - s_prime_pos ).Length();
+						if( d < 200.0f ) s_prime_fait += d / 39.37f;	// inches to metres, a teleport doesn't count
+					}
+					s_prime_pos = ici;
+					s_prime_pos_ok = true;
+				}
+				else s_prime_pos_ok = false;
+				if( s_prime_fait >= (float)s_prime_but ) prime_gagne();
+			}
+			if( s_ev_reste[EV_PRIME] > 0.0f )
+			{
+				// the goal timers' beep over the last 10 seconds, a fail at 0 (Marcus)
+				const float avant = s_ev_reste[EV_PRIME];
+				if( avant - dt > 0.0f && avant - dt < 10.0f && (int)avant > (int)( avant - dt ))
+					Script::RunScript( CRCD( 0xcfc7c3ad, "timer_runout_beep" ));
+				if( avant - dt <= 0.0f )
+				{
+					s_ev_reste[EV_PRIME] = 0.0f;
+					prime_affiche( false );
+					Script::RunScript( "desktop_prime_fail" );
+					VLOG( "DSK", "demented chaos: bounty %d failed", s_prime_but );
+				}
+				else
+				{
+					static float s_aff = 0.0f;
+					s_aff += dt;
+					if( s_aff > 0.2f ) { s_aff = 0.0f; prime_affiche( true ); }
+				}
+			}
+		}
+	}
+	if( s_ev_reste[EV_RUSH] > 0.0f && !s_menu ) rush_maj( dt );
 	if( s_ev_reste[EV_SCRAMBLE] > 0.0f )
 	{
 		s_salade_t += dt;
@@ -813,6 +1111,7 @@ static void chaos_maj( float dt, bool pause, bool film )
 	if( s_menu ) return;
 	s_ev_prochain -= dt;
 	if( s_ev_prochain > 0.0f ) return;
+	Flux f( &s_x_chaos );	// seeded: the same code, the same picks
 	s_ev_prochain = 8.0f + hasard( 33 );
 	Game::CGoalManager *gm = Game::GetGoalManager();
 	ev_lancer( gm );
@@ -836,6 +1135,36 @@ extern "C" int desktop_chaos_gen( void ) { return s_txt_gen; }
 extern "C" float desktop_chaos_ghost( void )
 {
 	return ( chaos_on() && s_ev_reste[EV_FANTOME] > 0.0f && !s_menu ) ? 0.9f : 0.0f;
+}
+
+// SkaterCameraComponent (shake) and CManual (balance): Earthquake's strength
+// now, 0..1, easing in from its start and out to its end
+extern "C" float desktop_chaos_seisme( void )
+{
+	if( !chaos_on() || s_ev_reste[EV_SEISME] <= 0.0f || s_menu || s_ev_duree[EV_SEISME] <= 0.0f ) return 0.0f;
+	const float u = 1.0f - s_ev_reste[EV_SEISME] / s_ev_duree[EV_SEISME];
+	const float q = sinf( 3.14159265f * u );
+	return q > 0.0f ? q : 0.0f;
+}
+
+// shim_input_audio.cpp: Swapped Buttons (ollie <-> grind), not in menus
+extern "C" int desktop_chaos_boutons( void )
+{
+	return chaos_on() && s_ev_reste[EV_ECHANGE] > 0.0f && !s_menu_seul;
+}
+
+// p_music.cpp: YouTube-poop dialogue, ped and goal lines chopped up
+extern "C" int desktop_chaos_ytp( void )
+{
+	return chaos_on() && s_ev_reste[EV_YTP] > 0.0f;
+}
+
+// Score::Land: a combo landed (Bounty)
+extern "C" void desktop_demented_land( int score )
+{
+	if( !chaos_on() || s_ev_reste[EV_PRIME] <= 0.0f || score <= 0 ) return;
+	if( s_prime_type == 0 && score >= s_prime_but ) prime_gagne();
+	else if( s_prime_type == 2 ) { s_prime_fait += (float)score; if( s_prime_fait >= (float)s_prime_but ) prime_gagne(); }
 }
 
 // soundfx.cpp PlaySound: Sound Salad's swap seed, 0 when off
@@ -1037,7 +1366,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 {
 	if( !in || n < 2 ) return 0;
 	// Demented's own notices stay readable (lives, time, the red banners)
-	static const char *s_propres[] = { "-1 LIFE", "+1 LIFE", "OUT OF TIME", "TIME EXTEND", "FRAGILE", "PERMA BAIL", "Missing trick" };
+	static const char *s_propres[] = { "-1 LIFE", "+1 LIFE", "OUT OF TIME", "TIME EXTEND", "FRAGILE", "PERMA BAIL", "Missing trick", "EARTHQUAKE", "\\c0\\c0" };
 	for( int i = 0; i < (int)( sizeof( s_propres ) / sizeof( s_propres[0] )); ++i )
 		if( strstr( in, s_propres[i] )) return 0;
 	// Word Salad randomizer: words shuffled, one seed per chapter, in play
@@ -1181,6 +1510,7 @@ void desktop_demented_bail( void )
 		--s_run.vies;
 		if( s_run.vies <= 0 ) { s_run.vies = 0; game_over( "Out of lives." ); return; }
 		panneau( "-1 LIFE", "HUDtrickslopC", 0, 128, 50, 40 );	// life lost sound (Marcus)
+		s_run.nouveau = true;	// lives are skaters: a new one is dealt
 	}
 }
 
@@ -1208,6 +1538,7 @@ void desktop_demented_goal( bool won, int goal_time )
 	char t[64];
 	snprintf( t, sizeof( t ), "-1 LIFE" );
 	panneau( t, "HUDtrickslopC", 0, 128, 50, 40 );
+	s_run.nouveau = true;	// lives are skaters: a new one is dealt
 }
 
 // Binding a trick in Demented: never over a starter trick.
@@ -1225,6 +1556,8 @@ bool desktop_demented_bind_ok( bool special, int index, uint32 key_combo )
 	const uint32 t = trick_a( p->GetTrickMapping( crc( "trick_mapping" )), key_combo );
 	return !t || !est_depart( key_combo, t );
 }
+
+static bool donne_skater( bool en_jeu );	// the deal, below
 
 namespace Mdl
 {
@@ -1289,7 +1622,9 @@ void DesktopDementedUpdate( Skate &mdl )
 			if( g && g->IsActive()) s_run.horloge = true;
 		}
 	}
-	if( !pause && !film && !s_run.fini && s_run.mods[MOD_TIME] && s_run.horloge )
+	// the clock stops in cutscenes and while someone talks (Marcus)
+	const bool dialogue = element( crc( "dialog_box_anchor" )) || element( crc( "goal_start_dialog" )) || element( crc( "speech_box_anchor" ));
+	if( !pause && !film && !dialogue && !s_run.fini && s_run.mods[MOD_TIME] && s_run.horloge )
 	{
 		const float avant = s_run.reste;
 		s_run.reste -= dt;
@@ -1321,6 +1656,7 @@ void DesktopDementedUpdate( Skate &mdl )
 				char t[64];
 				snprintf( t, sizeof( t ), "OUT OF TIME -1 LIFE" );
 				panneau( t, "HUDtrickslopC", 0, 128, 50, 40 );
+				s_run.nouveau = true;
 			}
 			else { if( s_run.mods[MOD_LIVES] ) s_run.vies = 0; game_over( "Out of time." ); }
 		}
@@ -1337,6 +1673,19 @@ void DesktopDementedUpdate( Skate &mdl )
 	// Chaos: curveballs at random times
 	if( s_run.mods[MOD_CHAOS] && !s_run.fini ) chaos_maj( dt, pause, film );
 	else chaos_tout_finir();
+	// Lives are skaters (Marcus's pick): after a lost life, a new random
+	// skater, once nothing is running (no goal, menu, cutscene or bail)
+	if( s_run.nouveau && !s_run.fini && !pause && !film && !s_menu )
+	{
+		Game::CGoalManager *gm = Game::GetGoalManager();
+		Obj::CSkater *sk = mdl.GetLocalSkater();
+		Obj::CSkaterStateComponent *st = sk ? GetSkaterStateComponentFromObject( sk ) : NULL;
+		if(( !gm || gm->GetNumActiveGoals() == 0 ) && st && !st->GetFlag( Obj::IS_BAILING ) && st->GetState() == Obj::GROUND && !st->GetDriving())
+		{
+			s_run.nouveau = false;
+			donne_skater( true );
+		}
+	}
 	if( film ) { hud_off(); return; }
 
 	// Run clock bottom right, with lives when they're on.
@@ -1436,6 +1785,33 @@ bool ScriptDesktopDementedText( Script::CStruct *pParams, Script::CScript *pScri
 		snprintf( t, sizeof( t ), "%s: %s", s_mod_noms[i], s_arme[i] ? "On" : "Off" );
 		pScript->GetParams()->AddString( n, t );
 	}
+	char t[48];
+	snprintf( t, sizeof( t ), "Seed: %s", s_code_choisi[0] ? s_code_choisi : "Random" );
+	pScript->GetParams()->AddString( "seed_text", t );
+	pScript->GetParams()->AddString( "seed_str", s_code_choisi[0] ? s_code_choisi : "RANDOM" );
+	return true;
+}
+
+// @script | DesktopDementedSeed | desktop: string = the next run's seed code
+// (RANDOM or empty = a random one); daily = the next run is today's Daily Run
+bool ScriptDesktopDementedSeed( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	if( pParams->ContainsFlag( crc( "daily" ))) { s_daily_arme = true; return true; }
+	const char *t = NULL;
+	if( !pParams->GetString( crc( "string" ), &t, Script::NO_ASSERT ) || !t ) return true;
+	char c[24];
+	int k = 0;
+	for( ; *t && k < (int)sizeof( c ) - 1; ++t )
+	{
+		char x = *t;
+		if( x >= 'a' && x <= 'z' ) x = (char)( x - 'a' + 'A' );
+		if( x == ' ' ) continue;
+		c[k++] = x;
+	}
+	c[k] = 0;
+	if( !strcmp( c, "RANDOM" )) c[0] = 0;
+	snprintf( s_code_choisi, sizeof( s_code_choisi ), "%s", c );
+	VLOG( "DSK", "demented: seed code '%s'", s_code_choisi );
 	return true;
 }
 
@@ -1443,8 +1819,30 @@ bool ScriptDesktopDementedText( Script::CStruct *pParams, Script::CScript *pScri
 bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	fin_run();
+	// the run's code: picked, today's Daily Run, or a random one (shown in View Stats)
+	s_run.daily = s_daily_arme;
+	s_daily_arme = false;
+	if( s_run.daily )
+	{
+		const time_t now = time( NULL );
+		const struct tm *lt = localtime( &now );
+		snprintf( s_run.code, sizeof( s_run.code ), "DAILY-%04d%02d%02d", lt ? lt->tm_year + 1900 : 2026, lt ? lt->tm_mon + 1 : 1, lt ? lt->tm_mday : 1 );
+	}
+	else if( s_code_choisi[0] ) snprintf( s_run.code, sizeof( s_run.code ), "%s", s_code_choisi );
+	else
+	{
+		static const char abc[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+		for( int i = 0; i < 8; ++i ) s_run.code[i] = abc[hasard( 32 )];
+		s_run.code[8] = 0;
+	}
+	s_run.graine = graine_de( s_run.code );
+	s_x_run = sous_graine( s_run.graine, 1 );
+	s_x_deal = sous_graine( s_run.graine, 2 );
+	s_x_chaos = sous_graine( s_run.graine, 3 );
+	Flux f( &s_x_run );
 	s_run.actif = true;
 	for( int i = 0; i < NB_MODS; ++i ) s_run.mods[i] = s_arme[i];
+	if( s_run.daily ) s_run.mods[MOD_SURPRISE] = true;	// the day's modifiers come from its code
 	s_run.mods[MOD_LIVES] = true;	// not a modifier (Marcus): every run has lives
 	if( s_run.mods[MOD_SURPRISE] )
 	{
@@ -1475,12 +1873,16 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.bails = s_run.gagnes = s_run.perdus = 0;
 	s_run.fini = false;
 	s_run.dialogue = false;
+	s_run.nouveau = false;
+	s_run.primes = 0;
+	s_run.stats_gardees = false;
 	s_run.depart_cles.clear(); s_run.depart_tricks.clear();
 	Obj::CSkaterCareer *car = Mdl::Skate::Instance()->GetCareer();
 	if( car )
 	{
 		if( s_run.mods[MOD_ZERO] ) car->SetGlobalFlag( 511 ); else car->UnSetGlobalFlag( 511 );
 	}
+	VLOG( "DSK", "demented: run code %s%s", s_run.code, s_run.daily ? " (daily)" : "" );
 	VLOG( "DSK", "demented: new run, perma %d zero %d time %d fragile %d obscure %d mirror %d chaos %d surprise %d",
 		s_run.mods[MOD_PERMA], s_run.mods[MOD_ZERO], s_run.mods[MOD_TIME], s_run.mods[MOD_FRAGILE],
 		s_run.mods[MOD_OBSCURE], s_run.mods[MOD_MIRROR], s_run.mods[MOD_CHAOS], s_run.mods[MOD_SURPRISE] );
@@ -1506,6 +1908,17 @@ bool ScriptDesktopSelectSkaterLent( uint32 name );	// skfuncs.cpp
 bool ScriptDesktopDementedDeal( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	if( !s_run.actif || s_run.skater ) return false;
+	if( !donne_skater( false )) return false;
+	pScript->GetParams()->AddString( "dealt_name", s_run.nom );
+	return true;
+}
+} // namespace CFuncs
+
+// the deal: a random skater (any but the created one, and not the one in
+// play) with random 0-10 stats; en_jeu = mid-run, after a lost life
+static bool donne_skater( bool en_jeu )
+{
+	Flux f( &s_x_deal );	// seeded
 	Obj::CPlayerProfileManager *pm = ppm();
 	std::vector<Obj::CSkaterProfile *> v;
 	const int n = (int)pm->GetNumProfileTemplates();
@@ -1517,6 +1930,7 @@ bool ScriptDesktopDementedDeal( Script::CStruct *pParams, Script::CScript *pScri
 		if( nom == CRCD( 0xa7be964, "custom" ) || nom == CRCD( 0x061a741e, "ped" )) continue;
 		const char *d = NULL;
 		if( !p->GetInfo()->GetString( CRCD( 0x2ab66cb8, "display_name" ), &d, Script::NO_ASSERT ) || !d ) continue;
+		if( en_jeu && nom == s_run.skater ) continue;
 		v.push_back( p );
 	}
 	if( v.empty()) { VLOG( "DSK", "demented: no skater to deal" ); return false; }
@@ -1536,18 +1950,28 @@ bool ScriptDesktopDementedDeal( Script::CStruct *pParams, Script::CScript *pScri
 			c->GetInfo()->GetInteger( crc( s_stats[i] ), &v0, Script::NO_ASSERT );
 			// Random 0-10 (Marcus): not the dealt skater's own figures.
 			const int vp = (int)hasard( 11 );
-			s_run.stats_custom[i] = v0;
+			if( !s_run.stats_gardees ) s_run.stats_custom[i] = v0;	// the created skater's own, kept from the first deal
 			c->GetInfo()->AddInteger( crc( s_stats[i] ), vp );
 		}
 		s_run.stats_gardees = true;
 	}
 	s_run.skater = pro->GetSkaterNameChecksum();
-	ScriptDesktopSelectSkaterLent( s_run.skater );
+	CFuncs::ScriptDesktopSelectSkaterLent( s_run.skater );
+	if( en_jeu )
+	{
+		Script::CStruct p;
+		p.AddInteger( "profile", 0 );
+		p.AddInteger( "skater", 0 );
+		Script::RunScript( "RefreshSkaterModel", &p );
+		if( s_ev_corps ) Script::RunScript( "refresh_skater_model_for_cheats" );
+	}
 	note_depart();
-	pScript->GetParams()->AddString( "dealt_name", s_run.nom );
-	VLOG( "DSK", "demented: dealt %s (%d to pick from), %d starter tricks", s_run.nom, (int)v.size(), (int)s_run.depart_cles.size());
+	VLOG( "DSK", "demented: dealt %s (%d to pick from), %d starter tricks%s", s_run.nom, (int)v.size(), (int)s_run.depart_cles.size(), en_jeu ? ", after a lost life" : "" );
 	return true;
 }
+
+namespace CFuncs
+{
 
 // @script | DesktopDementedNeedsDialog | desktop: a Demented run whose "You've been dealt" box hasn't shown
 bool ScriptDesktopDementedNeedsDialog( Script::CStruct *pParams, Script::CScript *pScript )
@@ -1620,6 +2044,7 @@ bool ScriptDesktopDementedStatRows( Script::CStruct *pParams, Script::CScript *p
 	snprintf( g, sizeof( g ), " SKATER:" );
 	L::ligne( g, s_run.nom );
 	L::ligne( " DIFFICULTY:", "SICK" );
+	L::ligne( s_run.daily ? " DAILY RUN:" : " SEED:", s_run.code );
 	L::ligne( NULL, NULL );
 	for( int i = 0; i < 10; ++i )
 	{
@@ -1693,7 +2118,7 @@ bool ScriptDesktopDementedChapter( Script::CStruct *pParams, Script::CScript *pS
 	if( s_run.chapitre_max < 0 ) { s_run.chapitre_max = ch; return true; }
 	if( ch <= s_run.chapitre_max ) return true;
 	s_run.chapitre_max = ch;
-	s_rando_graine = hasard( 0x7fffffff ) | 1;	// randomizers re-roll each chapter
+	s_rando_graine = (uint32)sous_graine( s_run.graine, 100 + (uint64)ch ) | 1;	// randomizers re-roll each chapter (seeded)
 	++s_txt_gen;	// Word Salad: on-screen text re-shuffled with the new seed
 	if( s_run.mods[MOD_LIVES] && !s_run.fini )
 	{

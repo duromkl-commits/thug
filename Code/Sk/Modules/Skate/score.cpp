@@ -72,6 +72,9 @@ namespace Front
 **								DBG Information								**
 *****************************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_demented_land( int score );	// desktop_demented.cpp: Chaos bounties
+#endif
 namespace Mdl
 {
 
@@ -980,6 +983,7 @@ void Score::TweakTrick(int tweak_value )
 	dispatch_score_pot_value_to_screen(m_scorePot, m_currentMult);
 }
 
+
 void Score::Land( void )
 {
 	GameNet::Manager * gamenet_man = GameNet::Manager::Instance();
@@ -1004,6 +1008,9 @@ void Score::Land( void )
 	Obj::CSkater* pSkater = skate_mod->GetSkaterById( m_skaterId );
 	Dbg_Assert( pSkater );
 	Dbg_Assert( pSkater->IsLocalClient());
+#ifdef THUG_DESKTOP
+	desktop_demented_land( trick_score );	// Demented Chaos bounties
+#endif
 	// if playing graffiti, then update the colors as appropriate
 	bool debug_graffiti = Script::GetInteger( "debug_graffiti" );
     Game::CGoalManager* pGoalManager = Game::GetGoalManager();

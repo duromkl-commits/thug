@@ -541,6 +541,9 @@ struct SFlux
 	// A THPS4 voice, decoded whole (48 kHz stereo) instead of read from pcm.wad.
 	short	*mem;
 	int		mem_n, mem_pos;
+	// Demented Chaos YouTube-poop dialogue: a ped's line that gets chopped
+	bool	ytp, ytp_coupe;
+	int		ytp_compte, ytp_budget;		// output frames to the next cut / left in all
 #endif
 };
 
@@ -854,6 +857,60 @@ static bool vremplit( SFlux &F )
 	return true;
 }
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_chaos_ytp( void );	// desktop_demented.cpp
+static uint32 s_ytp_g = 0x2545f491u;
+static uint32 ytp_hasard( uint32 n )
+{
+	s_ytp_g ^= s_ytp_g << 13; s_ytp_g ^= s_ytp_g >> 17; s_ytp_g ^= s_ytp_g << 5;
+	return n ? s_ytp_g % n : 0;
+}
+
+// One cut, mutex held: back a little (a stutter), anywhere in the line, or
+// anywhere in another stream from pcm.wad.
+static void ytp_coupe( SFlux &F )
+{
+	int mode = (int)ytp_hasard( 100 );
+	mode = mode < 35 ? 0 : ( mode < 65 ? 1 : 2 );
+	if( mode == 2 && ( F.wad < 0 || s_vindex_nb < 2 )) mode = 0;
+	if( mode == 2 )
+	{
+		const SEntree *e = &s_vindex[ytp_hasard( (uint32)s_vindex_nb )];
+		vlibere( F );
+		if( !vprepare( F, e )) { F.joue = false; return; }
+		const uint32 blocs = F.bloc > 0 ? F.taille / F.bloc : 0;
+		if( blocs > 8 ) F.lue = ytp_hasard( blocs - 4 ) * F.bloc;
+		F.ytp_coupe = true;
+		return;
+	}
+	const int reste = ( F.src_n - 1 ) - (int)F.src_pos;	// decoded, not played yet
+	const int recul = (int)( F.hz * ( 0.10 + ytp_hasard( 150 ) / 1000.0 ));
+	if( F.mem )
+	{
+		int lu = F.mem_pos - reste;
+		int c = mode == 1 ? lu - recul : (int)ytp_hasard( (uint32)( F.mem_n > 1 ? F.mem_n : 1 ));
+		if( c < 0 ) c = 0;
+		if( c >= F.mem_n ) c = F.mem_n - 1;
+		if( c < 0 ) c = 0;
+		F.mem_pos = c;
+	}
+	else
+	{
+		const int blocs = F.bloc > 0 ? (int)( F.taille / F.bloc ) : 0;
+		if( blocs <= 0 ) return;
+		const int lu = (int)( F.lue / F.bloc ) * 64 - reste;
+		int b = mode == 1 ? ( lu - recul ) / 64 : (int)ytp_hasard( (uint32)blocs );
+		if( b < 0 ) b = 0;
+		if( b >= blocs ) b = blocs - 1;
+		F.lue = (uint32)b * F.bloc;
+	}
+	F.src[0] = F.src[1] = 0;
+	F.src_n = 1;
+	F.src_pos = 0.0;
+	F.ytp_coupe = true;
+}
+#endif
+
 static int thread_voix( SceSize, void *p_arg )
 {
 	SFlux &F = s_flux[*(int *)p_arg];
@@ -866,6 +923,29 @@ static int thread_voix( SceSize, void *p_arg )
 			sceKernelDelayThread( 5000 );
 			continue;
 		}
+#ifdef THUG_DESKTOP
+		bool coupe_fin = false;
+		if( F.ytp )
+		{
+			F.ytp_budget -= GRAIN;
+			if( F.ytp_coupe && F.ytp_budget <= 0 ) coupe_fin = true;	// chopped long enough
+			else if( desktop_chaos_ytp())
+			{
+				F.ytp_compte -= GRAIN;
+				if( F.ytp_compte <= 0 )
+				{
+					F.ytp_compte = AUDIO_HZ / 4 + (int)ytp_hasard( AUDIO_HZ * 7 / 4 );	// 0.25 to 2 s
+					ytp_coupe( F );
+				}
+			}
+		}
+		if( coupe_fin || !F.joue )
+		{
+			F.joue = false;
+			sceKernelUnlockMutex( F.mutex, 1 );
+			continue;
+		}
+#endif
 		const double pas = (double)F.hz / AUDIO_HZ * ( F.vitesse > 0.0 ? F.vitesse : 1.0 );
 		int i = 0;
 		bool fini = false;
@@ -975,7 +1055,7 @@ static void vvolume( int s, Sfx::sVolume *p_volume )
 	vvolume( s, l * main, r * main );
 }
 
-static bool vdemarre( uint32 checksum, int s, bool ok )
+static bool vdemarre0( uint32 checksum, int s, bool ok )
 {
 	if( !vflux_ok( s ))
 		return false;
@@ -1064,6 +1144,28 @@ static bool vdemarre( uint32 checksum, int s, bool ok )
 	sceKernelUnlockMutex( F.mutex, 1 );
 	return pret;
 }
+
+#ifdef THUG_DESKTOP
+static bool vdemarre( uint32 checksum, int s, bool ok )
+{
+	const bool dialogue = s_salade_permise != 0;
+	if( !vdemarre0( checksum, s, ok ))
+		return false;
+	SFlux &F = s_flux[s];
+	sceKernelLockMutex( F.mutex, 1, NULL );
+	F.ytp = dialogue;
+	F.ytp_coupe = false;
+	F.ytp_compte = AUDIO_HZ / 2;
+	const double v = F.vitesse > 0.0 ? F.vitesse : 1.0;
+	double n = F.mem ? (double)F.mem_n : ( F.bloc > 0 ? (double)( F.taille / F.bloc ) * 64.0 : 0.0 );
+	n = F.hz > 0 ? n * AUDIO_HZ / F.hz / v : 0.0;
+	F.ytp_budget = (int)( n * 1.5 ) + AUDIO_HZ;	// a chopped line runs at most half again as long
+	sceKernelUnlockMutex( F.mutex, 1 );
+	return true;
+}
+#else
+static bool vdemarre( uint32 checksum, int s, bool ok ) { return vdemarre0( checksum, s, ok ); }
+#endif
 
 static void varrete( int s )
 {

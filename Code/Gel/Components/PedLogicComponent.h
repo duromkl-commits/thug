@@ -81,6 +81,12 @@ public:
 
 	static CBaseComponent*			s_create();
 
+#ifdef THUG_DESKTOP
+	// Demented Chaos Ped Rush: one step straight at cible (on the ground)
+	bool							DesktopRush( const Mth::Vector &cible, float pas );
+	bool							DesktopIsSkater( void );
+#endif
+
 private:
 	void							SelectNextWaypoint();
 	void							HitWaypoint();

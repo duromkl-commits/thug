@@ -152,6 +152,7 @@ static unsigned char axis_to_byte( Sint16 v )
 }
 
 extern "C" int desktop_mirror_input( void );	// desktop_demented.cpp
+extern "C" int desktop_chaos_boutons( void );	// Chaos Swapped Buttons: ollie <-> grind
 
 extern "C" int sceCtrlPeekBufferPositive( int, SceCtrlData *d, int )
 {
@@ -227,6 +228,13 @@ extern "C" int sceCtrlPeekBufferPositive( int, SceCtrlData *d, int )
 		b &= ~( SCE_CTRL_LEFT | SCE_CTRL_RIGHT );
 		if( g ) b |= SCE_CTRL_RIGHT;
 		if( dr ) b |= SCE_CTRL_LEFT;
+	}
+	if( desktop_chaos_boutons())
+	{
+		const unsigned x = b & SCE_CTRL_CROSS, t = b & SCE_CTRL_TRIANGLE;
+		b &= ~( SCE_CTRL_CROSS | SCE_CTRL_TRIANGLE );
+		if( x ) b |= SCE_CTRL_TRIANGLE;
+		if( t ) b |= SCE_CTRL_CROSS;
 	}
 	desktop_pad_record( b, d->lx, d->ly, d->rx, d->ry );	// extras read it too
 	d->buttons = b;

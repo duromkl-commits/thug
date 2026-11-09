@@ -154,6 +154,7 @@ bool ScriptDesktopQuitGame(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopZeroArm(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDemented(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedToggle(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedSeed(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedText(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedStart(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedStop(Script::CStruct *pParams, Script::CScript *pScript);
