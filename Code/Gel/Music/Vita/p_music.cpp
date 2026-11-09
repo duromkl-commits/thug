@@ -51,7 +51,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
-#include <vector>
 
 #include "vita_log.h"
 #ifdef THUG_DESKTOP
@@ -117,13 +116,6 @@ static volatile bool	s_fini			= true;
 static volatile bool	s_perso			= false;
 static volatile uint32	s_prechargee	= 0;
 static volatile bool	s_a_precharger	= false;
-#ifdef THUG_DESKTOP
-// the track waiting to be played instead of its cutscene's own
-static short	*s_cut_mem = NULL;
-static int		 s_cut_n = 0, s_cut_pos = 0;
-static uint32	 s_cut_crc = 0;
-static volatile bool s_cut_joue = false;
-#endif
 
 // Position dans le morceau courant.
 static uint32	s_pos_debut			= 0;	/* offset des données dans le .wad */
@@ -312,28 +304,6 @@ static int thread_audio( SceSize, void * )
 			sceAudioOutOutput( s_port, s_sortie );
 			continue;
 		}
-		if( s_cut_joue )
-		{
-			int n = s_cut_n - s_cut_pos;
-			if( n > GRAIN ) n = GRAIN;
-			if( n <= 0 || !s_cut_mem )
-			{
-				s_cut_joue = false;
-				free( s_cut_mem );
-				s_cut_mem = NULL;
-				s_cut_crc = 0;
-				s_joue = false;
-				s_fini = true;
-				sceKernelUnlockMutex( s_mutex, 1 );
-				continue;
-			}
-			memcpy( s_sortie, s_cut_mem + (size_t)s_cut_pos * 2, (size_t)n * 4 );
-			if( n < GRAIN ) memset( s_sortie + n * 2, 0, (size_t)( GRAIN - n ) * 4 );
-			s_cut_pos += n;
-			sceKernelUnlockMutex( s_mutex, 1 );
-			sceAudioOutOutput( s_port, s_sortie );
-			continue;
-		}
 #endif
 
 		if( s_bloc < s_blocs )
@@ -475,263 +445,6 @@ static inline void deverrouille( void )
 		sceKernelUnlockMutex( s_mutex, 1 );
 }
 
-#ifdef THUG_DESKTOP
-// --- Demented Random Cutscenes: the cutscene's sound rebuilt ---------------
-//
-// A cutscene's track (<cut>_Male / _Female in music_pcm.wad) mixes its lines
-// with the ambience. Its loudness is measured in 20 ms windows: the loud
-// stretches are taken as the lines (their pacing is kept), the rest as
-// ambience. Each line is replaced with a loud stretch of about its length
-// from another cutscene of the same level, over a bed of quiet ambience
-// looped from one of them. The new track is made in memory before the
-// cutscene starts and has the same length, so the cutscene still fits it.
-
-enum { FEN = 960, FEN_BLOCS = FEN / ADPCM_ECH_PAR_BLOC };	// 20 ms windows, 15 blocks each
-
-struct SPiste
-{
-	uint32 crc;
-	uint32 debut;	// data offset in the .wad
-	int    blocs;
-	std::vector<int> bloc_a, bloc_b;	// loud stretches, in windows [a, b)
-	std::vector<int> calme_a, calme_b;	// quiet stretches (half a second or more)
-};
-
-static bool piste_entete( SceUID h, const SEntree *p_e, SPiste &P )
-{
-	unsigned char e[48];
-	if( sceIoLseek( h, p_e->offset, SCE_SEEK_SET ) < 0 || sceIoRead( h, e, 48 ) != 48 ) return false;
-	if( memcmp( e + 12, "fmt ", 4 ) || memcmp( e + 40, "data", 4 )) return false;
-	if(( e[20] | ( e[21] << 8 )) != 0x0069 ) return false;
-	uint32 t;
-	memcpy( &t, e + 44, 4 );
-	if( t > p_e->taille - 48 ) t = p_e->taille - 48;
-	P.crc = p_e->checksum;
-	P.debut = p_e->offset + 48;
-	P.blocs = (int)( t / ADPCM_BLOC );
-	return P.blocs > 0;
-}
-
-// decodes blocks [b0, b0 + n) into out (stereo frames); false on a read error
-static bool piste_lit( SceUID h, const SPiste &P, int b0, int n, short *out )
-{
-	static unsigned char s_tmp[256 * ADPCM_BLOC];
-	if( b0 < 0 ) { memset( out, 0, (size_t)( -b0 ) * ADPCM_ECH_PAR_BLOC * 4 ); out += -b0 * ADPCM_ECH_PAR_BLOC * 2; n += b0; b0 = 0; }
-	if( b0 + n > P.blocs )
-	{
-		const int trop = b0 + n - P.blocs;
-		memset( out + ( n - trop > 0 ? n - trop : 0 ) * ADPCM_ECH_PAR_BLOC * 2, 0, (size_t)( trop < n ? trop : n ) * ADPCM_ECH_PAR_BLOC * 4 );
-		n -= trop;
-	}
-	while( n > 0 )
-	{
-		const int k = n > 256 ? 256 : n;
-		sceIoLseek( h, P.debut + (uint32)b0 * ADPCM_BLOC, SCE_SEEK_SET );
-		if( sceIoRead( h, s_tmp, k * ADPCM_BLOC ) != k * ADPCM_BLOC ) return false;
-		for( int i = 0; i < k; ++i )
-			VitaAdpcm::DecodeBloc( s_tmp + i * ADPCM_BLOC, out + ( i * ADPCM_ECH_PAR_BLOC ) * 2, 2, ADPCM_BLOC );
-		out += k * ADPCM_ECH_PAR_BLOC * 2;
-		b0 += k; n -= k;
-	}
-	return true;
-}
-
-static int cmp_float( const void *a, const void *b )
-{
-	const float x = *(const float *)a, y = *(const float *)b;
-	return x < y ? -1 : ( x > y ? 1 : 0 );
-}
-
-static float fen_rms( const short *f )
-{
-	double s = 0.0;
-	for( int i = 0; i < FEN; ++i ) { const double m = 0.5 * ( f[i * 2] + f[i * 2 + 1] ); s += m * m; }
-	return (float)sqrt( s / FEN );
-}
-
-// loudness per window, then the loud / quiet stretches
-static void piste_analyse( SceUID h, SPiste &P, const short *deja )
-{
-	P.bloc_a.clear(); P.bloc_b.clear(); P.calme_a.clear(); P.calme_b.clear();
-	const int nf = P.blocs / FEN_BLOCS;
-	if( nf < 10 ) return;
-	std::vector<float> env( nf );
-	if( deja )
-		for( int i = 0; i < nf; ++i ) env[i] = fen_rms( deja + (size_t)i * FEN * 2 );
-	else
-	{
-		std::vector<short> buf( 64 * FEN * 2 );
-		for( int i = 0; i < nf; i += 64 )
-		{
-			const int k = nf - i < 64 ? nf - i : 64;
-			if( !piste_lit( h, P, i * FEN_BLOCS, k * FEN_BLOCS, &buf[0] )) return;
-			for( int j = 0; j < k; ++j ) env[i + j] = fen_rms( &buf[(size_t)j * FEN * 2] );
-		}
-	}
-	std::vector<float> tri( env );
-	qsort( &tri[0], tri.size(), sizeof( float ), cmp_float );
-	const float bas = tri[nf / 5], haut = tri[nf * 95 / 100];
-	float seuil = bas + 0.25f * ( haut - bas );
-	if( seuil < bas * 2.0f ) seuil = bas * 2.0f;
-	if( seuil < 250.0f ) seuil = 250.0f;
-	// loud windows, gaps under 300 ms closed, stretches under 240 ms dropped
-	int a = -1, fin = -1;
-	for( int i = 0; i <= nf; ++i )
-	{
-		const bool fort = i < nf && env[i] >= seuil;
-		if( fort )
-		{
-			if( a < 0 ) a = i;
-			else if( i - fin > 15 ) { if( fin - a >= 12 ) { P.bloc_a.push_back( a ); P.bloc_b.push_back( fin ); } a = i; }
-			fin = i + 1;
-		}
-		else if( i == nf && a >= 0 && fin - a >= 12 ) { P.bloc_a.push_back( a ); P.bloc_b.push_back( fin ); }
-	}
-	// quiet stretches between them, not dead silence
-	int q = -1;
-	for( int i = 0; i <= nf; ++i )
-	{
-		const bool calme = i < nf && env[i] < seuil * 0.6f && env[i] > 20.0f;
-		if( calme ) { if( q < 0 ) q = i; }
-		else if( q >= 0 ) { if( i - q >= 25 ) { P.calme_a.push_back( q ); P.calme_b.push_back( i ); } q = -1; }
-	}
-}
-
-static std::vector<SPiste> s_pistes_vues;	// analyses kept for the session
-
-static SPiste *piste_de( SceUID h, uint32 crc )
-{
-	for( size_t i = 0; i < s_pistes_vues.size(); ++i )
-		if( s_pistes_vues[i].crc == crc ) return &s_pistes_vues[i];
-	const SEntree *p_e = trouve( crc );
-	if( !p_e ) return NULL;
-	SPiste P;
-	if( !piste_entete( h, p_e, P )) return NULL;
-	piste_analyse( h, P, NULL );
-	s_pistes_vues.push_back( P );
-	return &s_pistes_vues.back();
-}
-
-
-static uint32 s_cut_g = 1;
-static uint32 cut_hasard( uint32 n )
-{
-	s_cut_g ^= s_cut_g << 13; s_cut_g ^= s_cut_g >> 17; s_cut_g ^= s_cut_g << 5;
-	return n ? s_cut_g % n : 0;
-}
-
-static inline short sature( int v ) { return (short)( v > 32767 ? 32767 : ( v < -32768 ? -32768 : v )); }
-
-static bool cut_construit( uint32 cible, const uint32 *donneurs, int nd, uint32 graine )
-{
-	SceUID h = sceIoOpen( CHEMIN_MUSIC_WAD, SCE_O_RDONLY, 0 );
-	if( h < 0 ) return false;
-	s_cut_g = graine ? graine : 1;
-	const SEntree *p_e = trouve( cible );
-	SPiste T;
-	bool ok = p_e && piste_entete( h, p_e, T );
-	short *out = NULL;
-	const int n = ok ? T.blocs * ADPCM_ECH_PAR_BLOC : 0;
-	if( ok ) out = (short *)malloc( (size_t)n * 4 );
-	ok = out && piste_lit( h, T, 0, T.blocs, out );
-	if( !ok ) { free( out ); sceIoClose( h ); return false; }
-	piste_analyse( h, T, out );
-	// the donors: the level's other cutscenes, else this one's own lines
-	// (all analysed first: the cache grows, so pointers come after)
-	for( int i = 0; i < nd; ++i ) if( donneurs[i] != cible ) piste_de( h, donneurs[i] );
-	std::vector<SPiste *> d;
-	for( int i = 0; i < nd; ++i )
-		for( size_t k = 0; k < s_pistes_vues.size() && donneurs[i] != cible; ++k )
-			if( s_pistes_vues[k].crc == donneurs[i] && !s_pistes_vues[k].bloc_a.empty()) { d.push_back( &s_pistes_vues[k] ); break; }
-	const bool seul = d.empty();
-	if( seul )
-	{
-		s_pistes_vues.push_back( T );
-		d.push_back( &s_pistes_vues.back());
-	}
-	// the ambience bed: a quiet stretch of one of them (or of this one)
-	std::vector<short> lit;
-	{
-		std::vector<SPiste *> c;
-		for( size_t i = 0; i < d.size(); ++i ) if( !d[i]->calme_a.empty()) c.push_back( d[i] );
-		const SPiste *src = c.empty() ? ( T.calme_a.empty() ? NULL : &T ) : c[cut_hasard( (uint32)c.size())];
-		if( src )
-		{
-			const int k = (int)cut_hasard( (uint32)src->calme_a.size());
-			int a = src->calme_a[k], b = src->calme_b[k];
-			if( b - a > 400 ) b = a + 400;	// 8 s is plenty to loop
-			lit.resize( (size_t)( b - a ) * FEN * 2 );
-			if( !piste_lit( h, *src, a * FEN_BLOCS, ( b - a ) * FEN_BLOCS, &lit[0] )) lit.clear();
-		}
-	}
-	const int FONDU = 1920;	// 40 ms
-	int remplaces = 0;
-	std::vector<short> seg;
-	for( size_t k = 0; k < T.bloc_a.size(); ++k )
-	{
-		const int a = T.bloc_a[k] * FEN, b = T.bloc_b[k] * FEN;
-		const int L = b - a;
-		const int suivant = k + 1 < T.bloc_a.size() ? T.bloc_a[k + 1] * FEN : n;
-		// a donor line of about this length (half to twice), else any
-		const SPiste *src = NULL;
-		int sa = 0, sl = 0;
-		for( int essai = 0; essai < 40 && !src; ++essai )
-		{
-			const SPiste *p = d[cut_hasard( (uint32)d.size())];
-			const int j = (int)cut_hasard( (uint32)p->bloc_a.size());
-			const int l = ( p->bloc_b[j] - p->bloc_a[j] ) * FEN;
-			if( essai < 30 && ( l * 2 < L || l > L * 2 )) continue;
-			if( seul && p->bloc_a[j] * FEN == a ) continue;	// not the same line back
-			src = p; sa = p->bloc_a[j] * FEN; sl = l;
-		}
-		if( !src ) continue;
-		int len = sl;
-		if( a + len > suivant - FONDU ) len = suivant - FONDU - a;	// never over the next line
-		if( len < FEN ) continue;
-		seg.resize( (size_t)len * 2 );
-		if( !piste_lit( h, *src, sa / ADPCM_ECH_PAR_BLOC, ( len + ADPCM_ECH_PAR_BLOC - 1 ) / ADPCM_ECH_PAR_BLOC, &seg[0] )) continue;
-		// out over [a - fade, max(b, a + len) + fade]: the original fades to the bed, the line on top
-		const int fin = ( a + len > b ? a + len : b );
-		for( int i = a - FONDU; i < fin + FONDU; ++i )
-		{
-			if( i < 0 || i >= n ) continue;
-			float w = 1.0f;
-			if( i < a ) w = (float)( i - ( a - FONDU )) / FONDU;
-			else if( i >= fin ) w = 1.0f - (float)( i - fin ) / FONDU;
-			for( int c = 0; c < 2; ++c )
-			{
-				const int o = out[i * 2 + c];
-				int v = (int)( o * ( 1.0f - w ));
-				if( !lit.empty()) v += (int)( lit[( (size_t)( i - a + FONDU ) * 2 + c ) % lit.size()] * w );
-				const int j = i - a;
-				if( j >= 0 && j < len )
-				{
-					float g = 1.0f;
-					if( j < 480 ) g = j / 480.0f;
-					if( len - j < 1440 ) g = ( len - j ) / 1440.0f;
-					v += (int)( seg[j * 2 + c] * g );
-				}
-				out[i * 2 + c] = sature( v );
-			}
-		}
-		++remplaces;
-	}
-	sceIoClose( h );
-	VLOG( "PCM", "random cutscene: %08x, %d lines replaced from %d other cutscene(s)%s, bed %d frames",
-		cible, remplaces, seul ? 0 : (int)d.size(), seul ? " (own lines shuffled)" : "", (int)( lit.size() / 2 ));
-	if( seul ) s_pistes_vues.pop_back();
-	verrouille();
-	if( s_cut_joue ) s_cut_joue = false;
-	free( s_cut_mem );
-	s_cut_mem = out;
-	s_cut_n = n;
-	s_cut_pos = 0;
-	s_cut_crc = cible;
-	deverrouille();
-	return true;
-}
-#endif
-
 static bool demarre( uint32 checksum )
 {
 	if(( s_wad < 0 ) || !s_index )
@@ -748,19 +461,6 @@ static bool demarre( uint32 checksum )
 #ifdef THUG_DESKTOP
 	cm_close();
 	s_perso = false;
-	s_cut_joue = false;
-	if( s_cut_mem && checksum == s_cut_crc )
-	{
-		// Random Cutscenes: the rebuilt track instead
-		s_cut_joue = true;
-		s_cut_pos = 0;
-		s_joue = true;
-		s_pause = false;
-		s_fini = false;
-		deverrouille();
-		VLOG( "PCM", "random cutscene track %08x: %d frames", checksum, s_cut_n );
-		return true;
-	}
 #endif
 	const bool ok = prepare_morceau( p_e );
 	if( ok )
@@ -782,7 +482,6 @@ static bool demarre_perso( int i )
 		return false;
 	verrouille();
 	const bool ok = custom_music_open( i ) != 0;
-	s_cut_joue = false;
 	s_perso = ok;
 	s_joue  = ok;
 	s_pause = false;
@@ -1547,14 +1246,6 @@ bool	PCMAudio_PlayMusicStream( uint32 checksum )
 {
 	return demarre( checksum );
 }
-
-#ifdef THUG_DESKTOP
-// cutscenedetails.cpp: Demented Random Cutscenes, before the cutscene's track preloads
-extern "C" int desktop_cut_audio( unsigned int cible, const unsigned int *donneurs, int nd, unsigned int graine )
-{
-	return cut_construit( cible, (const uint32 *)donneurs, nd, graine ) ? 1 : 0;
-}
-#endif
 
 bool	PCMAudio_PreLoadMusicStream( uint32 checksum )
 {

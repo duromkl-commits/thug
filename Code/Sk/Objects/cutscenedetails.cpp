@@ -55,15 +55,7 @@
 
 #include <sk/objects/skaterprofile.h>
 #ifdef THUG_DESKTOP
-#include <psp2/io/dirent.h>
-#include <ctype.h>
-#include <strings.h>
-#include <psp2/io/fcntl.h>
 extern "C" unsigned int desktop_rando_cutscene( unsigned int squelette_tete );	// desktop_demented.cpp
-extern "C" unsigned int desktop_rando_cuts( unsigned int nom );					// Random Cutscenes seed, 0 = off
-extern "C" int desktop_rando_cut_lieu( unsigned int graine, float *xyz );
-extern "C" int desktop_cut_audio( unsigned int cible, const unsigned int *donneurs, int nd, unsigned int graine );	// p_music.cpp
-#include "vita_log.h"
 #endif
 #include <gfx/modelappearance.h>
 #include <sys/mem/memman.h>
@@ -3675,96 +3667,6 @@ void apply_cas_scaling( Obj::CCompositeObject* pObject, Gfx::CSkeleton* pSourceS
 		}
 	}
 }
-#ifdef THUG_DESKTOP
-// --- Demented Random Cutscenes (Marcus) -------------------------------------
-// The whole scene (camera, actors, props) is moved to a random restart point
-// of the level and turned; the actors' animations are swapped between those
-// sharing a skeleton; the lines are replaced with other lines of the same
-// level's cutscenes (p_music.cpp). Clipping into walls is fine (Marcus).
-static uint32		s_rc_graine = 0;	// 0 = this cutscene plays as it is
-static bool			s_rc_lieu = false, s_rc_ancre_ok = false;
-static Mth::Vector	s_rc_ancre, s_rc_cible;
-static float		s_rc_c = 1.0f, s_rc_s = 0.0f;
-static Mth::Quat	s_rc_q[96];
-static Mth::Vector	s_rc_v[96];
-
-static Mth::Vector rc_dir( const Mth::Vector &v )
-{
-	return Mth::Vector( v[X] * s_rc_c + v[Z] * s_rc_s, v[Y], -v[X] * s_rc_s + v[Z] * s_rc_c, v[W] );
-}
-static Mth::Vector rc_point( const Mth::Vector &p )
-{
-	Mth::Vector d = p - s_rc_ancre;
-	d[W] = 0.0f;
-	Mth::Vector r = rc_dir( d ) + s_rc_cible;
-	r[W] = 1.0f;
-	return r;
-}
-static void rc_matrice( Mth::Matrix &m )
-{
-	m[X] = rc_dir( m[X] );
-	m[Y] = rc_dir( m[Y] );
-	m[Z] = rc_dir( m[Z] );
-}
-
-static uint32 rc_hasard( uint32 &g, uint32 n )
-{
-	g ^= g << 13; g ^= g >> 17; g ^= g << 5;
-	return n ? g % n : 0;
-}
-
-// the cutscene's prefix (NJ_02 -> NJ): its level's cutscenes share it
-static void rc_prefixe( const char *nom, char *o, int n )
-{
-	int k = 0;
-	for( ; nom[k] && nom[k] != '_' && k < n - 1; ++k ) o[k] = (char)toupper( (unsigned char)nom[k] );
-	o[k] = 0;
-}
-
-static void rc_charge( const char *nom, bool homme, uint32 piste )
-{
-	s_rc_graine = desktop_rando_cuts( Crc::GenerateCRCFromString( nom ));
-	s_rc_lieu = s_rc_ancre_ok = false;
-	if( !s_rc_graine ) return;
-	uint32 g = s_rc_graine;
-	float xyz[3];
-	if( desktop_rando_cut_lieu( g, xyz ))
-	{
-		s_rc_cible.Set( xyz[0], xyz[1], xyz[2], 1.0f );
-		const float a = (float)rc_hasard( g, 360 ) * 3.14159265f / 180.0f;
-		s_rc_c = cosf( a ); s_rc_s = sinf( a );
-		s_rc_lieu = true;
-	}
-	// the level's other cutscenes' tracks
-	char pre[32], autre[32];
-	rc_prefixe( nom, pre, sizeof( pre ));
-	unsigned int donneurs[64];
-	int nd = 0;
-	SceUID d = sceIoDopen( "ux0:data/thug/Data/cutscenes" );
-	if( d >= 0 )
-	{
-		SceIoDirent e;
-		while( sceIoDread( d, &e ) > 0 && nd < 64 )
-		{
-			char base[256];
-			snprintf( base, sizeof( base ), "%s", e.d_name );
-			char *pt = strchr( base, '.' );
-			if( !pt ) continue;
-			*pt = 0;
-			rc_prefixe( base, autre, sizeof( autre ));
-			if( strcmp( autre, pre ) || !strcasecmp( base, nom )) continue;
-			char t[300];
-			snprintf( t, sizeof( t ), "%s_%s", base, homme ? "Male" : "Female" );
-			donneurs[nd++] = Crc::GenerateCRCFromString( t );
-		}
-		sceIoDclose( d );
-	}
-	const int ok = desktop_cut_audio( piste, donneurs, nd, s_rc_graine );
-	VLOG( "CUT", "random cutscene %s: moved %s, %d other %s cutscenes for lines, track %s", nom,
-		s_rc_lieu ? "yes" : "no", nd, pre, ok ? "rebuilt" : "as it is" );
-}
-#endif
-
 
 /******************************************************************/
 /*                                                                */
@@ -4054,37 +3956,6 @@ bool CCutsceneData::create_objects( uint32* pData )
 		pBody->GetModel()->SetBoundingSphere( Mth::Vector(0.0f,0.0f,0.0f,50000.0f) );
 		pHead->GetModel()->ClearGeoms();
 	}
-
-	// Random Cutscenes: the actors' animations shuffled among those with
-	// the same skeleton (bodies only, heads follow their body)
-	if ( s_rc_graine )
-	{
-		uint32 g = s_rc_graine ^ 0x9e3779b9u;
-		int nb = 0;
-		for ( int i = 0; i < m_numObjects; i++ )
-		{
-			SCutsceneObjectInfo* a = &m_objects[i];
-			if ( !a->mp_animInfo || a->mp_parentObject || ( a->m_flags & vCUTSCENEOBJECTFLAGS_ISHEAD ) || !a->m_skeletonName )
-				continue;
-			// a random earlier one of the same skeleton takes this one's place
-			int cands[vMAX_CUTSCENE_OBJECTS], nc = 0;
-			for ( int j = 0; j <= i; j++ )
-			{
-				SCutsceneObjectInfo* b = &m_objects[j];
-				if ( b->mp_animInfo && !b->mp_parentObject && !( b->m_flags & vCUTSCENEOBJECTFLAGS_ISHEAD ) && b->m_skeletonName == a->m_skeletonName )
-					cands[nc++] = j;
-			}
-			const int k = cands[rc_hasard( g, (uint32)nc )];
-			if ( k != i )
-			{
-				SCutsceneAnimInfo* t = a->mp_animInfo;
-				a->mp_animInfo = m_objects[k].mp_animInfo;
-				m_objects[k].mp_animInfo = t;
-				++nb;
-			}
-		}
-		VLOG( "CUT", "random cutscene: %d animation swaps", nb );
-	}
 #endif
 
 	// apply cas scaling to the appropriate parts
@@ -4250,7 +4121,6 @@ bool CCutsceneData::create_objects( uint32* pData )
 /*                                                                */
 /******************************************************************/
 
-
 char* get_cut_name( const char* p_fileName )
 {
 	static char cutsceneName[256];
@@ -4320,9 +4190,6 @@ bool CCutsceneData::Load( const char* p_fileName, bool assertOnFail, bool async_
 	uint32 streamNameChecksum;
 	streamNameChecksum = Crc::GenerateCRCFromString(streamName);
 
-#ifdef THUG_DESKTOP
-	rc_charge( pCutsceneName, is_male != 0, streamNameChecksum );
-#endif
 #ifndef __PLAT_NGC__
 	if ( !Pcm::PreLoadMusicStream( streamNameChecksum ) )
 	{
@@ -4779,34 +4646,6 @@ void CCutsceneData::update_camera( Gfx::Camera* pCamera )
 	nullTrans.Set(0.0f,0.0f,0.0f,1.0f);		// Mick: added separate initialization
 	Mth::QuatVecToMatrix( &theQuat, &nullTrans, &camMatrix );
 
-#ifdef THUG_DESKTOP
-	if ( s_rc_graine && s_rc_lieu )
-	{
-		if ( !s_rc_ancre_ok && mp_objectQuickAnim )
-		{
-			// the scene's spot: where its actors stand at the start
-			s_rc_ancre_ok = true;
-			mp_objectQuickAnim->GetInterpolatedHiResFrames( &s_rc_q[0], &s_rc_v[0], 0.0f );
-			Mth::Vector somme( 0.0f, 0.0f, 0.0f, 0.0f );
-			int n = 0;
-			for ( int i = 0; i < m_numObjects; i++ )
-			{
-				SCutsceneObjectInfo* o = &m_objects[i];
-				if ( o->m_obaIndex < 0 || o->m_obaIndex >= 96 || o->mp_parentObject || !o->m_skeletonName ) continue;
-				somme += s_rc_v[o->m_obaIndex];
-				++n;
-			}
-			if ( n ) { s_rc_ancre = somme * ( 1.0f / n ); s_rc_ancre[W] = 1.0f; }
-			else s_rc_lieu = false;		// nobody in it: left where it is
-		}
-		if ( s_rc_lieu && s_rc_ancre_ok )
-		{
-			camPos = rc_point( camPos );
-			rc_matrice( camMatrix );
-		}
-	}
-#endif
-
 	if ( !m_videoAborted )
 	{
 		// any allocations during the cutscene should go on the
@@ -5121,18 +4960,12 @@ void CCutsceneData::update_moving_objects()
 				// theMatrix.RotateXLocal( Mth::DegToRad(90.0f) );
 			}
 
-#ifdef THUG_DESKTOP
-			if ( s_rc_graine && s_rc_lieu && s_rc_ancre_ok ) rc_matrice( theMatrix );
-#endif
 			//theMatrix.Ident();
 			pCompositeObject->SetMatrix( theMatrix );
 			pCompositeObject->SetDisplayMatrix( theMatrix );
 
 			// update the object's position
 			pCompositeObject->m_pos = s_temp_vectors[pInfo->m_obaIndex];
-#ifdef THUG_DESKTOP
-			if ( s_rc_graine && s_rc_lieu && s_rc_ancre_ok ) pCompositeObject->m_pos = rc_point( pCompositeObject->m_pos );
-#endif
 
 //			Dbg_Message( "Object %d:   ", i );
 //	 		pCompositeObject->m_pos.PrintContents();

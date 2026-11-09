@@ -44,7 +44,6 @@
 #include <sys/timer.h>
 #include <gel/object/compositeobjectmanager.h>
 #include <sk/objects/restart.h>
-#include <sk/scripting/nodearray.h>
 #include <sk/components/skaterstatecomponent.h>
 #include <sk/components/skatercorephysicscomponent.h>
 #include <sk/components/skaterflipandrotatecomponent.h>
@@ -89,9 +88,9 @@ static uint32 hasard( uint32 n )
 }
 
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
-       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, MOD_R_CUTS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
+       MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Time Extend", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
-                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations", "Random Cutscenes" };
+                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
 static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
@@ -663,10 +662,11 @@ static int   s_prime_but = 0;
 static float s_prime_fait = 0.0f;
 static Mth::Vector s_prime_pos;
 static bool  s_prime_pos_ok = false;
-// Ped Rush: the peds charging the skater, and each one's wait after a hit
-enum { RUSH_MAX = 5 };
-static uint32 s_rush_id[RUSH_MAX];
-static float  s_rush_pause[RUSH_MAX];
+// Ped Rush (Marcus, after 5 peds knocked him down over and over): one ped
+// runs up, beats the skater down once, and the event is over
+static uint32 s_rush_id = 0;
+static float  s_rush_pause = 0.0f;
+static bool   s_rush_touche = false;
 static int    s_rush_n = 0;
 static float s_ev_prochain = 20.0f;
 static float s_ev_stat = 0.0f;
@@ -846,11 +846,12 @@ static bool est_donneur_obj( uint32 id )
 }
 static void rush_lancer( void )
 {
-	s_rush_n = 0;
+	s_rush_n = 0; s_rush_touche = false; s_rush_pause = 0.0f;
 	Obj::CSkater *sk = skater_local();
 	if( !sk ) return;
 	const Mth::Vector ici = sk->GetPos();
-	float d2[RUSH_MAX];
+	// the nearest ped that isn't right on top of the skater (it has to run up)
+	float meilleur = 0.0f;
 	Lst::Search<Obj::CObject> sh;
 	Obj::CCompositeObject *o = (Obj::CCompositeObject *)sh.FirstItem( Obj::CCompositeObjectManager::Instance()->GetRefObjectList());
 	for( ; o; o = (Obj::CCompositeObject *)sh.NextItem())
@@ -859,57 +860,57 @@ static void rush_lancer( void )
 		if( !pl || pl->DesktopIsSkater() || !GetMotionComponentFromObject( o ) || est_donneur_obj( o->GetID())) continue;
 		const float d = ( o->m_pos - ici ).LengthSqr();
 		if( d > 2400.0f * 2400.0f ) continue;	// about 60 m
-		int k = s_rush_n < RUSH_MAX ? s_rush_n++ : -1;
-		if( k < 0 ) { int pire = 0; for( int i = 1; i < RUSH_MAX; ++i ) if( d2[i] > d2[pire] ) pire = i; if( d >= d2[pire] ) continue; k = pire; }
-		s_rush_id[k] = o->GetID(); d2[k] = d; s_rush_pause[k] = 0.0f;
+		const float note = d < 240.0f * 240.0f ? d + 1e12f : d;	// under 6 m: last pick
+		if( s_rush_n && note >= meilleur ) continue;
+		s_rush_id = o->GetID(); meilleur = note; s_rush_n = 1;
 	}
-	for( int i = 0; i < s_rush_n; ++i )
+	if( s_rush_n )
 	{
-		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id[i] );
+		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id );
 		if( p ) p->SwitchScript( crc( "desktop_ped_rush" ), NULL );
+		else s_rush_n = 0;
 	}
-	VLOG( "DSK", "demented chaos: ped rush, %d peds", s_rush_n );
+	VLOG( "DSK", "demented chaos: ped rush, %s", s_rush_n ? "1 ped" : "no ped near" );
 }
 static void rush_fin( void )
 {
-	for( int i = 0; i < s_rush_n; ++i )
+	if( s_rush_n )
 	{
-		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id[i] );
+		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id );
 		if( p ) p->SwitchScript( crc( "desktop_ped_rush_end" ), NULL );
 	}
-	s_rush_n = 0;
+	s_rush_n = 0; s_rush_touche = false;
 }
+static void ev_fin( int e );
 static void rush_maj( float dt )
 {
+	if( !s_rush_n ) { ev_fin( EV_RUSH ); return; }	// nobody to send
+	Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id );
+	if( !p ) { s_rush_n = 0; ev_fin( EV_RUSH ); return; }
+	// after the beating: the punch anim plays out, then the ped goes back
+	if( s_rush_touche ) { s_rush_pause -= dt; if( s_rush_pause <= 0.0f ) ev_fin( EV_RUSH ); return; }
 	Obj::CSkater *sk = skater_local();
-	if( !sk ) return;
+	Obj::CPedLogicComponent *pl = GetPedLogicComponentFromObject( p );
+	if( !sk || !pl ) return;
 	const Mth::Vector ici = sk->GetPos();
 	Obj::CSkaterStateComponent *st = GetSkaterStateComponentFromObject( sk );
 	const bool a_terre = st && !st->GetFlag( Obj::IS_BAILING ) && st->GetDriving() == false;
-	for( int i = 0; i < s_rush_n; ++i )
+	Mth::Vector d = ici - p->m_pos;
+	const float h = d[Y];
+	d[Y] = 0.0f;
+	const float l = d.Length();
+	if( l < 40.0f && h > -30.0f && h < 60.0f )
 	{
-		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id[i] );
-		if( !p ) continue;
-		if( s_rush_pause[i] > 0.0f ) { s_rush_pause[i] -= dt; continue; }
-		Obj::CPedLogicComponent *pl = GetPedLogicComponentFromObject( p );
-		if( !pl ) continue;
-		Mth::Vector d = ici - p->m_pos;
-		const float h = d[Y];
-		d[Y] = 0.0f;
-		const float l = d.Length();
-		if( l < 40.0f && h > -30.0f && h < 60.0f )
-		{
-			s_rush_pause[i] = 2.5f;
-			if( a_terre )
-			{
-				p->SwitchScript( crc( "desktop_ped_rush_hit" ), NULL );
-				Script::RunScript( "desktop_ped_rush_slap" );
-				sk->SwitchScript( crc( "PedKnockDown" ), NULL );
-			}
-			continue;
-		}
-		pl->DesktopRush( ici, 300.0f * dt );	// about 17 mph: you can outskate them
+		if( !a_terre ) return;	// already down: it waits by the skater
+		s_rush_touche = true;
+		s_rush_pause = 1.5f;
+		p->SwitchScript( crc( "desktop_ped_rush_hit" ), NULL );
+		Script::RunScript( "desktop_ped_rush_slap" );
+		sk->SwitchScript( crc( "PedKnockDown" ), NULL );
+		VLOG( "DSK", "demented chaos: ped rush hit" );
+		return;
 	}
+	pl->DesktopRush( ici, 520.0f * dt );	// a sprint (about 30 mph)
 }
 
 static void ev_fin( int e )
@@ -990,7 +991,7 @@ static void ev_lancer( Game::CGoalManager *gm )
 			if( e == EV_SEISME ) ev_banniere( e, true );	// the only label besides FRAGILE / PERMA BAIL (Marcus)
 			if( e == EV_TAILLE ) { s_taille = hasard( 2 ) ? 2.0f : 0.4f; ev_taille_appliquer( s_taille ); }
 			if( e == EV_PRIME ) { prime_lancer(); s_ev_reste[e] = s_ev_duree[e] = prime_duree(); }
-			if( e == EV_RUSH ) rush_lancer();
+			if( e == EV_RUSH ) { rush_lancer(); s_ev_reste[e] = s_ev_duree[e] = 15.0f; }
 			if( e == EV_REVERSE ) s_inverse = true;
 			if( e == EV_SONS ) s_son_graine = hasard( 0x7fffffff ) | 1;
 			if( e == EV_BOUTONS ) ++s_txt_gen;
@@ -1148,26 +1149,6 @@ extern "C" float desktop_chaos_seisme( void )
 	return q > 0.0f ? q : 0.0f;
 }
 
-// cutscenedetails.cpp: Random Cutscenes (Marcus). 0 = off, else this
-// cutscene's seed (per chapter, like the other randomizers)
-extern "C" unsigned int desktop_rando_cuts( unsigned int nom )
-{
-	return rando_on( MOD_R_CUTS ) ? ( melanger( s_rando_graine ^ nom ^ 0xc075c3e5u ) | 1 ) : 0;
-}
-
-// a random spot of the level for a Random Cutscene: one of its restart points
-extern "C" int desktop_rando_cut_lieu( unsigned int graine, float *xyz )
-{
-	std::vector<int> v;
-	int n = -1;
-	while(( n = Obj::GetRestartNode( 0, 0, n )) != -1 && v.size() < 400 ) v.push_back( n );
-	if( v.empty()) return 0;
-	Mth::Vector p;
-	SkateScript::GetPosition( v[melanger( graine ) % (uint32)v.size()], &p );
-	xyz[0] = p[X]; xyz[1] = p[Y]; xyz[2] = p[Z];
-	return 1;
-}
-
 // shim_input_audio.cpp: Swapped Buttons (ollie <-> grind), not in menus
 extern "C" int desktop_chaos_boutons( void )
 {
@@ -1316,7 +1297,18 @@ static int babil( char *t, int cap, uint32 graine )
 		for( int k = 0; k < l; ++k ) if( d[k] >= 'a' && d[k] <= 'z' ) caps = false;
 		uint32 h = graine ^ (uint32)mot * 0x9E3779B1u;
 		for( int k = 0; k < l; ++k ) h = ( h ^ (uint8)( d[k] | 0x20 )) * 16777619u;
-		const char *w = s_babil[melanger( h ) % (uint32)NB_BABIL];
+		// a word no longer than the one it replaces (Marcus: lines ran out
+		// of the dialogue box and off the goal list; they're wrapped before
+		// this runs), and no more than 2 letters shorter when there's one
+		int cand[NB_BABIL], nc = 0;
+		for( int lo = l > 2 ? l - 2 : 1; !nc && lo >= 1; lo = lo > 1 ? 1 : 0 )
+			for( int k = 0; k < NB_BABIL; ++k )
+			{
+				const int lw = (int)strlen( s_babil[k] );
+				if( lw >= lo && lw <= l ) cand[nc++] = k;
+			}
+		if( !nc ) { o.append( d, l ); ++mot; continue; }
+		const char *w = s_babil[cand[melanger( h ) % (uint32)nc]];
 		for( int k = 0; w[k]; ++k )
 		{
 			char c = w[k];
@@ -1465,8 +1457,13 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 				{
 					const int nx = desktop_noms_extra_count( 0 );
 					const uint32 h = melanger((uint32)i * 0x9E3779B1u ^ s_rando_graine ^ 0x1f83d9abu );
-					const uint32 k = h % (uint32)( NB_NOMS_CHAOS + nx );
-					rempl = k < (uint32)NB_NOMS_CHAOS ? s_noms_chaos[k] : desktop_noms_extra( 0, (int)k - NB_NOMS_CHAOS );
+					// a name about as long (text is wrapped before this runs)
+					for( int essai = 0; essai < 24 && !rempl; ++essai )
+					{
+						const uint32 k = melanger( h + (uint32)essai * 0x9E3779B9u ) % (uint32)( NB_NOMS_CHAOS + nx );
+						rempl = k < (uint32)NB_NOMS_CHAOS ? s_noms_chaos[k] : desktop_noms_extra( 0, (int)k - NB_NOMS_CHAOS );
+						if( rempl && (int)strlen( rempl ) > l + 1 ) rempl = NULL;
+					}
 					if( !rempl ) rempl = s_noms_chaos[i];
 				}
 				else rempl = s_noms_chaos[s_perm_noms[i]];
@@ -1486,8 +1483,12 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 			if( !ok ) continue;
 			const int nx = desktop_noms_extra_count( 1 );
 			const uint32 h = melanger((uint32)i * 0x85ebca6bu ^ s_rando_graine ^ 0x5be0cd19u );
-			const uint32 k = h % (uint32)( NB_NOMS_FAMILLE + nx );
-			rempl = k < (uint32)NB_NOMS_FAMILLE ? s_noms_famille[k] : desktop_noms_extra( 1, (int)k - NB_NOMS_FAMILLE );
+			for( int essai = 0; essai < 24 && !rempl; ++essai )
+			{
+				const uint32 k = melanger( h + (uint32)essai * 0x9E3779B9u ) % (uint32)( NB_NOMS_FAMILLE + nx );
+				rempl = k < (uint32)NB_NOMS_FAMILLE ? s_noms_famille[k] : desktop_noms_extra( 1, (int)k - NB_NOMS_FAMILLE );
+				if( rempl && (int)strlen( rempl ) > l + 1 ) rempl = NULL;
+			}
 			if( !rempl ) rempl = nm;
 		}
 		if( rempl )
@@ -1868,7 +1869,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	if( s_run.mods[MOD_SURPRISE] )
 	{
 		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 25, 30, 30, 0, 50, 40, 40, 35, 25, 0, 0, 0, 35 };	// Random Models (experimental) never
+		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 25, 30, 30, 0, 50, 40, 40, 35, 25, 0, 0, 0 };	// Random Models (experimental) never
 		for( int i = 0; i < NB_MODS; ++i )
 			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
 		if( s_run.mods[MOD_PERMA] ) s_run.mods[MOD_FRAGILE] = false;
