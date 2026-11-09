@@ -1248,8 +1248,6 @@ static const char *s_demented_scripts =
 	"desktop_tog_color id = desktop_mod_3\n"
 	"make_main_menu_item { text = <text6> id = desktop_mod_6 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 6 focus = 4 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
 	"desktop_tog_color id = desktop_mod_6\n"
-	"make_main_menu_item { text = <text7> id = desktop_mod_7 pad_choose_script = desktop_demented_flip pad_choose_params = { i = 7 focus = 5 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
-	"desktop_tog_color id = desktop_mod_7\n"
 	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 0 } }\n"
 	"FireEvent Type = focus target = current_menu_anchor\n"
 	"if NOT ( <focus> = 0 )\n"

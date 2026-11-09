@@ -90,7 +90,7 @@ static uint32 hasard( uint32 n )
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
        MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Countdown", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
-                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
+                                           "Chaos", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
 static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
@@ -471,13 +471,13 @@ static bool rando_on( int m ) { return s_run.actif && !s_run.fini && s_run.mods[
 // and Fragile never both
 static bool mod_cache( int i )	// folded into another, not listed
 {
-	return i == MOD_OBSCURE || i == MOD_R_VOIX || i == MOD_R_COULEURS || i == MOD_R_DONNEURS;
+	return i == MOD_CHAOS || i == MOD_OBSCURE || i == MOD_R_VOIX || i == MOD_R_COULEURS || i == MOD_R_DONNEURS;
 }
 static void lier_mods( bool *m, int change )
 {
 	m[MOD_OBSCURE] = m[MOD_R_MOTS];
 	m[MOD_R_VOIX] = m[MOD_R_SONS];
-	m[MOD_R_COULEURS] = m[MOD_R_DONNEURS] = m[MOD_R_MONDE];
+	m[MOD_R_COULEURS] = m[MOD_R_DONNEURS] = m[MOD_CHAOS] = m[MOD_R_MONDE];	// Marcus: Random World + Chaos = "Chaos"
 	if( m[MOD_PERMA] && m[MOD_FRAGILE] ) { if( change == MOD_FRAGILE ) m[MOD_PERMA] = false; else m[MOD_FRAGILE] = false; }
 	m[MOD_R_NOMS] = m[MOD_R_ANIMS] = false;
 }
