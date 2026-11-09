@@ -796,6 +796,10 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 		{
 			const char *nm = s_noms_chaos[i];
 			if( (int)strlen( nm ) != l ) continue;
+			// Random Names: Peralta and Muska are last names, they get one
+			bool famille = false;
+			for( int j = 0; noms && j < NB_NOMS_FAMILLE && !famille; ++j ) famille = !strcmp( nm, s_noms_famille[j] );
+			if( famille ) continue;
 			bool ok = true;
 			for( int k = 0; k < l && ok; ++k )
 			{
