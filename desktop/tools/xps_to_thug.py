@@ -168,6 +168,25 @@ for s, S in (('right', 'R'), ('left', 'L')):
     ]
 
 
+def inherit_unmapped(bones, fn):
+    """Bones of fuller rigs (face, thumb, toe-nub, accessory) that have no THUG
+    bone take their nearest mapped ancestor's: they follow it in the repose
+    and give it their weights."""
+    extra = []
+    for nm, par, _ in bones:
+        if nm in BONE_MAP:
+            continue
+        a = par
+        while a >= 0 and bones[a][0] not in BONE_MAP:
+            a = bones[a][1]
+        if a < 0:
+            raise ValueError('%s: GTA bone %s has no mapped ancestor' % (fn, nm))
+        BONE_MAP[nm] = BONE_MAP[bones[a][0]]
+        extra.append(nm)
+    if extra:
+        print('%s: %d extra bones folded into their parents' % (os.path.basename(os.path.dirname(fn)), len(extra)))
+
+
 def align(a, b):
     """Row-vector rotation turning direction a onto b (shortest arc)."""
     a = a / np.linalg.norm(a); b = b / np.linalg.norm(b)
@@ -183,7 +202,7 @@ def repose(bones, tpos, scale):
     """Per GTA bone: (rotation, rest joint, posed joint) for v' = (v - rest) R + posed."""
     names = [b[0] for b in bones]
     rest = [b[2] * scale for b in bones]
-    aim = {g: (names.index(gt), tpos[tf], tpos[tt]) for g, gt, tf, tt in AIM}
+    aim = {g: (names.index(gt), tpos[tf], tpos[tt]) for g, gt, tf, tt in AIM if gt in names}	# a rig missing a fingertip/toe keeps that bone as is
     R = [None] * len(bones); posed = [None] * len(bones)
     for i, (nm, par, _) in enumerate(bones):
         if par < 0:
@@ -315,9 +334,7 @@ def write_tex(fn, textures):
 def convert(data, out, name, xps_fn, tex_dir=None):
     index, tpos = read_skeleton(os.path.join(data, 'skeletons', 'thps5_human.ske.xbx'))
     bones, meshes = read_xps(xps_fn)
-    unknown = [b[0] for b in bones if b[0] not in BONE_MAP]
-    if unknown:
-        raise ValueError('%s: GTA bones not mapped: %s' % (xps_fn, unknown))
+    inherit_unmapped(bones, xps_fn)
     # Scaled to a THUG pro's height (72.6 in; GTA's rigs put the hip joint at
     # different heights, so it can't be the yardstick). GTA's women come out
     # as tall as the men; the game shrinks them back with female_scale_info.

@@ -1,22 +1,26 @@
 #!/usr/bin/env python3
 """Bail voice banks for the extra skaters (data/voices).
 
-usage: voice_banks.py <Sound Assets for THUG dir> <out voices dir>
+usage: voice_banks.py <Sound Assets for THUG dir>[;<more sound dirs>...] <out voices dir>
 
-Reads Marcus's sound folder (GTA SA generic male/female pain sounds, Red Dead
-Revolver character injury lines) and writes:
-  <out>/gta_male/*.wav, gta_female/*.wav, rdr/<character>/*.wav
+Reads Marcus's sound folders (GTA SA generic male/female pain sounds, Red Dead
+Revolver character injury lines; Kingdom Hearts and Simpsons hit lines from
+the zips he sent 2026-11-10, unpacked anywhere and listed after the first
+folder with os.pathsep, ';' on Windows, ':' elsewhere) and writes:
+  <out>/gta_male/*.wav, gta_female/*.wav, rdr/<character>/*.wav,
+      own/<character>/*.wav
       mono 16-bit, silence trimmed, peak normalised
   <out>/<skater key>.txt
       'pitch N' then one clip per line (relative to <out>); the game plays a
       random one on each bail (custom_music.cpp / p_music.cpp).
-Red Dead characters with their own injury lines use those at their own pitch;
-everyone else gets 14 GTA pain clips (male or female) at their profile pitch."""
+Characters with their own lines use those at their own pitch; skaters in
+skater_roster.SILENT get no bank; everyone else gets 14 GTA pain clips (male
+or female) at their profile pitch."""
 import array, os, random, re, sys, wave
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from skater_roster import R
+from skater_roster import R, SILENT
 
-SRC, OUT = sys.argv[1], sys.argv[2]
+SRCS, OUT = sys.argv[1].split(os.pathsep), sys.argv[2]
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Red Dead characters with their own injury clips: key -> (folder, file regex)
@@ -31,7 +35,17 @@ OWN = {
     'redharlow': ('Red Dead Revolver/Red Harlow', r'^final_lginj'),
     'youngred': ('Red Dead Revolver/Red Harlow/Young', r'^lginj'),
 }
+# Marcus's 2026-11-10 zips (written under own/<key>): Sora's four 'Hit!'
+# grunts, Riku's normal damage lines (not the 'Riku Possessed' set), each
+# Simpson's hit/crash lines
+OWN2 = {
+    'sora': ('Sora (KH)', r'^hit!'),
+    'riku': ('Riku', r'^rk0[13]da'),
+    'bart': ('bart', r''), 'lisa': ('lisa', r''), 'homer': ('homer', r''),
+    'marge': ('marge', r''), 'skinner': ('skinner', r''),
+}
 MIN_S, MAX_S = 0.15, 1.8
+MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 
 def charge(path):
     w = wave.open(path)
@@ -42,7 +56,7 @@ def charge(path):
         a = array.array('h', [(a[i] + a[i + 1]) // 2 for i in range(0, len(a), 2)])
     return a, hz
 
-def prepare(path, dst):
+def prepare(path, dst, max_s=MAX_S):
     """Trim silence, normalise, write mono 16-bit; returns seconds or None."""
     a, hz = charge(path)
     if not a:
@@ -57,7 +71,7 @@ def prepare(path, dst):
     j = min(len(a), j + hz // 20)
     a = a[i:j]
     s = len(a) / hz
-    if s < MIN_S or s > MAX_S:
+    if s < MIN_S or s > max_s:
         return None
     g = 0.89 * 32767 / pk
     a = array.array('h', [max(-32768, min(32767, int(x * g))) for x in a])
@@ -72,13 +86,19 @@ def prepare(path, dst):
     w.close()
     return s
 
-def pool(folder, rx, sous):
+def find(folder):
+    for src in SRCS:
+        if os.path.isdir(os.path.join(src, folder)):
+            return os.path.join(src, folder)
+    sys.exit('no %r under %s' % (folder, SRCS))
+
+def pool(folder, rx, sous, max_s=MAX_S):
     out = []
-    d = os.path.join(SRC, folder)
+    d = find(folder)
     for f in sorted(os.listdir(d)):
         if f.lower().endswith('.wav') and re.search(rx, f, re.I):
-            rel = '%s/%s' % (sous, f.lower())
-            if prepare(os.path.join(d, f), os.path.join(OUT, rel)) is not None:
+            rel = '%s/%s' % (sous, re.sub(r'[^a-z0-9_.-]+', '_', f.lower()))
+            if prepare(os.path.join(d, f), os.path.join(OUT, rel), max_s) is not None:
                 out.append(rel)
     return out
 
@@ -103,9 +123,11 @@ assert len(pitch) == len(R), len(pitch)
 own_n = 0
 for key, (name, first, age, town, tags) in R.items():
     rng = random.Random('thug-voice:' + key)
-    if key in OWN:
-        d, rx = OWN[key]
-        clips = pool(d, rx, 'rdr/' + key)
+    if key in SILENT:
+        continue
+    if key in OWN or key in OWN2:
+        d, rx = OWN[key] if key in OWN else OWN2[key]
+        clips = pool(d, rx, ('rdr/' if key in OWN else 'own/') + key, MAX_OWN if key in OWN2 else MAX_S)
         p = 100
         own_n += 1
     else:
@@ -115,4 +137,4 @@ for key, (name, first, age, town, tags) in R.items():
     with open(os.path.join(OUT, key + '.txt'), 'w') as f:
         f.write('# %s: bail voice clips, one picked at random per bail\npitch %d\n' % (name, p))
         f.write('\n'.join(clips) + '\n')
-print('%d skaters (%d with their own Red Dead voice) -> %s' % (len(R), own_n, OUT))
+print('%d skaters (%d with their own voice, %d silent) -> %s' % (len(R), own_n, len(SILENT), OUT))
