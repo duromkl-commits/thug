@@ -3059,7 +3059,7 @@ void CTrickComponent::DesktopAirFlips()
 			Script::CStruct p;
 			p.AddInteger( Script::GenerateCRC( "k" ), k );
 			p.AddString( CRCD(0xa1dc81f9, "name"), s_noms[k] );
-			if ( k < 2 ) p.AddChecksum( NONAME, Script::GenerateCRC( "scored" ));	// rolls are flair only (Marcus)
+			// flips and rolls are flair only, never scored (Marcus)
 			GetObject()->SpawnScriptPlease( Script::GenerateCRC( "desktop_air_flip" ), &p );
 			m_flip_fin = now + DUREE;
 			m_flip_derniere = 0;

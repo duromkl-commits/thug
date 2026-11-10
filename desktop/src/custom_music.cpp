@@ -1255,7 +1255,7 @@ static const char *s_demented_scripts =
 	"endif\n"
 	"endscript\n"
 	// THUG2-style flips and rolls (trickcomponent.cpp spawns it on a double tap in
-	// the air): the body goes round once, flips scored, rolls flair only (Marcus);
+	// the air): the body goes round once, flair only, no score (Marcus);
 	// landing before it is round = bail
 	"script desktop_air_flip k = 0 name = \"Front Flip\"\n"
 	"BailOn\n"
@@ -1270,11 +1270,6 @@ static const char *s_demented_scripts =
 	"endif\n"
 	"if ( <k> = 3 )\n"
 	"RotateDisplay z Duration = 0.85 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
-	"endif\n"
-	"if GotParam scored\n"
-	"SetTrickName <name>\n"
-	"SetTrickScore 500\n"
-	"Display\n"
 	"endif\n"
 	"begin\n"
 	"if NOT InAir\n"
