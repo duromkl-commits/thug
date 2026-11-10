@@ -113,6 +113,9 @@ CSkaterCorePhysicsComponent::CSkaterCorePhysicsComponent() : CBaseComponent()
 	SetType( CRC_SKATERCOREPHYSICS );
 	
 	mp_input_component = NULL;
+#ifdef THUG_DESKTOP
+	m_desk_on_rail = m_desk_stall = false;
+#endif
 	mp_trigger_component = NULL;
 	mp_sound_component = NULL;
 	mp_trick_component = NULL;
@@ -254,6 +257,15 @@ void CSkaterCorePhysicsComponent::Update()
 			break;
 			
 		case RAIL:
+#ifdef THUG_DESKTOP
+			// THUG2 grind stalls (Marcus): R2 held as you Triangle onto a rail
+			// = a still grind, no balance, until you ollie off
+			if (!m_desk_on_rail)
+			{
+				m_desk_stall = (mp_input_component->GetInputMask() & Inp::Data::mA_R2) != 0;
+				m_desk_on_rail = true;
+			}
+#endif
 			do_rail_physics();
 			break;
 			
@@ -262,6 +274,9 @@ void CSkaterCorePhysicsComponent::Update()
 			break;
 	}
 	
+#ifdef THUG_DESKTOP
+	if (GetState() != RAIL) m_desk_on_rail = m_desk_stall = false;
+#endif
 	handle_post_transfer_limit_overrides();
 	
 	// NOTE: moved this call from after CSkaterRotateComponent::Update to before it
@@ -7460,6 +7475,17 @@ void CSkaterCorePhysicsComponent::do_rail_physics (   )
 		gravity.ProjectToNormal(dir);
 		GetVel() += gravity * m_frame_length;
 		DUMP_VELOCITY;
+#ifdef THUG_DESKTOP
+		if (m_desk_stall)
+		{
+			// stalled: barely creeping (keeps the direction the rail code works
+			// from), balance held level
+			const float sens = Mth::DotProduct(dir, GetVel()) < 0.0f ? -1.0f : 1.0f;
+			GetVel() = dir * (0.01f * sens);
+			mp_balance_trick_component->mGrind.mManualLean = 0.0f;
+			mp_balance_trick_component->mGrind.mManualLeanDir = 0.0f;
+		}
+#endif
 		
 		// sign is which way we are going along the rail
 		float sign = Mth::Sgn(Mth::DotProduct(dir, GetVel()));

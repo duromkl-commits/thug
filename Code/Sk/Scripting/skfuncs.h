@@ -152,6 +152,7 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopQuitGame(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopZeroArm(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopAirFlipBail(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDemented(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedToggle(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedSeed(Script::CStruct *pParams, Script::CScript *pScript);

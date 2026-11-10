@@ -35,15 +35,8 @@ OWN = {
     'redharlow': ('Red Dead Revolver/Red Harlow', r'^final_lginj'),
     'youngred': ('Red Dead Revolver/Red Harlow/Young', r'^lginj'),
 }
-# Marcus's 2026-11-10 zips (written under own/<key>): Sora's four 'Hit!'
-# grunts, Riku's normal damage lines (not the 'Riku Possessed' set), each
-# Simpson's hit/crash lines
-OWN2 = {
-    'sora': ('Sora (KH)', r'^hit!'),
-    'riku': ('Riku', r'^rk0[13]da'),
-    'bart': ('bart', r''), 'lisa': ('lisa', r''), 'homer': ('homer', r''),
-    'marge': ('marge', r''), 'skinner': ('skinner', r''),
-}
+# Marcus's 2026-11-10 zips (Sora, Riku, the Simpsons): those skaters are gone
+OWN2 = {}	# (Kingdom Hearts and Simpsons skaters removed 2026-11-10, Marcus)
 MIN_S, MAX_S = 0.15, 1.8
 MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 

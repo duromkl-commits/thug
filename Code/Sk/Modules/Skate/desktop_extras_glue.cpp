@@ -50,6 +50,8 @@ void desktop_goal_won( uint32 goal, const char *nom )
 	desktop_th4_goal_won();
 }
 
+extern "C" int desktop_air_flip_bail( void );	// trickcomponent.cpp
+
 namespace CFuncs
 {
 
@@ -62,6 +64,12 @@ namespace CFuncs
 static bool s_zero_arme = false;
 
 // @script | DesktopZeroArm | desktop: on arms THUG Zero for the next new story, off disarms
+// @script | DesktopAirFlipBail | desktop: true when a flip/roll is landed before it comes round
+bool ScriptDesktopAirFlipBail( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	return desktop_air_flip_bail() != 0;
+}
+
 bool ScriptDesktopZeroArm( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	s_zero_arme = pParams->ContainsFlag( Script::GenerateCRC( "on" ));

@@ -3030,9 +3030,25 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
 // double tap of one direction flips the skater that way, Up = front flip,
 // Down = back flip, Left / Right = a roll. desktop_air_flip (custom_music.cpp)
 // turns the body and scores it; landing before it comes round is a bail.
+// The flip in progress (local skater): Land asks DesktopAirFlipBail whether
+// it lands too early. Marcus: 0.7 s, and a little grace at the end so a
+// flip that's basically round (then a revert) isn't a bail. Grinds, lips
+// and wallrides take it mid-flip and end it.
+static bool s_flip_en_cours = false;
+static Tmr::Time s_flip_debut = 0;
+static const Tmr::Time FLIP_DUREE = 700, FLIP_GRACE = 560;	// round enough after 80%
+
+// DesktopAirFlipBail (desktop_extras_glue.cpp): landed too early? (clears it)
+extern "C" int desktop_air_flip_bail( void )
+{
+	const bool b = s_flip_en_cours && Tmr::GetTime() - s_flip_debut < FLIP_GRACE;
+	s_flip_en_cours = false;
+	return b ? 1 : 0;
+}
+
 void CTrickComponent::DesktopAirFlips()
 {
-	static const Tmr::Time DOUBLE_TAP = 250, DUREE = 850;
+	static const Tmr::Time DOUBLE_TAP = 250, DUREE = FLIP_DUREE;
 	uint32 input_mask = mp_input_component->GetInputMask();
 	uint32 d = CSkaterPad::sGetDirection(
 		input_mask & Inp::Data::mA_UP,
@@ -3049,19 +3065,25 @@ void CTrickComponent::DesktopAirFlips()
 	if ( !en_l_air )
 	{
 		m_flip_derniere = 0;
+		const EStateType e = mp_skater_state_component->GetState();
+		if ( e == RAIL || e == LIP || e == WALL || e == WALLPLANT ) s_flip_en_cours = false;	// grinded out of it
 	}
 	else if ( d && d != m_flip_dir_avant )
 	{
-		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin )
+		const int k = d == PAD_U ? 0 : d == PAD_D ? 1 : d == PAD_L ? 2 : 3;
+		// THUG2: a roll needs a flip or grab trick going, not just an ollie
+		const bool permis = k < 2 || mp_skater_state_component->DoingTrick();
+		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin && permis )
 		{
 			static const char *s_noms[4] = { "Front Flip", "Back Flip", "Left Roll", "Right Roll" };
-			const int k = d == PAD_U ? 0 : d == PAD_D ? 1 : d == PAD_L ? 2 : 3;
 			Script::CStruct p;
 			p.AddInteger( Script::GenerateCRC( "k" ), k );
 			p.AddString( CRCD(0xa1dc81f9, "name"), s_noms[k] );
-			// flips and rolls are flair only, never scored (Marcus)
+			// 1000 each as in THUG2; the combo's repeat penalty makes spam worth less
 			GetObject()->SpawnScriptPlease( Script::GenerateCRC( "desktop_air_flip" ), &p );
 			m_flip_fin = now + DUREE;
+			s_flip_en_cours = true;
+			s_flip_debut = now;
 			m_flip_derniere = 0;
 		}
 		else

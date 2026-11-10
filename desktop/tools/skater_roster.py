@@ -288,34 +288,6 @@ R = {
 'tommy': ('Tommy Vercetti', 'Tommy', 35, 'Vice City', 'street athletic beach'),
 'umberto': ('Umberto Robina', 'Umberto', 38, 'Little Havana, VC', 'street normal fire'),
 # --- GTA III ---------------------------------------------------------------
-'claude_b': ('Claude B', 'Claude', 25, 'Liberty City', 'street normal dark'),
-'catalina_b': ('Catalina B', 'Catalina', 27, 'Liberty City', 'street normal female'),
-'maria_b': ('Maria B', 'Maria', 28, 'Liberty City', 'street normal female'),
-'asuka': ('Asuka Kasen', 'Asuka', 32, 'Liberty City', 'street athletic asia'),
-'army': ('Army Soldier', 'Army', 25, 'Liberty City', 'allround athletic army'),
-'b_man1': ('Business Man 1', 'Business', 42, 'Liberty City', 'street normal money'),
-'b_man2': ('Business Man 2', 'Business', 50, 'Liberty City', 'street old money'),
-'b_man3': ('Business Man 3', 'Business', 36, 'Liberty City', 'street normal money'),
-'bomber': ('8-Ball', 'Eightball', 30, 'Liberty City', 'street normal fire'),
-'cas_man': ('Casual Man', 'Casual', 34, 'Liberty City', 'street normal plain'),
-'cas_wom': ('Casual Woman', 'Casual', 28, 'Liberty City', 'street normal female'),
-'chunky': ('Chunky', 'Chunky', 30, 'Liberty City', 'street heavy comic'),
-'col1': ('Colombian 1', 'Colombian', 28, 'Liberty City', 'street normal army'),
-'col2': ('Colombian 2', 'Colombian', 32, 'Liberty City', 'street normal army'),
-'colrob': ('Colombian Robber', 'Colombian', 30, 'Liberty City', 'street normal dark'),
-'const1': ('Construction Worker B', 'Construction', 36, 'Liberty City', 'street heavy plain'),
-'const2': ('Construction Worker C', 'Construction', 40, 'Liberty City', 'street heavy plain'),
-'criminal01': ('Criminal 1', 'Criminal', 27, 'Liberty City', 'street normal dark'),
-'criminal02': ('Criminal 2', 'Criminal', 24, 'Liberty City', 'street skinny street'),
-'ct_man': ('Chinatown Man 1', 'Chinatown', 45, 'Liberty City', 'street normal asia'),
-'ct_man2': ('Chinatown Man 2', 'Chinatown', 38, 'Liberty City', 'street normal asia'),
-'ct_wom1': ('Chinatown Woman 1', 'Chinatown', 55, 'Liberty City', 'street old asia'),
-'ct_wom2': ('Chinatown Woman 2', 'Chinatown', 48, 'Liberty City', 'street heavy asia'),
-'iii_cop': ('Cop', 'Cop', 35, 'Liberty City', 'street normal army'),
-'iii_fbi': ('FBI Agent', 'FBI', 38, 'Liberty City', 'street normal army'),
-'iii_hobo': ('Hobo', 'Hobo', 55, 'Liberty City', 'street old dark'),
-'iii_mafia': ('Mafia Goon', 'Mafia', 34, 'Liberty City', 'street normal money'),
-'iii_medic': ('Medic', 'Medic', 33, 'Liberty City', 'street normal plain'),
 # --- Half-Life ---------------------------------------------------------------
 'gordon': ('Gordon Freeman', 'Gordon', 27, 'Black Mesa, NM', 'allround athletic fire'),
 'gman': ('G-Man', 'G-Man', 50, 'Black Mesa, NM', 'street skinny dark'),
@@ -330,15 +302,7 @@ R = {
 'cs_nerd': ('Cleansuit Scientist', 'Scientist', 35, 'Black Mesa, NM', 'street skinny alien'),
 'tmcm': ('TMCM', 'TMCM', 30, 'Black Mesa, NM', 'street heavy comic'),
 # --- Kingdom Hearts ----------------------------------------------------------
-'sora': ('Sora', 'Sora', 14, 'Destiny Islands', 'allround kid hero'),
-'riku': ('Riku', 'Riku', 15, 'Destiny Islands', 'vert athletic dark'),
-'kairi': ('Kairi', 'Kairi', 14, 'Destiny Islands', 'street kid female'),
 # --- The Simpsons ------------------------------------------------------------
-'bart': ('Bart Simpson', 'Bart', 10, 'Springfield', 'street kid comic'),
-'lisa': ('Lisa Simpson', 'Lisa', 8, 'Springfield', 'street kid female'),
-'homer': ('Homer Simpson', 'Homer', 39, 'Springfield', 'street heavy comic'),
-'marge': ('Marge Simpson', 'Marge', 36, 'Springfield', 'street normal female'),
-'skinner': ('Principal Skinner', 'Seymour', 44, 'Springfield', 'street normal plain'),
 # --- The Warriors --------------------------------------------------------------
 'wr_abe': ('Abe', 'Abe', 22, 'New York, NY', 'street normal dark'),
 'wr_ace': ('Ace', 'Ace', 24, 'New York, NY', 'street normal street'),
@@ -407,4 +371,4 @@ R = {
 }
 
 # No bail voice at all (Marcus: Kairi stays silent).
-SILENT = {'kairi'}
+SILENT = set()	# (Kairi was the only one; removed 2026-11-10)

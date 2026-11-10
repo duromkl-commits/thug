@@ -1255,31 +1255,31 @@ static const char *s_demented_scripts =
 	"endif\n"
 	"endscript\n"
 	// THUG2-style flips and rolls (trickcomponent.cpp spawns it on a double tap in
-	// the air): the body goes round once, flair only, no score (Marcus);
-	// landing before it is round = bail
+	// the air): the body goes round once in 0.7 s, 1000 points each (Marcus). Landing
+	// too early is a bail (Land asks DesktopAirFlipBail); a rail, lip or wall ends it
 	"script desktop_air_flip k = 0 name = \"Front Flip\"\n"
-	"BailOn\n"
 	"if ( <k> = 0 )\n"
-	"RotateDisplay x Duration = 0.85 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 1 )\n"
-	"RotateDisplay x Duration = 0.85 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 2 )\n"
-	"RotateDisplay z Duration = 0.85 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 3 )\n"
-	"RotateDisplay z Duration = 0.85 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
 	"endif\n"
+	"SetTrickName <name>\n"
+	"SetTrickScore 1000\n"
+	"Display\n"
 	"begin\n"
 	"if NOT InAir\n"
 	"CancelRotateDisplay\n"
 	"return\n"
 	"endif\n"
-	"BailOn\n"
 	"wait 1 gameframe\n"
-	"repeat 50\n"
-	"BailOff\n"
+	"repeat 42\n"
 	"endscript\n"
 	// on = the theme's colour, off = grey (Marcus), on the modifier pages
 	"script desktop_tog_focus\n"
@@ -2244,34 +2244,6 @@ static const PersoGTA s_gta[] = {
 	{ "sonny", "Sonny Forelli", 0 },
 	{ "tommy", "Tommy Vercetti", 0 },
 	{ "umberto", "Umberto Robina", 0 },
-	{ "claude_b", "Claude B", 0 },
-	{ "catalina_b", "Catalina B", 1 },
-	{ "maria_b", "Maria B", 1 },
-	{ "asuka", "Asuka Kasen", 0 },
-	{ "army", "Army Soldier", 0 },
-	{ "b_man1", "Business Man 1", 0 },
-	{ "b_man2", "Business Man 2", 0 },
-	{ "b_man3", "Business Man 3", 0 },
-	{ "bomber", "8-Ball", 0 },
-	{ "cas_man", "Casual Man", 0 },
-	{ "cas_wom", "Casual Woman", 1 },
-	{ "chunky", "Chunky", 0 },
-	{ "col1", "Colombian 1", 0 },
-	{ "col2", "Colombian 2", 0 },
-	{ "colrob", "Colombian Robber", 0 },
-	{ "const1", "Construction Worker B", 0 },
-	{ "const2", "Construction Worker C", 0 },
-	{ "criminal01", "Criminal 1", 0 },
-	{ "criminal02", "Criminal 2", 0 },
-	{ "ct_man", "Chinatown Man 1", 0 },
-	{ "ct_man2", "Chinatown Man 2", 0 },
-	{ "ct_wom1", "Chinatown Woman 1", 0 },
-	{ "ct_wom2", "Chinatown Woman 2", 0 },
-	{ "iii_cop", "Cop", 0 },
-	{ "iii_fbi", "FBI Agent", 0 },
-	{ "iii_hobo", "Hobo", 0 },
-	{ "iii_mafia", "Mafia Goon", 0 },
-	{ "iii_medic", "Medic", 0 },
 	{ "gordon", "Gordon Freeman", 0 },
 	{ "gman", "G-Man", 0 },
 	{ "einstein", "Einstein", 0 },
@@ -2284,14 +2256,6 @@ static const PersoGTA s_gta[] = {
 	{ "cs_walter", "Walter B", 0 },
 	{ "cs_nerd", "Cleansuit Scientist", 0 },
 	{ "tmcm", "TMCM", 0 },
-	{ "sora", "Sora", 0, 0, 0.85f },
-	{ "riku", "Riku", 0 },
-	{ "kairi", "Kairi", 1, 0, 0.85f },
-	{ "bart", "Bart Simpson", 0, 0, 0.49f },
-	{ "lisa", "Lisa Simpson", 1, 0, 0.47f },
-	{ "homer", "Homer Simpson", 0, 0, 0.78f },
-	{ "marge", "Marge Simpson", 1, 0, 0.71f },
-	{ "skinner", "Principal Skinner", 0, 0, 0.85f },
 	{ "wr_abe", "Abe", 0 },
 	{ "wr_ace", "Ace", 0 },
 	{ "wr_aj", "AJ", 0 },
@@ -2937,6 +2901,8 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	}
 	patch_histoire( qb, j, m );
 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
+	// flips/rolls landed before they come round bail (trickcomponent.cpp)
+	patch_debut( qb, j, m, "Land", "if DesktopAirFlipBail\nGoto DoingTrickBail\nendif\n" );
 	patch_debut( qb, j, m, "create_career_options_menu", "DesktopZeroArm off\n" );
 	patch_debut( qb, j, m, "cancel_new_career", "DesktopZeroArm off\n" );
 	// Difficulty menu: Twisted (THUG Zero) and Demented after Sick.
