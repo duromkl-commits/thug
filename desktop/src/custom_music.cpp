@@ -1254,6 +1254,35 @@ static const char *s_demented_scripts =
 	"change disable_menu_sounds = 0\n"
 	"endif\n"
 	"endscript\n"
+	// THUG2-style flips and rolls (trickcomponent.cpp spawns it on a double tap in
+	// the air): the body goes round once, scored; landing before it is round = bail
+	"script desktop_air_flip k = 0 name = \"Front Flip\"\n"
+	"BailOn\n"
+	"if ( <k> = 0 )\n"
+	"RotateDisplay x Duration = 0.85 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"endif\n"
+	"if ( <k> = 1 )\n"
+	"RotateDisplay x Duration = 0.85 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"endif\n"
+	"if ( <k> = 2 )\n"
+	"RotateDisplay z Duration = 0.85 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"endif\n"
+	"if ( <k> = 3 )\n"
+	"RotateDisplay z Duration = 0.85 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"endif\n"
+	"SetTrickName <name>\n"
+	"SetTrickScore 500\n"
+	"Display\n"
+	"begin\n"
+	"if NOT InAir\n"
+	"CancelRotateDisplay\n"
+	"return\n"
+	"endif\n"
+	"BailOn\n"
+	"wait 1 gameframe\n"
+	"repeat 50\n"
+	"BailOff\n"
+	"endscript\n"
 	// on = the theme's colour, off = grey (Marcus), on the modifier pages
 	"script desktop_tog_focus\n"
 	"GetTags\n"
@@ -1690,14 +1719,14 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 			m.push_back( Modif{ j[b].pos, 0, w1.o } );
 			if( f ) { Ecrit w4; compile_q( w4, "endif\n" ); m.push_back( Modif{ j[f].pos, 0, w4.o } ); }
 		}
-		const uint32_t caches[] = { crc( "menu_cas" ), crc( "menu_retry_goal" ), crc( "menu_end_current_goal" ), crc( "menu_chapters" ) };
+		const uint32_t caches[] = { crc( "menu_cas" ), crc( "menu_retry_goal" ), crc( "menu_end_current_goal" ), crc( "menu_chapters" ), crc( "menu_skip_to_gap" ) };	// + View Gaps (Marcus)
 		const uint32_t props = crc( "SetScreenElementProps" );
 		int nb = 0;
 		for( size_t e = k + 2; e + 2 < fin_; ++e )
 		{
 			if( !( est_nom( qb, j[e], id ) && qb[j[e + 1].pos] == T_EGAL )) continue;
 			bool ok = false;
-			for( int c = 0; c < 4; ++c ) ok |= est_nom( qb, j[e + 2], caches[c] );
+			for( int c = 0; c < (int)( sizeof( caches ) / sizeof( caches[0] )); ++c ) ok |= est_nom( qb, j[e + 2], caches[c] );
 			if( !ok ) continue;
 			size_t d = e;
 			while( d > k && !est_nom( qb, j[d], item ) && qb[j[d].pos] != T_EOL && qb[j[d].pos] != T_EOLNUM ) --d;	// this line's item

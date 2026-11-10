@@ -144,6 +144,10 @@ CTrickComponent::CTrickComponent() : CBaseComponent()
 	mp_skater_flip_and_rotate_component=NULL;
 	mp_skater_state_component=NULL;
     mp_stats_manager_component=NULL;
+#ifdef THUG_DESKTOP
+	m_flip_dir_avant = m_flip_derniere = 0;
+	m_flip_t = m_flip_fin = 0;
+#endif
 				 
 	Clear();
 }
@@ -3021,6 +3025,54 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
 	}	
 }
 
+#ifdef THUG_DESKTOP
+// THUG2 / American Wasteland flips and rolls (Marcus): in the air, a quick
+// double tap of one direction flips the skater that way, Up = front flip,
+// Down = back flip, Left / Right = a roll. desktop_air_flip (custom_music.cpp)
+// turns the body and scores it; landing before it comes round is a bail.
+void CTrickComponent::DesktopAirFlips()
+{
+	static const Tmr::Time DOUBLE_TAP = 250, DUREE = 850;
+	uint32 input_mask = mp_input_component->GetInputMask();
+	uint32 d = CSkaterPad::sGetDirection(
+		input_mask & Inp::Data::mA_UP,
+		input_mask & Inp::Data::mA_DOWN,
+		input_mask & Inp::Data::mA_LEFT,
+		input_mask & Inp::Data::mA_RIGHT
+	);
+	if ( d != PAD_U && d != PAD_D && d != PAD_L && d != PAD_R ) d = 0;	// diagonals don't count
+	const Tmr::Time now = Tmr::GetTime();
+	const bool en_l_air = mp_skater_state_component->GetState() == AIR
+		&& !mp_skater_state_component->GetFlag( IS_BAILING )
+		&& !mp_skater_state_component->GetDriving()
+		&& !mp_skater_state_component->GetPhysicsState();	// skating, not on foot
+	if ( !en_l_air )
+	{
+		m_flip_derniere = 0;
+	}
+	else if ( d && d != m_flip_dir_avant )
+	{
+		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin )
+		{
+			static const char *s_noms[4] = { "Front Flip", "Back Flip", "Left Roll", "Right Roll" };
+			const int k = d == PAD_U ? 0 : d == PAD_D ? 1 : d == PAD_L ? 2 : 3;
+			Script::CStruct p;
+			p.AddInteger( Script::GenerateCRC( "k" ), k );
+			p.AddString( CRCD(0xa1dc81f9, "name"), s_noms[k] );
+			GetObject()->SpawnScriptPlease( Script::GenerateCRC( "desktop_air_flip" ), &p );
+			m_flip_fin = now + DUREE;
+			m_flip_derniere = 0;
+		}
+		else
+		{
+			m_flip_derniere = d;
+			m_flip_t = now;
+		}
+	}
+	m_flip_dir_avant = d;
+}
+#endif
+
 void CTrickComponent::RecordButtons()
 {
 	uint32 input_mask = mp_input_component->GetInputMask();
@@ -3192,6 +3244,9 @@ void CTrickComponent::Update()
 	}
 	
 	RecordButtons();
+#ifdef THUG_DESKTOP
+	DesktopAirFlips();
+#endif
 	
 	mp_skater_balance_trick_component->ExcludeBalanceButtons(mNumButtonsToIgnore, mpButtonsToIgnore);
 	
