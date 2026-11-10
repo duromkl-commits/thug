@@ -207,6 +207,11 @@ def convert(data, out, name, obj_fn, flip=False, sub='gta'):
         N = N * [-1, 1, -1] if N is not None else None
     P = fit(V)
     bones, W = weights(P, F, tpos)
+    # fit() with THUG's own joints (fit() already put the mesh on them): pro
+    # weights, rigid head
+    import thug_fit
+    Wd = [{index[bones[k]]: W[i, k] for k in np.nonzero(W[i])[0]} for i in range(len(P))]
+    P, Wd = thug_fit.fit(P, Wd, dict(tpos), index, tpos, thug_fit.pro_reference(data), log=print)
     if N is None:
         N = np.tile([0.0, 0.0, 1.0], (len(V), 1))
     PP = []; NN = []; UV = []; WW = []; BI = []
@@ -222,10 +227,9 @@ def convert(data, out, name, obj_fn, flip=False, sub='gta'):
                 n = N[ni] if ni >= 0 else N[vi]
                 NN.append(n / max(1e-6, np.linalg.norm(n)))
                 UV.append((T[ti][0], 1.0 - T[ti][1]) if ti >= 0 else (0.0, 0.0))
-                ks = np.argsort(-W[vi])[:3]
-                w = W[vi, ks]
-                WW.append(pack_weights(list(w / w.sum())))
-                BI.append([index[bones[k]] if W[vi, k] > 0 else 0 for k in ks] + [0])
+                t3 = thug_fit.top3(Wd[vi])
+                WW.append(pack_weights([x for _, x in t3]))
+                BI.append([b for b, _ in t3] + [0])
             ids.append(remap[key])
         tris.setdefault(tri[3], []).append(tuple(ids))	# OBJ winds CCW like THUG
     PP = np.array(PP); NN = np.array(NN); UV = np.array(UV)

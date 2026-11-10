@@ -362,12 +362,8 @@ def convert(data, out, name, xps_fn, tex_dir=None):
             if tot <= 0:
                 q = p; nq = np.array(nrm); per = {index['Bone_Pelvis']: 1.0}; tot = 1.0
             q /= tot; nq /= max(1e-6, np.linalg.norm(nq))
-            top = sorted(per.items(), key=lambda kv: -kv[1])[:3]
-            s = sum(w for _, w in top)
-            top = [(b, w / s) for b, w in top] + [(0, 0.0)] * (3 - len(top))
             P.append(q); N.append(nq); UV.append(uv)
-            W.append(pack_weights([w for _, w in top]))
-            BI.append([b for b, _ in top] + [0])
+            W.append({b: w / tot for b, w in per.items()})
         tname = os.path.basename(tex[0]) if tex else None
         tc = crc('gta/%s/%s' % (name, tname or 'none'))
         if tname and tc not in textures:
@@ -378,6 +374,12 @@ def convert(data, out, name, xps_fn, tex_dir=None):
     if len(P) > 65535:
         raise ValueError('%s: %d vertices, over THUG\'s 16-bit limit' % (xps_fn, len(P)))
     P = np.array(P); N = np.array(N); UV = np.array(UV)
+    import thug_fit
+    P, W = thug_fit.fit(P, W, thug_fit.joints(bones, posed), index, tpos,
+                        thug_fit.pro_reference(data), log=print)
+    for i, w in enumerate(W):
+        t3 = thug_fit.top3(w)
+        W[i] = pack_weights([x for _, x in t3]); BI.append([b for b, _ in t3] + [0])
     d = os.path.join(out, 'models', 'gta', name)
     os.makedirs(d, exist_ok=True)
     write_skin(os.path.join(d, name + '.skin.xbx'), crc('gta_' + name), P, N, UV, W, BI, out_meshes)

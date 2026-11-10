@@ -21,6 +21,7 @@ import numpy as np
 from PIL import Image
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import thug_fit  # noqa: E402
 from xps_to_thug import (crc, read_skeleton, repose, pack_weights, write_skin,  # noqa: E402
                          write_tex, BONE_MAP)
 
@@ -221,7 +222,7 @@ def convert(data, out, name, dae_fn, sub='gta'):
     return r + (mirrored,)
 
 
-def build(data, out, name, B, pos, norms, uvs, tris, VW, tex_dir, sub='gta'):
+def build(data, out, name, B, pos, norms, uvs, tris, VW, tex_dir, sub='gta', guess=False):
     """Scale to a pro's height, repose to THUG's T-pose and write the files."""
     index, tpos = read_skeleton(os.path.join(data, 'skeletons', 'thps5_human.ske.xbx'))
     scale = 72.6 / pos[:, 1].max()
@@ -246,14 +247,10 @@ def build(data, out, name, B, pos, norms, uvs, tris, VW, tex_dir, sub='gta'):
                 if tot <= 0:
                     qv = p; nq = nr; per = {index['Bone_Pelvis']: 1.0}; tot = 1.0
                 qv /= tot; nq /= max(1e-6, np.linalg.norm(nq))
-                top3 = sorted(per.items(), key=lambda kv: -kv[1])[:3]
-                s = sum(w for _, w in top3)
-                top3 = [(b, w / s) for b, w in top3] + [(0, 0.0)] * (3 - len(top3))
                 remap[key] = len(P)
                 P.append(qv); N.append(nq)
                 UV.append((uvs[ti][0], 1.0 - uvs[ti][1]) if ti >= 0 else (0.0, 0.0))
-                W.append(pack_weights([w for _, w in top3]))
-                BI.append([b for b, _ in top3] + [0])
+                W.append({b: w / tot for b, w in per.items()})
             ids.append(remap[key])
         meshes.setdefault(tex, []).append(tuple(ids))	# Collada winds CCW like THUG
     if len(P) > 65535:
@@ -269,6 +266,12 @@ def build(data, out, name, B, pos, norms, uvs, tris, VW, tex_dir, sub='gta'):
             textures[tc] = Image.open(os.path.join(tex_dir, tname))
         out_meshes.append((crc('%s_%s_mat%d' % (sub, name, mi)), tc, tl))
     P = np.array(P); N = np.array(N); UV = np.array(UV)
+    P, W = thug_fit.fit(P, W, thug_fit.joints(B, posed), index, tpos,
+                        thug_fit.pro_reference(data), log=print, guess=guess)
+    BI = []
+    for i, w in enumerate(W):
+        t3 = thug_fit.top3(w)
+        W[i] = pack_weights([x for _, x in t3]); BI.append([b for b, _ in t3] + [0])
     convert.last = (P, UV, out_meshes, textures)	# for previews
     d = os.path.join(out, 'models', sub, name)
     os.makedirs(d, exist_ok=True)

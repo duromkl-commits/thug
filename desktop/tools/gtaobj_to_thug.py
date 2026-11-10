@@ -423,7 +423,7 @@ def convert(data, out, name, obj_fn, refs, sub='gta', force_ref=None):
             VW[i] = [(b, w / t) for b, w in keep] if t > 0 else [(names.index('root hips'), 1.0)]
     untear(data, B, Q, tris, VW)
     norms = N @ M.T if N is not None else None
-    r = dae.build(data, out, name, B, Q, norms, T, tris, VW, os.path.dirname(obj_fn), sub)
+    r = dae.build(data, out, name, B, Q, norms, T, tris, VW, os.path.dirname(obj_fn), sub, guess=True)
     return r + (os.path.basename(ref['fn']), scores[:3])
 
 
