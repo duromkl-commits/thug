@@ -714,6 +714,7 @@ static const char *s_ev_noms[NB_EV] = { "MOON GRAVITY", "HEAVY GRAVITY", "THE WO
 static const int s_ev_poids[NB_EV] = { 0, 10, 6, 7, 6, 6, 5, 0, 5, 5, 5, 4, 4, 0, 0, 6, 4, 7, 7, 6, 5, 3, 6, 5, 5, 5, 5, 5, 6, 4, 5 };
 static float s_ev_reste[NB_EV];		// seconds left, 0 = off
 static float s_ev_duree[NB_EV];		// how long it was rolled for (Earthquake's ease in/out)
+static Tmr::Time s_lag_debut = 0;	// LAG!!! runs on the wall clock (game time crawls while it lags)
 // Tiny/Giant: the skater's scale while it lasts
 static float s_taille = 1.0f;
 // Bounty: kind (0 combo, 1 grind metres, 2 points), target, progress
@@ -1079,6 +1080,7 @@ static void ev_lancer( Game::CGoalManager *gm )
 			if( e == EV_TAILLE ) { s_taille = hasard( 2 ) ? 2.0f : 0.4f; ev_taille_appliquer( s_taille ); }
 			if( e == EV_PRIME ) { prime_lancer(); s_ev_reste[e] = s_ev_duree[e] = prime_duree(); }
 			if( e == EV_RUSH ) { rush_lancer(); s_ev_reste[e] = s_ev_duree[e] = 15.0f; }
+			if( e == EV_LAG ) { s_ev_reste[e] = s_ev_duree[e] = 1.5f + (float)hasard( 16 ) / 10.0f; s_lag_debut = Tmr::GetTime(); }	// Marcus: 3 s at most
 			if( e == EV_REVERSE ) s_inverse = true;
 			if( e == EV_SONS ) s_son_graine = hasard( 0x7fffffff ) | 1;
 			if( e == EV_BOUTONS ) ++s_txt_gen;
@@ -1090,7 +1092,7 @@ static void ev_lancer( Game::CGoalManager *gm )
 			if( ev_drapeau( e )) ev_corps();
 			break;
 	}
-	VLOG( "DSK", "demented chaos: %s (%.0f s)", t, duree );	// no on-screen label: you work it out (Marcus)
+	VLOG( "DSK", "demented chaos: %s (%.1f s)", t, e < NB_EV && s_ev_duree[e] > 0.0f ? s_ev_duree[e] : duree );	// no on-screen label: you work it out (Marcus)
 }
 
 static void chaos_maj( float dt, bool pause, bool film )
@@ -1196,7 +1198,8 @@ static void chaos_maj( float dt, bool pause, bool film )
 	for( int e = 0; e < NB_EV; ++e )
 		if( s_ev_reste[e] > 0.0f )
 		{
-			s_ev_reste[e] -= dt;
+			if( e == EV_LAG ) s_ev_reste[e] = s_ev_duree[e] - (float)Tmr::ElapsedTime( s_lag_debut ) / 1000.0f;
+			else s_ev_reste[e] -= dt;
 			if( s_ev_reste[e] <= 0.0f ) { s_ev_reste[e] = 0.01f; ev_fin( e ); }
 		}
 	if( s_menu ) return;
@@ -2027,15 +2030,9 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 {
 	fin_run();
 	// the run's code: picked, today's Daily Run, or a random one (shown in View Stats)
-	s_run.daily = s_daily_arme;
+	s_run.daily = false;	// Daily Run removed (Marcus)
 	s_daily_arme = false;
-	if( s_run.daily )
-	{
-		const time_t now = time( NULL );
-		const struct tm *lt = localtime( &now );
-		snprintf( s_run.code, sizeof( s_run.code ), "DAILY-%04d%02d%02d", lt ? lt->tm_year + 1900 : 2026, lt ? lt->tm_mon + 1 : 1, lt ? lt->tm_mday : 1 );
-	}
-	else if( s_code_choisi[0] ) snprintf( s_run.code, sizeof( s_run.code ), "%s", s_code_choisi );
+	if( s_code_choisi[0] ) snprintf( s_run.code, sizeof( s_run.code ), "%s", s_code_choisi );
 	else
 	{
 		static const char abc[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -2049,15 +2046,12 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	Flux f( &s_x_run );
 	s_run.actif = true;
 	for( int i = 0; i < NB_MODS; ++i ) s_run.mods[i] = s_arme[i];
-	if( s_run.daily ) s_run.mods[MOD_SURPRISE] = true;	// the day's modifiers come from its code
 	s_run.mods[MOD_LIVES] = true;	// not a modifier (Marcus): every run has lives
-	if( s_run.mods[MOD_SURPRISE] )
-	{
-		// Surprise: every other modifier rolled, odds by how much it hurts
-		static const int chance[NB_MODS] = { 12, 30, 100, 40, 35, 25, 30, 30, 0, 50, 40, 40, 35, 25, 0, 0, 0 };	// Random Models (experimental) never
-		for( int i = 0; i < NB_MODS; ++i )
-			if( i != MOD_LIVES && i != MOD_SURPRISE ) s_run.mods[i] = (int)hasard( 100 ) < chance[i];
-	}
+	// Marcus 2026-11-10: every randomizer is part of Demented (no menu for them),
+	// Countdown too; SURPRISE ME! removed
+	s_run.mods[MOD_TIME] = true;
+	s_run.mods[MOD_R_MONDE] = s_run.mods[MOD_R_SONS] = s_run.mods[MOD_R_MOTS] = true;
+	s_run.mods[MOD_SURPRISE] = false;
 	lier_mods( s_run.mods, -1 );
 	s_run.pro_n = 0; s_run.pro_retry = 0.0f;
 	s_reve_t = 0.0f; s_flip_t = 0.0f; s_flip_suivant = 60.0f + hasard( 90 ); s_flip = false;
@@ -2089,7 +2083,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	{
 		if( s_run.mods[MOD_ZERO] ) car->SetGlobalFlag( 511 ); else car->UnSetGlobalFlag( 511 );
 	}
-	VLOG( "DSK", "demented: run code %s%s", s_run.code, s_run.daily ? " (daily)" : "" );
+	VLOG( "DSK", "demented: run code %s", s_run.code );
 	VLOG( "DSK", "demented: new run, perma %d zero %d time %d fragile %d obscure %d mirror %d chaos %d surprise %d",
 		s_run.mods[MOD_PERMA], s_run.mods[MOD_ZERO], s_run.mods[MOD_TIME], s_run.mods[MOD_FRAGILE],
 		s_run.mods[MOD_OBSCURE], s_run.mods[MOD_MIRROR], s_run.mods[MOD_CHAOS], s_run.mods[MOD_SURPRISE] );
@@ -2280,7 +2274,7 @@ bool ScriptDesktopDementedStatRows( Script::CStruct *pParams, Script::CScript *p
 	snprintf( g, sizeof( g ), " SKATER:" );
 	L::ligne( g, s_run.nom );
 	L::ligne( " DIFFICULTY:", "SICK" );
-	L::ligne( s_run.daily ? " DAILY RUN:" : " SEED:", s_run.code );
+	L::ligne( " SEED:", s_run.code );
 	L::ligne( NULL, NULL );
 	for( int i = 0; i < 10; ++i )
 	{
@@ -2299,13 +2293,12 @@ bool ScriptDesktopDementedStatRows( Script::CStruct *pParams, Script::CScript *p
 	L::ligne( NULL, NULL );
 	int n = 0;
 	for( int i = 0; i < NB_MODS; ++i )
-		if( s_run.mods[i] && i != MOD_LIVES && i != MOD_SURPRISE && !mod_cache( i ))
+		if( s_run.mods[i] && i != MOD_LIVES && i != MOD_SURPRISE && i != MOD_TIME && i < MOD_R_MONDE && !mod_cache( i ))
 		{
 			L::ligne( n ? " " : " MODIFIERS:", s_mod_noms[i] );
 			++n;
 		}
 	if( !n ) L::ligne( " MODIFIERS:", "NONE" );
-	if( s_run.mods[MOD_SURPRISE] ) L::ligne( " ROLLED BY:", "SURPRISE ME!" );
 	return true;
 }
 
