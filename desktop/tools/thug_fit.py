@@ -152,6 +152,16 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
                 s += groups[g]
         return s / tot
 
+    # leg joints centred in the mesh's own legs (a rig whose hips are wider
+    # or narrower than its trousers left legs splayed or knock-kneed)
+    for s_ in SIDES:
+        own = share(*[g % s_ for g in LEG_ALL]) > 0.5
+        for b in LEG:
+            j = J[b % s_]
+            near = P[own & (np.abs(P[:, 1] - (j[1] - (3 if b == LEG[0] else 0))) < 1.0)]
+            if len(near) >= 6:
+                J[b % s_] = np.array([near[:, 0].mean(), j[1], near[:, 2].mean() if b != LEG[0] else j[2]])
+
     out = np.zeros_like(P)
     done = np.zeros(n)
     # torso (and anything without a better place): height mapped piecewise
@@ -176,6 +186,7 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
         return sh_ * (1 - f1), sh_ * (f1 - f2), sh_ * f2
 
     segs = []
+    feet = []
     for s, sg in (('L', 1), ('R', -1)):
         a = [J[x % s] for x in ARM]; A = [t[x % s] for x in ARM]
         armsh = share(*[g % s for g in ARM_ALL])
@@ -189,6 +200,7 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
         segs.append((th, l[0], l[1], Lt[0], Lt[1]))
         segs.append((shin, l[1], l[2], Lt[1], Lt[2]))
         segs.append((foot, None, l[2], None, Lt[2]))
+        feet.append((s, foot, Lt[2]))
     limb = np.zeros(n)
     for sh_, a, b, A, B in segs:
         if not sh_.any():
@@ -204,6 +216,34 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
     norm = limb + hd + rest
     out /= norm[:, None]
     Q = out
+
+    # feet: soles levelled (some came out toes-up) and as long as a pro's
+    # (some were tiny on the board), turned and scaled about THUG's ankle
+    if ref is not None:
+        RP, RW = ref
+        for s, fs, ank in feet:
+            fb = {index[b % s] for b in ('Bone_Ankle_%s', 'Bone_Toe_%s') if b % s in index}
+            pf = RP[[i for i, w in enumerate(RW) if w and max(w, key=w.get) in fb]]
+            m = fs > 0.5
+            if m.sum() < 8 or len(pf) < 8:
+                continue
+            F = Q[m]
+            sole = F[F[:, 1] < F[:, 1].min() + 1.0]
+            ang = 0.0
+            if len(sole) >= 4 and np.ptp(sole[:, 2]) > 1.0:
+                a = np.polyfit(sole[:, 2], sole[:, 1], 1)[0]
+                ang = float(np.arctan(a))
+                if abs(ang) > np.radians(40):
+                    ang = 0.0
+            c, s_ = np.cos(ang), np.sin(ang)
+            R = np.array([[1, 0, 0], [0, c, -s_], [0, s_, c]])	# about x: y/z plane
+            V = (Q - ank) @ R.T
+            ln = np.ptp(np.percentile(V[m][:, 2], [2, 98])); pl = np.ptp(np.percentile(pf[:, 2], [2, 98]))
+            k = float(np.clip(pl / ln, 0.8, 1.6)) if ln > 1e-3 else 1.0
+            V[:, 0] *= k; V[:, 2] *= k
+            Q = Q + fs[:, None] * ((V + ank) - Q)
+            if log:
+                log('fit: foot %s levelled %.0f deg, length %.1f -> %.1f in' % (s, np.degrees(ang), ln, ln * k))
 
     # weights from the pros
     newW = [dict(w) for w in W]
@@ -227,6 +267,21 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
                 for b, y in W[i].items():
                     m[b] = m.get(b, 0.0) + a * y
                 newW[i] = m
+
+    # a leg's vertices never follow the other leg (trouser hems stuck to
+    # the opposite ankle when the legs part)
+    legb = {x: {index[b % x] for b in LEG_ALL if b % x in index} for x in SIDES}
+    hy = t['Bone_Thigh_L'][1]
+    for i in range(n):
+        if Q[i, 1] >= hy or abs(Q[i, 0]) < 0.5:
+            continue
+        other = legb['R' if Q[i, 0] > 0 else 'L']
+        w = newW[i]
+        if any(b in other for b in w):
+            k = {b: y for b, y in w.items() if b not in other}
+            sm = sum(k.values())
+            if sm > 0:
+                newW[i] = {b: y / sm for b, y in k.items()}
 
     # head and everything worn on it: rigid with the head
     ih = index['Bone_Head']
