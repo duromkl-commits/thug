@@ -331,6 +331,30 @@ def write_tex(fn, textures):
 
 # --- main ----------------------------------------------------------------------
 
+TWO_SIDED_HEAD = {'avery'}
+
+
+def two_sided_above(P, N, UV, W, BI, meshes, y0):
+    """Adds back faces (own vertices, normals turned round) for every
+    triangle wholly above height y0: THUG culls back faces, so the underside
+    of a single-sided hat brim showed the sky through it."""
+    P = list(P); N = list(N); UV = list(UV); W = list(W); BI = list(BI)
+    copie = {}
+    out = []
+    for mc, tc, tris in meshes:
+        extra = []
+        for t in tris:
+            if all(P[i][1] > y0 for i in t):
+                for i in t:
+                    if i not in copie:
+                        copie[i] = len(P)
+                        P.append(P[i]); N.append(-np.asarray(N[i])); UV.append(UV[i]); W.append(W[i]); BI.append(BI[i])
+                a, b, c = (copie[i] for i in t)
+                extra.append((a, c, b))
+        out.append((mc, tc, tris + extra))
+    return np.array(P), np.array(N), np.array(UV), W, BI, out
+
+
 def convert(data, out, name, xps_fn, tex_dir=None):
     index, tpos = read_skeleton(os.path.join(data, 'skeletons', 'thps5_human.ske.xbx'))
     bones, meshes = read_xps(xps_fn)
@@ -380,6 +404,8 @@ def convert(data, out, name, xps_fn, tex_dir=None):
     for i, w in enumerate(W):
         t3 = thug_fit.top3(w)
         W[i] = pack_weights([x for _, x in t3]); BI.append([b for b, _ in t3] + [0])
+    if name in TWO_SIDED_HEAD:	# hat brims seen from below were see-through
+        P, N, UV, W, BI, out_meshes = two_sided_above(P, N, UV, W, BI, out_meshes, tpos['Bone_Neck'][1] + 3)
     d = os.path.join(out, 'models', 'gta', name)
     os.makedirs(d, exist_ok=True)
     write_skin(os.path.join(d, name + '.skin.xbx'), crc('gta_' + name), P, N, UV, W, BI, out_meshes)

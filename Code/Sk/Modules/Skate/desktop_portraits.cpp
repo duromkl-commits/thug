@@ -345,13 +345,15 @@ void recadrer( const float *dep )
 	const float demi = DIST * tanf( VFOV_LARGE * 0.5f * 3.14159265f / 180.0f );
 	const float dy = ( 1.0f - 2.0f * ( haut + 0.5f ) / CH ) * demi;
 	s.cible[1] += dy - SOUS_CRANE;
-	// A tall hat (the chef's) is not the top of the head: never aim more
-	// than a few inches over the head bone.
-	if( s.os_tete > -1e8f && s.cible[1] > s.os_tete + 5.0f )
+	// A hat or big hair is not the top of the head (the chef, Smiley
+	// Fawler's and Dan's hats, Gene's hair took half the frame): a bare
+	// head comes out about 1.6 in over the head bone (a pro: head bone 64,
+	// top 72.6, aim 7 below), so anything over 3 is aimed there instead.
+	if( s.os_tete > -1e8f && s.cible[1] > s.os_tete + 3.0f )
 	{
 		VLOG( "DSK", "portraits: %08x, hat or hair %.0f in over the head, aimed at the head bone",
 		      (unsigned)s.liste[s.i], s.cible[1] - s.os_tete );
-		s.cible[1] = s.os_tete + 3.0f;
+		s.cible[1] = s.os_tete + 1.6f;
 	}
 	poser_camera( VFOV );
 }

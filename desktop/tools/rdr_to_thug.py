@@ -20,6 +20,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from xps_to_thug import crc, read_skeleton, align, pack_weights, write_skin, write_tex  # noqa: E402
+import thug_fit  # noqa: E402
 import rdr_formats as RF  # noqa: E402
 
 FLIP = np.array([-1.0, 1.0, -1.0])	# Red Dead faces -Z; turned round, its _l side lands on THUG's _L (+x)
@@ -108,7 +109,7 @@ def convert(data, out, dat, code, name, hat=True, sub='rdr'):
             m = thug_bone(names[k], J[k][0]) if k >= 0 else [('Bone_Pelvis', 1)]
         maps[i] = [(index[b], s) for b, s in m]
 
-    P = []; N = []; W = []; BI = []
+    P = []; N = []; WD = []
     for lst, nrm in zip(VB, NR):
         q = np.zeros(3); nq = np.zeros(3); per = {}
         for b, w, loc in lst:
@@ -116,13 +117,24 @@ def convert(data, out, dat, code, name, hat=True, sub='rdr'):
             nq += w * ((nrm * FLIP) @ R[b])
             for t, s in maps[b]:
                 per[t] = per.get(t, 0.0) + w * s
-        top3 = sorted(per.items(), key=lambda kv: -kv[1])[:3]
-        s = sum(x for _, x in top3)
-        top3 = [(t, x / s) for t, x in top3] + [(0, 0.0)] * (3 - len(top3))
-        P.append(q); N.append(nq / max(1e-6, np.linalg.norm(nq)))
-        W.append(pack_weights([x for _, x in top3])); BI.append([t for t, _ in top3] + [0])
+        P.append(q); N.append(nq / max(1e-6, np.linalg.norm(nq))); WD.append(per)
     P = np.array(P); N = np.array(N)
-    P[:, 1] -= P[:, 1].min()	# soles on the ground
+    lift = P[:, 1].min(); P[:, 1] -= lift	# soles on the ground
+    # same limb fit as the GTA rips: legs under the hips, feet levelled and
+    # pro-sized, the pros' weights, no trouser hem on the other ankle
+    J = {}
+    for i, nm in enumerate(names):
+        m = thug_bone(nm, J0[i][0])
+        if m and len(m) == 1 and m[0][0] not in J and not nm.startswith(('larm', 't0', 'tail', 'finger', 'thumb')):
+            J[m[0][0]] = posed[i] - [0, lift, 0]
+    if all(b % s_ in J for s_ in 'LR' for b in thug_fit.ARM + thug_fit.LEG) and 'Bone_Neck' in J:
+        P, WD = thug_fit.fit(P, WD, J, index, tpos, thug_fit.pro_reference(data), log=print)
+    else:
+        print('fit: skipped, missing joints')
+    W = []; BI = []
+    for w in WD:
+        t3 = thug_fit.top3(w)
+        W.append(pack_weights([x for _, x in t3])); BI.append([t for t, _ in t3] + [0])
 
     meshes = []; textures = {}
     for tn in dict.fromkeys(TEX):
