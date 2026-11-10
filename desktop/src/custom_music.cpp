@@ -1567,12 +1567,15 @@ static const char *s_demented_scripts =
 	"wait 1 gameframe\n"
 	"repeat\n"
 	"endscript\n"
+	// after the beating the ped just stands there: restarting its walk
+	// (ped_initialize_movement / Ped_StartMoving away from its path) is where
+	// both Ped Rush crashes happened
 	"script desktop_ped_rush_end\n"
-	"GetTags\n"
-	"if NOT GotParam stand\n"
-	"ped_initialize_movement\n"
-	"endif\n"
-	"Ped_StartMoving\n"
+	"Ped_StopMoving\n"
+	"Obj_PlayAnim Anim = Ped_M_Idle1 Cycle\n"
+	"begin\n"
+	"wait 1 gameframe\n"
+	"repeat\n"
 	"endscript\n"
 	"script desktop_ped_rush_slap\n"
 	"PlaySound BailSlap03\n"

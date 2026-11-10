@@ -954,7 +954,9 @@ static void rush_fin( void )
 	if( s_rush_n )
 	{
 		Obj::CCompositeObject *p = (Obj::CCompositeObject *)Obj::CCompositeObjectManager::Instance()->GetObjectByID( s_rush_id );
+		VLOG( "DSK", "demented chaos: ped rush over" );
 		if( p ) p->SwitchScript( crc( "desktop_ped_rush_end" ), NULL );
+		VLOG( "DSK", "demented chaos: ped rush ped back to standing" );
 	}
 	s_rush_n = 0; s_rush_touche = false;
 }
