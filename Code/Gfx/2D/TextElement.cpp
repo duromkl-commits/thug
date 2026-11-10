@@ -36,6 +36,7 @@ CTextElement::CTextElement() :
 	mp_desktop_orig = NULL;
 	m_desktop_orig_taille = 0;
 	m_desktop_gen = 0;
+	m_desktop_jeu = -1;
 #endif
 	mp_blur_effect = NULL;
 	m_use_shadow = false;
@@ -178,6 +179,8 @@ void CTextElement::SetFont(uint32 font_checksum)
 
 #ifdef THUG_DESKTOP
 extern "C" int desktop_chaos_text( const char *in, char *out, int n );	// desktop_demented.cpp
+extern "C" int desktop_chaos_menu( void );	// desktop_demented.cpp: a menu is up
+extern "C" void desktop_chaos_jeu( int jeu );	// the next desktop_chaos_text is for text made in play
 extern "C" int desktop_chaos_gen( void );	// changes each time Chaos reshuffles on-screen text
 #endif
 
@@ -201,6 +204,10 @@ void CTextElement::SetText(const char *pText)
 	}
 	m_desktop_gen = desktop_chaos_gen();
 	static char s_chaos[vMAX_TEXT_LENGTH];
+	// text that was on screen before a menu opened (goal text, dialogue)
+	// stays scrambled under the pause menu (Marcus)
+	if( m_desktop_jeu < 0 ) m_desktop_jeu = desktop_chaos_menu() ? 0 : 1;
+	desktop_chaos_jeu( m_desktop_jeu );
 	if( desktop_chaos_text( pText, s_chaos, vMAX_TEXT_LENGTH - 1 ))
 		pText = s_chaos;
 #endif

@@ -1488,7 +1488,7 @@ static bool invite( const char *q )
 // talk"...) keep theirs.
 static bool est_icone( const char *q )
 {
-	return q[0] == '\\' && ( q[1] == 'b' || q[1] == 'B' || q[1] == 'm' || q[1] == 'M' ) && q[2];
+	return q[0] == '\\' && ( q[1] == 'b' || q[1] == 'B' || q[1] == 'm' || q[1] == 'M' || q[1] == 'k' || q[1] == 'K' ) && q[2];	// \k = a trick's key combo
 }
 static void sans_icones( const char *in, std::string &o )
 {
@@ -1530,8 +1530,16 @@ static void sans_icones( const char *in, std::string &o )
 // Chaos: people's names swapped for each other (the same swap all run), and
 // now and then a word with two letters traded. Same input, same output, so
 // text redrawn every frame doesn't flicker.
+static int s_txt_jeu = 0;
+extern "C" void desktop_chaos_jeu( int jeu ) { s_txt_jeu = jeu; }
+extern "C" int desktop_chaos_menu( void )
+{
+	return Mdl::FrontEnd::Instance()->GamePaused() || element( crc( "current_menu_anchor" ));
+}
 extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 {
+	const int jeu = s_txt_jeu;
+	s_txt_jeu = 0;
 	if( !in || n < 2 ) return 0;
 	// Demented's own notices stay readable (lives, time, the red banners)
 	static const char *s_propres[] = { "-1 LIFE", "+1 LIFE", "OUT OF TIME", "TIME EXTEND", "FRAGILE", "PERMA BAIL", "Missing trick", "EARTHQUAKE", "SWAPPED WITH", "LAG!!!", "\\c0\\c0" };
@@ -1541,7 +1549,7 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 	// only (a paused menu is built while the game is paused, and stays plain)
 	// a menu is checked now, not at the last update: its texts are made the
 	// frame it opens
-	const bool menu = Mdl::FrontEnd::Instance()->GamePaused() || element( crc( "current_menu_anchor" ));
+	const bool menu = !jeu && desktop_chaos_menu();	// text made in play stays scrambled under a menu
 	const bool mots = rando_on( MOD_R_MOTS ) && !menu;
 	// ... and every known name becomes one from the pool (the stock list +
 	// data\custom\names.txt), one seed per chapter, menus included
