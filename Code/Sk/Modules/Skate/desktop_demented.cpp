@@ -1589,9 +1589,12 @@ extern "C" int desktop_chaos_text( const char *in, char *out, int n )
 			for( int k = 0; k < 3 && *p && o < n - 1; ++k ) out[o++] = *p++;
 			continue;
 		}
-		if( obscur && ( *p == '[' || *p == ']' ))	// the brackets round the buttons go too
+		// brackets go too: ( ) are drawn as [ ] by the font, and with the
+		// buttons gone they only frame leftovers ("(Tap to get on or off the board)")
+		if(( obscur || ( chaos && s_ev_reste[EV_BOUTONS] > 0.0f )) && ( *p == '[' || *p == ']' || *p == '(' || *p == ')' ))
 		{
-			out[o++] = ' '; ++p; change = 1;
+			++p; change = 1;
+			if( o > 0 && out[o - 1] == ' ' && ( *p == ' ' || *p == 0 )) --o;	// no double space left behind
 			continue;
 		}
 		if( !(( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' )))
