@@ -7479,11 +7479,9 @@ void CSkaterCorePhysicsComponent::do_rail_physics (   )
 		if (m_desk_stall)
 		{
 			// stalled: barely creeping (keeps the direction the rail code works
-			// from), balance held level
+			// from); the balance meter runs as in any grind
 			const float sens = Mth::DotProduct(dir, GetVel()) < 0.0f ? -1.0f : 1.0f;
 			GetVel() = dir * (0.01f * sens);
-			mp_balance_trick_component->mGrind.mManualLean = 0.0f;
-			mp_balance_trick_component->mGrind.mManualLeanDir = 0.0f;
 		}
 #endif
 		
@@ -7780,7 +7778,12 @@ void CSkaterCorePhysicsComponent::do_rail_physics (   )
 	  
 	// Add mGrindTweak to the score.
 	// adjusted by the robot rail mult (1.0 to 0.1, depending on how much you've ground the rail)
+#ifdef THUG_DESKTOP
+	// a stall scores a quarter of a moving grind per frame
+	mp_score_component->GetScore()->TweakTrick((int)(mGrindTweak * mp_score_component->GetScore()->GetRobotRailMult() * (m_desk_stall ? 0.25f : 1.0f)));
+#else
 	mp_score_component->GetScore()->TweakTrick(mGrindTweak * mp_score_component->GetScore()->GetRobotRailMult());
+#endif
 
 	// if we've already started doing a trick, then start remembering our trick chain
 	{

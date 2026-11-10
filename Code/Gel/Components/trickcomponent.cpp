@@ -3035,6 +3035,8 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
 // flip that's basically round (then a revert) isn't a bail. Grinds, lips
 // and wallrides take it mid-flip and end it.
 static bool s_flip_en_cours = false;
+static bool s_air_trick = false;	// a flip or grab trick done on this jump
+extern "C" void desktop_air_trick_mark( void ) { s_air_trick = true; }
 static Tmr::Time s_flip_debut = 0;
 static const Tmr::Time FLIP_DUREE = 700, FLIP_GRACE = 560;	// round enough after 80%
 
@@ -3067,12 +3069,14 @@ void CTrickComponent::DesktopAirFlips()
 		m_flip_derniere = 0;
 		const EStateType e = mp_skater_state_component->GetState();
 		if ( e == RAIL || e == LIP || e == WALL || e == WALLPLANT ) s_flip_en_cours = false;	// grinded out of it
+		s_air_trick = false;	// a new jump needs its own flip or grab trick
 	}
 	else if ( d && d != m_flip_dir_avant )
 	{
 		const int k = d == PAD_U ? 0 : d == PAD_D ? 1 : d == PAD_L ? 2 : 3;
 		// THUG2: a roll needs a flip or grab trick going, not just an ollie
-		const bool permis = k < 2 || mp_skater_state_component->DoingTrick();
+		// (flips too): FlipTrick / GrabTrick mark it (desktop_air_trick_mark)
+		const bool permis = s_air_trick;
 		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin && permis )
 		{
 			static const char *s_noms[4] = { "Front Flip", "Back Flip", "Left Roll", "Right Roll" };
