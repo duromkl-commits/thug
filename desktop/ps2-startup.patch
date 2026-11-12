@@ -272,7 +272,7 @@ index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..0141dd64f3df6a1f475b838af6549c05
 @@ -685,0 +686 @@ SCFunction CFunctionLookupTable[]=
 +	{"DesktopFirstSaveCheck", CFuncs::ScriptDesktopFirstSaveCheck},
 diff --git a/desktop/src/custom_music.cpp b/desktop/src/custom_music.cpp
-index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..6c14bea0a338085bae95760e24e3ba76565680e9 100644
+index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..c4233c11d4ae1648d7e61d4dea793d6e4629d8e2 100644
 --- a/desktop/src/custom_music.cpp
 +++ b/desktop/src/custom_music.cpp
 @@ -1258 +1258 @@ static const char *s_demented_scripts =
@@ -280,16 +280,16 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..6c14bea0a338085bae95760e24e3ba76
 +	// the air): the body goes round once in 0.8 s, 1000 points each (Marcus). Landing
 @@ -1262 +1262 @@ static const char *s_demented_scripts =
 -	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
-+	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
 @@ -1265 +1265 @@ static const char *s_demented_scripts =
 -	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
-+	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
 @@ -1268 +1268 @@ static const char *s_demented_scripts =
 -	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
-+	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
 @@ -1271 +1271 @@ static const char *s_demented_scripts =
 -	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
-+	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
 @@ -2863,0 +2864,20 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 +	// Use the existing save selection with the desktop filesystem-backed card.
 +	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
@@ -331,3 +331,20 @@ index 7592e0aafeafb20a9fc89d4bdbcfff25894f9ba2..3e4052d0585739afcb0dd74fc11a8cf2
 @@ -3079 +3079 @@ void CTrickComponent::DesktopAirFlips()
 -		const bool permis = s_air_trick;
 +		const bool permis = s_air_trick && (input_mask & (Inp::Data::mA_SQUARE | Inp::Data::mA_CIRCLE));
+diff --git a/Code/Sk/Components/SkaterCorePhysicsComponent.cpp b/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
+index e88e692f8c4e88eda472d47c8e31a0ee9141cb33..e2b47430be4f7a7b685e47edd3242d8015d9c48a 100644
+--- a/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
++++ b/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
+@@ -7816,0 +7817,12 @@ void CSkaterCorePhysicsComponent::ollie_off_rail_rotate (   )
++#ifdef THUG_DESKTOP
++	// Give a directed stall exit enough horizontal motion to steer.
++	if (GetState() == RAIL && m_desk_stall)
++	{
++		Mth::Vector along(GetVel()[X], 0.0f, GetVel()[Z]);
++		if (along.LengthSqr() > 0.0f)
++		{
++			along.Normalize();
++			GetVel() += along * GetPhysicsFloat(CRCD(0x457bb395, "Rail_Speed_Boost"));
++		}
++	}
++#endif
