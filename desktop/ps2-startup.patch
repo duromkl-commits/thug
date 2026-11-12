@@ -226,13 +226,11 @@ index 5fe7411b43be0bbb2e186e4d997367359f30d344..5463bfea0a84b443a084ce93beccbda2
 +#endif
 +		Script::RunScript("startup_loading_screen");
 diff --git a/Code/Sk/Scripting/cfuncs.cpp b/Code/Sk/Scripting/cfuncs.cpp
-index 142185c22bcccdebd9546d08a5ac7f5a7be38642..e8a14aaeab21c026968ac71aa05c84439391a7bb 100644
+index 142185c22bcccdebd9546d08a5ac7f5a7be38642..5b9cbe903a7f14521f77a77b2dba440236bcc30f 100644
 --- a/Code/Sk/Scripting/cfuncs.cpp
 +++ b/Code/Sk/Scripting/cfuncs.cpp
-@@ -10592,0 +10593,21 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
+@@ -10592,0 +10593,12 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
 +#ifdef THUG_DESKTOP
-+extern "C" void desktop_start_story_ghosting(int milliseconds);
-+
 +bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *)
 +{
 +	static bool checked = false;
@@ -242,16 +240,9 @@ index 142185c22bcccdebd9546d08a5ac7f5a7be38642..e8a14aaeab21c026968ac71aa05c8443
 +	return true;
 +}
 +
-+bool ScriptDesktopStoryGhosting(Script::CStruct *params, Script::CScript *)
-+{
-+	int milliseconds = 2000;
-+	params->GetInteger(NONAME, &milliseconds);
-+	desktop_start_story_ghosting(milliseconds);
-+	return true;
-+}
 +#endif
 +
-@@ -10599 +10620,13 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
+@@ -10599 +10611,13 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
 -	Nx::CLoadScreen::sDisplay( (char*) pScreen, pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze")),pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank")));
 +	const bool freeze = pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze"));
 +	const bool blank = pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank"));
@@ -267,72 +258,39 @@ index 142185c22bcccdebd9546d08a5ac7f5a7be38642..e8a14aaeab21c026968ac71aa05c8443
 +#endif
 +	Nx::CLoadScreen::sDisplay(pScreen, freeze, blank);
 diff --git a/Code/Sk/Scripting/cfuncs.h b/Code/Sk/Scripting/cfuncs.h
-index 689a7162c364d97b37b0989f0fe5e2c8417ec4a0..cef6bf91cbfd1eb9d396f03faee03f13a8399aee 100644
+index 689a7162c364d97b37b0989f0fe5e2c8417ec4a0..fe08625662d284f8c77e8e4c9b1a7d7b74006549 100644
 --- a/Code/Sk/Scripting/cfuncs.h
 +++ b/Code/Sk/Scripting/cfuncs.h
-@@ -341,0 +342,4 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
+@@ -341,0 +342,3 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
 +#ifdef THUG_DESKTOP
 +bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *);
-+bool ScriptDesktopStoryGhosting(Script::CStruct *, Script::CScript *);
 +#endif
 diff --git a/Code/Sk/Scripting/ftables.cpp b/Code/Sk/Scripting/ftables.cpp
-index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..580119e00170f7099fcd539af8ac20201bd131e4 100644
+index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..0141dd64f3df6a1f475b838af6549c052b8037a3 100644
 --- a/Code/Sk/Scripting/ftables.cpp
 +++ b/Code/Sk/Scripting/ftables.cpp
-@@ -685,0 +686,2 @@ SCFunction CFunctionLookupTable[]=
+@@ -685,0 +686 @@ SCFunction CFunctionLookupTable[]=
 +	{"DesktopFirstSaveCheck", CFuncs::ScriptDesktopFirstSaveCheck},
-+	{"DesktopStoryGhosting",	CFuncs::ScriptDesktopStoryGhosting},
 diff --git a/desktop/src/custom_music.cpp b/desktop/src/custom_music.cpp
-index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..b2ec81df139ccf7d8cdbc4453d519220e29811f3 100644
+index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..6c14bea0a338085bae95760e24e3ba76565680e9 100644
 --- a/desktop/src/custom_music.cpp
 +++ b/desktop/src/custom_music.cpp
-@@ -2823,0 +2824,24 @@ static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j,
-+// Mark only these menus' existing Triangle handlers for the shorter pulse.
-+static void patch_menu_back_ghosting(const unsigned char *qb, const std::vector<Jeton> &j,
-+                                    std::vector<Modif> &m, const char *name)
-+{
-+	const uint32_t script = crc(name), back = crc("pad_back");
-+	const uint32_t handler = crc("generic_menu_pad_back"), params = crc("params");
-+	for (size_t k = 0; k + 1 < j.size(); ++k)
-+	{
-+		if (qb[j[k].pos] != T_SCRIPT || !est_nom(qb, j[k + 1], script))
-+			continue;
-+		for (size_t a = k + 2; a + 4 < j.size() && qb[j[a].pos] != T_ENDSCRIPT; ++a)
-+		{
-+			if (!est_nom(qb, j[a], back) || !est_nom(qb, j[a + 1], handler)
-+			    || !est_nom(qb, j[a + 2], params) || qb[j[a + 3].pos] != T_EGAL
-+			    || qb[j[a + 4].pos] != T_STRUCT)
-+				continue;
-+			Ecrit w;
-+			w.nom("desktop_menu_ghost");
-+			m.push_back(Modif{ j[a + 4].pos + j[a + 4].taille, 0, w.o });
-+		}
-+		return;
-+	}
-+}
-+
-@@ -2863,0 +2888,41 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
-+	static const char *menu_ghosting[] = {
-+		"create_pre_cat_menu", "level_select_create_menu_block",
-+		"edit_skater_options_menu", "create_options_menu", "create_screen_menu",
-+		"create_sound_options_menu", "create_display_options_menu", "swap_themes_menu"
-+	};
-+	for (const char *menu : menu_ghosting)
-+	{
-+		patch_debut(qb, j, m, menu, "DesktopStoryGhosting 1100\n");
-+		patch_menu_back_ghosting(qb, j, m, menu);
-+	}
-+	patch_debut(qb, j, m, "generic_menu_pad_back",
-+		"if GotParam desktop_menu_ghost\nDesktopStoryGhosting 1100\nendif\n");
-+	patch_debut( qb, j, m, "career_options_menu_exit",
-+		"if GotParam new_menu_script\n"
-+		"if (<new_menu_script> = create_main_menu)\n"
-+		"DesktopStoryGhosting\nendif\nendif\n" );
-+	patch_debut( qb, j, m, "main_menu_exit",
-+		"if GotParam new_menu_script\n"
-+		"if (<new_menu_script> = create_career_options_menu)\n"
-+		"DesktopStoryGhosting\nendif\nendif\n" );
-+
+@@ -1258 +1258 @@ static const char *s_demented_scripts =
+-	// the air): the body goes round once in 0.7 s, 1000 points each (Marcus). Landing
++	// the air): the body goes round once in 0.8 s, 1000 points each (Marcus). Landing
+@@ -1262 +1262 @@ static const char *s_demented_scripts =
+-	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+@@ -1265 +1265 @@ static const char *s_demented_scripts =
+-	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+@@ -1268 +1268 @@ static const char *s_demented_scripts =
+-	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+@@ -1271 +1271 @@ static const char *s_demented_scripts =
+-	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
++	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+@@ -2863,0 +2864,20 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 +	// Use the existing save selection with the desktop filesystem-backed card.
 +	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
 +		"if DesktopFirstSaveCheck\n"
@@ -353,61 +311,6 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..b2ec81df139ccf7d8cdbc4453d519220
 +		"create_dialog_box_with_wait { title = \"Loading ...\" text_dims = (256.0, 0.0)\n"
 +		"text = \"Loading data. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
 +		"add_loading_anim = add_loading_anim }\nno_animate = <no_animate>\nreturn\n" );
-diff --git a/desktop/src/shim_gl.cpp b/desktop/src/shim_gl.cpp
-index 14b82f27d6ab234a192f350c8ed064966d105972..2924b71c6ad4bc03ca4da430154f5e5bbb325a97 100644
---- a/desktop/src/shim_gl.cpp
-+++ b/desktop/src/shim_gl.cpp
-@@ -512,0 +513,31 @@ static GLuint desktop_fantome( void );
-+static Uint64 s_story_ghost_start, s_story_ghost_until;
-+static bool s_fant_vide = true;
-+
-+extern "C" void desktop_start_story_ghosting(int milliseconds)
-+{
-+	const Uint64 now = SDL_GetPerformanceCounter();
-+	const Uint64 until = now + SDL_GetPerformanceFrequency() * milliseconds / 1000;
-+	if (now >= s_story_ghost_until)
-+		s_story_ghost_start = now;
-+	if (until > s_story_ghost_until)
-+		s_story_ghost_until = until;
-+}
-+
-+static float ghosting_strength()
-+{
-+	float strength = desktop_config().ghosting;
-+	const float chaos = desktop_chaos_ghost();
-+	if (chaos > strength)
-+		strength = chaos;
-+	const Uint64 now = SDL_GetPerformanceCounter();
-+	if (now < s_story_ghost_until)
-+	{
-+		const float phase = float(now - s_story_ghost_start) /
-+		                    float(s_story_ghost_until - s_story_ghost_start);
-+		float fade = phase < 0.25f ? phase * 4.0f : (1.0f - phase) * 2.0f;
-+		if (fade > 1.0f) fade = 1.0f;
-+		const float pulse = 0.96f * fade * fade * (3.0f - 2.0f * fade);
-+		if (pulse > strength) strength = pulse;
-+	}
-+	return strength;
-+}
-@@ -648,2 +679,5 @@ extern "C" void vglSwapBuffers( GLboolean )
--	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
--	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f || desktop_chaos_ghost() > 0.0f
-+	// Keep a clean copy of each fully composited frame, including the HUD.
-+	// The first transition frame can then blend with the outgoing menu.
-+	const bool keep_menu_history = true;
-+	const bool gamma = ( keep_menu_history || s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
-+	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || ghosting_strength() > 0.0f
-@@ -1779 +1812,0 @@ static int    s_fant_w = 0, s_fant_h = 0, s_fant_cur = 0, s_fant_etat = 0;
--static bool   s_fant_vide = true;
-@@ -1951,0 +1985 @@ static GLuint desktop_fantome( void )
-+	const float a = ghosting_strength();
-@@ -1953,2 +1987 @@ static GLuint desktop_fantome( void )
--	const float a = chaos > desktop_config().ghosting ? chaos : desktop_config().ghosting;
--	if( a <= 0.0f || s_fant_etat < 0 )
-+	if( s_fant_etat < 0 )
-@@ -2003 +2036 @@ static GLuint desktop_fantome( void )
--	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f ? 0.8f : a );
-+	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f && SDL_GetPerformanceCounter() >= s_story_ghost_until ? 0.8f : a );
 diff --git a/desktop/CMakeLists.txt b/desktop/CMakeLists.txt
 index 7bf26eb08447d7cb6b6331c54599824b75dfb89c..f7f44ceb74dda59f38c27f3f787c4dbd47fdd41f 100644
 --- a/desktop/CMakeLists.txt
@@ -415,3 +318,16 @@ index 7bf26eb08447d7cb6b6331c54599824b75dfb89c..f7f44ceb74dda59f38c27f3f787c4dbd
 @@ -74 +74 @@ if(WIN32)
 -  list(APPEND DESKTOP_SOURCES src/win_main.cpp)
 +  list(APPEND DESKTOP_SOURCES src/win_main.cpp src/thug_icon.rc)
+diff --git a/Code/Gel/Components/trickcomponent.cpp b/Code/Gel/Components/trickcomponent.cpp
+index 7592e0aafeafb20a9fc89d4bdbcfff25894f9ba2..3e4052d0585739afcb0dd74fc11a8cf213b5ad41 100644
+--- a/Code/Gel/Components/trickcomponent.cpp
++++ b/Code/Gel/Components/trickcomponent.cpp
+@@ -3034 +3034 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
+-// it lands too early. Marcus: 0.7 s, and a little grace at the end so a
++// it lands too early. Marcus: 0.8 s, and a little grace at the end so a
+@@ -3041 +3041 @@ static Tmr::Time s_flip_debut = 0;
+-static const Tmr::Time FLIP_DUREE = 700, FLIP_GRACE = 560;	// round enough after 80%
++static const Tmr::Time FLIP_DUREE = 800, FLIP_GRACE = 640;	// round enough after 80%
+@@ -3079 +3079 @@ void CTrickComponent::DesktopAirFlips()
+-		const bool permis = s_air_trick;
++		const bool permis = s_air_trick && (input_mask & (Inp::Data::mA_SQUARE | Inp::Data::mA_CIRCLE));
