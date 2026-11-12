@@ -283,7 +283,7 @@ index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..580119e00170f7099fcd539af8ac2020
 +	{"DesktopFirstSaveCheck", CFuncs::ScriptDesktopFirstSaveCheck},
 +	{"DesktopStoryGhosting",	CFuncs::ScriptDesktopStoryGhosting},
 diff --git a/desktop/src/custom_music.cpp b/desktop/src/custom_music.cpp
-index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..fb9bd1e6ea99294895ea915fdfd2bc3270d2ce43 100644
+index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..b2ec81df139ccf7d8cdbc4453d519220e29811f3 100644
 --- a/desktop/src/custom_music.cpp
 +++ b/desktop/src/custom_music.cpp
 @@ -2823,0 +2824,24 @@ static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j,
@@ -340,9 +340,9 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..fb9bd1e6ea99294895ea915fdfd2bc32
 +		"SpawnScript wait_and_pause_skater params = { time = 1 }\n"
 +		"CheckForCardOnBootup\n"
 +		"return\nendif\nchange DoAutoload = 0\n" );
-+	patch_debut(qb, j, m, "create_main_menu", "mark_first_input_received\n");
++	patch_debut(qb, j, m, "create_main_menu", "change attempted_xbox_autoload = 1\n");
 +	patch_debut(qb, j, m, "xbox_autoload_message",
-+		"mark_first_input_received\nlaunch_main_menu\nreturn\n");
++		"change attempted_xbox_autoload = 1\nlaunch_main_menu\nreturn\n");
 +	patch_debut( qb, j, m, "career_autoload_launch_current_level",
 +		"change show_career_startup_menu = 1\n" );
 +	patch_debut( qb, j, m, "mcmess_CheckingCard",
@@ -408,3 +408,10 @@ index 14b82f27d6ab234a192f350c8ed064966d105972..2924b71c6ad4bc03ca4da430154f5e5b
 @@ -2003 +2036 @@ static GLuint desktop_fantome( void )
 -	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f ? 0.8f : a );
 +	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f && SDL_GetPerformanceCounter() >= s_story_ghost_until ? 0.8f : a );
+diff --git a/desktop/CMakeLists.txt b/desktop/CMakeLists.txt
+index 7bf26eb08447d7cb6b6331c54599824b75dfb89c..f7f44ceb74dda59f38c27f3f787c4dbd47fdd41f 100644
+--- a/desktop/CMakeLists.txt
++++ b/desktop/CMakeLists.txt
+@@ -74 +74 @@ if(WIN32)
+-  list(APPEND DESKTOP_SOURCES src/win_main.cpp)
++  list(APPEND DESKTOP_SOURCES src/win_main.cpp src/thug_icon.rc)
