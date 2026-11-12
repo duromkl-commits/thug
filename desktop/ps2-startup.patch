@@ -1,5 +1,5 @@
 diff --git a/Code/Gfx/NxLoadScreen.h b/Code/Gfx/NxLoadScreen.h
-index 182acdca14dcf4f2b4672791aac75eaad198416b..7de8ee3d051fd9b0c20ccd643924709bc3fa6db0 100644
+index 182acdca14dcf4f2b4672791aac75eaad198416b..2eedce2b33d72e0c0e02d311ec789a612ebf0844 100644
 --- a/Code/Gfx/NxLoadScreen.h
 +++ b/Code/Gfx/NxLoadScreen.h
 @@ -21,0 +22,6 @@ public:
@@ -7,7 +7,7 @@ index 182acdca14dcf4f2b4672791aac75eaad198416b..7de8ee3d051fd9b0c20ccd643924709b
 +	static void					sDesktopDrawBar();
 +	static void					sDesktopBeginBoot();
 +	static void					sDesktopBoot();
-+	static void					sDesktopDisplay(const char *filename, bool level_change);
++	static void					sDesktopDisplay(const char *filename, bool level_change, bool returning_to_menu);
 +#endif
 diff --git a/Code/Gfx/Vita/p_nx.cpp b/Code/Gfx/Vita/p_nx.cpp
 index 6ef1d75c656c3e5cd7f253e5d6acf69adc047756..bbfe154287b7bb737f703d297fef65b9e025f78b 100644
@@ -33,7 +33,7 @@ index 6ef1d75c656c3e5cd7f253e5d6acf69adc047756..bbfe154287b7bb737f703d297fef65b9
 @@ -753,0 +767 @@ void	CEngine::s_plat_pre_render()
 +#endif
 diff --git a/Code/Gfx/Vita/p_nx_managers.cpp b/Code/Gfx/Vita/p_nx_managers.cpp
-index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..a965115edc83a88f2ee05b1363913e90bedee6b6 100644
+index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..b9dd54f8b1d85112994291bf778160e00e6a42a1 100644
 --- a/Code/Gfx/Vita/p_nx_managers.cpp
 +++ b/Code/Gfx/Vita/p_nx_managers.cpp
 @@ -26,0 +27,6 @@
@@ -97,7 +97,7 @@ index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..a965115edc83a88f2ee05b1363913e90
 +	s_bar_duration = static_cast<Uint32>(seconds * 1000.0f + 0.5f);
 +	s_bar_started = SDL_GetTicks();
 +#else
-@@ -297,0 +354,97 @@ void	CLoadScreen::s_plat_start_loading_bar(float seconds)
+@@ -297,0 +354,102 @@ void	CLoadScreen::s_plat_start_loading_bar(float seconds)
 +#endif
 +}
 +
@@ -171,12 +171,12 @@ index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..a965115edc83a88f2ee05b1363913e90
 +	sDisplay(NULL, false, true);
 +	wait_with_events(SDL_GetTicks(), loading_duration(3, 4));
 +	sDisplay("loadscrn_generic", false, false);
-+	sStartLoadingBar(loading_duration(7, 14) / 1000.0f);
++	sStartLoadingBar(loading_duration(3, 10) / 1000.0f);
 +	wait_for_loading_bar();
 +	s_boot_loading = true;
 +}
 +
-+void CLoadScreen::sDesktopDisplay(const char *filename, bool level_change)
++void CLoadScreen::sDesktopDisplay(const char *filename, bool level_change, bool returning_to_menu)
 +{
 +	const bool main_menu = std::strcmp(filename, "loadscrn_mainmenu") == 0;
 +	// The first frontend level shares the generic boot screen and its bar.
@@ -185,6 +185,11 @@ index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..a965115edc83a88f2ee05b1363913e90
 +	s_boot_loading = false;
 +	if (boot_frontend)
 +		return;
++	if (returning_to_menu)
++	{
++		sDisplay(filename, false, false);
++		return;
++	}
 +
 +	const bool level = level_change && !main_menu;
 +	if (!level)
@@ -193,16 +198,16 @@ index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..a965115edc83a88f2ee05b1363913e90
 +		wait_with_events(SDL_GetTicks(), 1000);
 +	}
 +	sDisplay(filename, false, false);
-+	sStartLoadingBar((level ? loading_duration(12, 21) : loading_duration(7, 14)) / 1000.0f);
++	sStartLoadingBar((level ? loading_duration(8, 17) : loading_duration(3, 10)) / 1000.0f);
 +	wait_for_loading_bar();
-@@ -298,0 +452 @@ void	CLoadScreen::s_plat_start_loading_bar(float seconds)
+@@ -298,0 +457 @@ void	CLoadScreen::s_plat_start_loading_bar(float seconds)
 +#endif
-@@ -317,0 +472,4 @@ void	CLoadScreen::s_plat_clear()
+@@ -317,0 +477,4 @@ void	CLoadScreen::s_plat_clear()
 +#ifdef THUG_DESKTOP
 +	s_bar_duration = 0;
 +	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 +#else
-@@ -321,0 +480 @@ void	CLoadScreen::s_plat_clear()
+@@ -321,0 +485 @@ void	CLoadScreen::s_plat_clear()
 +#endif
 diff --git a/Code/Sk/Modules/Skate/skate.cpp b/Code/Sk/Modules/Skate/skate.cpp
 index 5fe7411b43be0bbb2e186e4d997367359f30d344..5463bfea0a84b443a084ce93beccbda22242e81c 100644
@@ -221,12 +226,21 @@ index 5fe7411b43be0bbb2e186e4d997367359f30d344..5463bfea0a84b443a084ce93beccbda2
 +#endif
 +		Script::RunScript("startup_loading_screen");
 diff --git a/Code/Sk/Scripting/cfuncs.cpp b/Code/Sk/Scripting/cfuncs.cpp
-index 142185c22bcccdebd9546d08a5ac7f5a7be38642..170e6e3f0dc5b6c856c22b3cd1137928eedab120 100644
+index 142185c22bcccdebd9546d08a5ac7f5a7be38642..e8a14aaeab21c026968ac71aa05c84439391a7bb 100644
 --- a/Code/Sk/Scripting/cfuncs.cpp
 +++ b/Code/Sk/Scripting/cfuncs.cpp
-@@ -10592,0 +10593,12 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
+@@ -10592,0 +10593,21 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
 +#ifdef THUG_DESKTOP
 +extern "C" void desktop_start_story_ghosting(int milliseconds);
++
++bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *)
++{
++	static bool checked = false;
++	if (checked)
++		return false;
++	checked = true;
++	return true;
++}
 +
 +bool ScriptDesktopStoryGhosting(Script::CStruct *params, Script::CScript *)
 +{
@@ -237,35 +251,39 @@ index 142185c22bcccdebd9546d08a5ac7f5a7be38642..170e6e3f0dc5b6c856c22b3cd1137928
 +}
 +#endif
 +
-@@ -10599 +10611,11 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
+@@ -10599 +10620,13 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
 -	Nx::CLoadScreen::sDisplay( (char*) pScreen, pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze")),pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank")));
 +	const bool freeze = pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze"));
 +	const bool blank = pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank"));
 +#ifdef THUG_DESKTOP
 +	if (!freeze && !blank && !Config::Bootstrap())
 +	{
-+		Nx::CLoadScreen::sDesktopDisplay(pScreen, pScript &&
-+			pScript->RefersToScript(Script::GenerateCRC("load_level")));
++		const bool level_change = pScript && pScript->RefersToScript(Script::GenerateCRC("load_level"));
++		const bool frontend = level_change && Mdl::Skate::Instance()->m_requested_level ==
++			Script::GenerateCRC("load_skateshop");
++		Nx::CLoadScreen::sDesktopDisplay(pScreen, level_change, frontend);
 +		return true;
 +	}
 +#endif
 +	Nx::CLoadScreen::sDisplay(pScreen, freeze, blank);
 diff --git a/Code/Sk/Scripting/cfuncs.h b/Code/Sk/Scripting/cfuncs.h
-index 689a7162c364d97b37b0989f0fe5e2c8417ec4a0..2aef1c49241246b67761cf1d85544e5b66228758 100644
+index 689a7162c364d97b37b0989f0fe5e2c8417ec4a0..cef6bf91cbfd1eb9d396f03faee03f13a8399aee 100644
 --- a/Code/Sk/Scripting/cfuncs.h
 +++ b/Code/Sk/Scripting/cfuncs.h
-@@ -341,0 +342,3 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
+@@ -341,0 +342,4 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
 +#ifdef THUG_DESKTOP
++bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *);
 +bool ScriptDesktopStoryGhosting(Script::CStruct *, Script::CScript *);
 +#endif
 diff --git a/Code/Sk/Scripting/ftables.cpp b/Code/Sk/Scripting/ftables.cpp
-index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..1ceeaf3e4014fce0408930d2132f7b7ef25bc243 100644
+index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..580119e00170f7099fcd539af8ac20201bd131e4 100644
 --- a/Code/Sk/Scripting/ftables.cpp
 +++ b/Code/Sk/Scripting/ftables.cpp
-@@ -685,0 +686 @@ SCFunction CFunctionLookupTable[]=
+@@ -685,0 +686,2 @@ SCFunction CFunctionLookupTable[]=
++	{"DesktopFirstSaveCheck", CFuncs::ScriptDesktopFirstSaveCheck},
 +	{"DesktopStoryGhosting",	CFuncs::ScriptDesktopStoryGhosting},
 diff --git a/desktop/src/custom_music.cpp b/desktop/src/custom_music.cpp
-index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..286323711af541839a5be245a74e8ce908c8df20 100644
+index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..310431e3e89a2c1290ece07953bb6c124371a750 100644
 --- a/desktop/src/custom_music.cpp
 +++ b/desktop/src/custom_music.cpp
 @@ -2823,0 +2824,24 @@ static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j,
@@ -293,7 +311,7 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..286323711af541839a5be245a74e8ce9
 +	}
 +}
 +
-@@ -2863,0 +2888,38 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
+@@ -2863,0 +2888,39 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 +	static const char *menu_ghosting[] = {
 +		"create_pre_cat_menu", "level_select_create_menu_block",
 +		"edit_skater_options_menu", "create_options_menu", "create_screen_menu",
@@ -317,11 +335,12 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..286323711af541839a5be245a74e8ce9
 +
 +	// Use the existing save selection with the desktop filesystem-backed card.
 +	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
-+		"if NOT (DoAutoload = 0)\n"
++		"if DesktopFirstSaveCheck\n"
 +		"change DoAutoload = 0\n"
 +		"SpawnScript wait_and_pause_skater params = { time = 1 }\n"
 +		"CheckForCardOnBootup\n"
-+		"return\nendif\n" );
++		"return\nendif\nchange DoAutoload = 0\n" );
++	patch_debut(qb, j, m, "xbox_autoload_message", "launch_main_menu\nreturn\n");
 +	patch_debut( qb, j, m, "career_autoload_launch_current_level",
 +		"change show_career_startup_menu = 1\n" );
 +	patch_debut( qb, j, m, "mcmess_CheckingCard",
@@ -333,7 +352,7 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..286323711af541839a5be245a74e8ce9
 +		"text = \"Loading data. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
 +		"add_loading_anim = add_loading_anim }\nno_animate = <no_animate>\nreturn\n" );
 diff --git a/desktop/src/shim_gl.cpp b/desktop/src/shim_gl.cpp
-index 14b82f27d6ab234a192f350c8ed064966d105972..a5304d97dc6b9575942bd4ce75b094b8e2ee9133 100644
+index 14b82f27d6ab234a192f350c8ed064966d105972..ac6b98da58c02cab6a5d282b5954714675ac287b 100644
 --- a/desktop/src/shim_gl.cpp
 +++ b/desktop/src/shim_gl.cpp
 @@ -512,0 +513,23 @@ static GLuint desktop_fantome( void );
@@ -356,8 +375,8 @@ index 14b82f27d6ab234a192f350c8ed064966d105972..a5304d97dc6b9575942bd4ce75b094b8
 +	const float chaos = desktop_chaos_ghost();
 +	if (chaos > strength)
 +		strength = chaos;
-+	if (strength < 0.55f && SDL_GetPerformanceCounter() < s_story_ghost_until)
-+		strength = 0.55f;
++	if (strength < 0.90f && SDL_GetPerformanceCounter() < s_story_ghost_until)
++		strength = 0.90f;
 +	return strength;
 +}
 @@ -649 +672 @@ extern "C" void vglSwapBuffers( GLboolean )
@@ -369,3 +388,6 @@ index 14b82f27d6ab234a192f350c8ed064966d105972..a5304d97dc6b9575942bd4ce75b094b8
 +	const float a = ghosting_strength();
 @@ -1953 +1975,0 @@ static GLuint desktop_fantome( void )
 -	const float a = chaos > desktop_config().ghosting ? chaos : desktop_config().ghosting;
+@@ -2003 +2025 @@ static GLuint desktop_fantome( void )
+-	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f ? 0.8f : a );
++	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f && SDL_GetPerformanceCounter() >= s_story_ghost_until ? 0.8f : a );
