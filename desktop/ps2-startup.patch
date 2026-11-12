@@ -33,18 +33,17 @@ index 6ef1d75c656c3e5cd7f253e5d6acf69adc047756..bbfe154287b7bb737f703d297fef65b9
 @@ -753,0 +767 @@ void	CEngine::s_plat_pre_render()
 +#endif
 diff --git a/Code/Gfx/Vita/p_nx_managers.cpp b/Code/Gfx/Vita/p_nx_managers.cpp
-index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..c58288dc188868b3fb043f36b5faeb6e3862557d 100644
+index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..a965115edc83a88f2ee05b1363913e90bedee6b6 100644
 --- a/Code/Gfx/Vita/p_nx_managers.cpp
 +++ b/Code/Gfx/Vita/p_nx_managers.cpp
-@@ -26,0 +27,7 @@
+@@ -26,0 +27,6 @@
 +#ifdef THUG_DESKTOP
 +#include <SDL.h>
 +#include <cstring>
-+#include <random>
 +extern "C" void desktop_pump_events();
 +extern "C" int desktop_play_movie(const char *name, float volume);
 +#endif
-@@ -164,0 +172,35 @@ static Nx::CVitaTexture *sp_load_screen = NULL;
+@@ -164,0 +171,36 @@ static Nx::CVitaTexture *sp_load_screen = NULL;
 +#ifdef THUG_DESKTOP
 +static Uint32 s_boot_started;
 +static Uint32 s_bar_started;
@@ -53,9 +52,10 @@ index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..c58288dc188868b3fb043f36b5faeb6e
 +
 +static Uint32 loading_duration(int minimum_seconds, int maximum_seconds)
 +{
-+	static std::mt19937 rng(static_cast<std::mt19937::result_type>(SDL_GetPerformanceCounter()));
-+	return std::uniform_int_distribution<Uint32>(
-+		minimum_seconds * 1000, maximum_seconds * 1000)(rng);
++	static Uint32 state = static_cast<Uint32>(SDL_GetPerformanceCounter());
++	state = state * 1664525u + 1013904223u;
++	const Uint32 range = (maximum_seconds - minimum_seconds) * 1000 + 1;
++	return minimum_seconds * 1000 + state % range;
 +}
 +
 +static void wait_with_events(Uint32 start, Uint32 duration)
