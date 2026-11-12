@@ -348,3 +348,15 @@ index e88e692f8c4e88eda472d47c8e31a0ee9141cb33..e2b47430be4f7a7b685e47edd3242d80
 +		}
 +	}
 +#endif
+diff --git a/Code/Sk/Objects/cutscenedetails.cpp b/Code/Sk/Objects/cutscenedetails.cpp
+index 585a6d3dbbd87bb8c7f008adf0d41d991da0335f..c989a5e1eee8538b120d094c3c1c44625b754673 100644
+--- a/Code/Sk/Objects/cutscenedetails.cpp
++++ b/Code/Sk/Objects/cutscenedetails.cpp
+@@ -57,0 +58 @@
++extern "C" int desktop_ecran_43();
+@@ -5313,0 +5315,5 @@ void CCutsceneDetails::Update()
++#ifdef THUG_DESKTOP
++		// Apply the cutscene framing before its first camera update.
++		if (!mp_cutsceneAsset->HasMovieStarted())
++			Script::RunScript(desktop_ecran_43() ? "screen_setup_letterbox" : "screen_setup_widescreen");
++#endif
