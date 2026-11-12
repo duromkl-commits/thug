@@ -2,7 +2,7 @@ name: Windows build
 
 on:
   push:
-    branches: [ main, desktop-port ]
+    branches: [ main, desktop-port, ps2-startup-build ]
   pull_request:
   workflow_dispatch:
 
@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Apply PS2 startup and menu changes
+        if: github.ref == 'refs/heads/ps2-startup-build'
+        run: git -c core.whitespace=cr-at-eol apply --index --unidiff-zero --whitespace=error desktop/ps2-startup.patch
 
       - name: Install MinGW-w64 and Ninja
         run: |
