@@ -31,7 +31,6 @@ jobs:
           SDL2_MINGW="$RUNNER_TEMP/SDL2-2.30.9/i686-w64-mingw32" desktop/tools/build_mingw32.sh "$RUNNER_TEMP/build"
           mkdir -p dist
           cp "$RUNNER_TEMP/build/cmake/thug.exe" "$RUNNER_TEMP/build/cmake/SDL2.dll" dist/
-          cp desktop/README.md dist/README-desktop.md
 
       - uses: actions/upload-artifact@v4
         with:
