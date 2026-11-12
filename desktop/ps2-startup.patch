@@ -283,7 +283,7 @@ index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..580119e00170f7099fcd539af8ac2020
 +	{"DesktopFirstSaveCheck", CFuncs::ScriptDesktopFirstSaveCheck},
 +	{"DesktopStoryGhosting",	CFuncs::ScriptDesktopStoryGhosting},
 diff --git a/desktop/src/custom_music.cpp b/desktop/src/custom_music.cpp
-index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..310431e3e89a2c1290ece07953bb6c124371a750 100644
+index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..fb9bd1e6ea99294895ea915fdfd2bc3270d2ce43 100644
 --- a/desktop/src/custom_music.cpp
 +++ b/desktop/src/custom_music.cpp
 @@ -2823,0 +2824,24 @@ static void patch_niveaux( const unsigned char *qb, const std::vector<Jeton> &j,
@@ -311,7 +311,7 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..310431e3e89a2c1290ece07953bb6c12
 +	}
 +}
 +
-@@ -2863,0 +2888,39 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
+@@ -2863,0 +2888,41 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 +	static const char *menu_ghosting[] = {
 +		"create_pre_cat_menu", "level_select_create_menu_block",
 +		"edit_skater_options_menu", "create_options_menu", "create_screen_menu",
@@ -319,11 +319,11 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..310431e3e89a2c1290ece07953bb6c12
 +	};
 +	for (const char *menu : menu_ghosting)
 +	{
-+		patch_debut(qb, j, m, menu, "DesktopStoryGhosting 500\n");
++		patch_debut(qb, j, m, menu, "DesktopStoryGhosting 1100\n");
 +		patch_menu_back_ghosting(qb, j, m, menu);
 +	}
 +	patch_debut(qb, j, m, "generic_menu_pad_back",
-+		"if GotParam desktop_menu_ghost\nDesktopStoryGhosting 500\nendif\n");
++		"if GotParam desktop_menu_ghost\nDesktopStoryGhosting 1100\nendif\n");
 +	patch_debut( qb, j, m, "career_options_menu_exit",
 +		"if GotParam new_menu_script\n"
 +		"if (<new_menu_script> = create_main_menu)\n"
@@ -340,7 +340,9 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..310431e3e89a2c1290ece07953bb6c12
 +		"SpawnScript wait_and_pause_skater params = { time = 1 }\n"
 +		"CheckForCardOnBootup\n"
 +		"return\nendif\nchange DoAutoload = 0\n" );
-+	patch_debut(qb, j, m, "xbox_autoload_message", "launch_main_menu\nreturn\n");
++	patch_debut(qb, j, m, "create_main_menu", "mark_first_input_received\n");
++	patch_debut(qb, j, m, "xbox_autoload_message",
++		"mark_first_input_received\nlaunch_main_menu\nreturn\n");
 +	patch_debut( qb, j, m, "career_autoload_launch_current_level",
 +		"change show_career_startup_menu = 1\n" );
 +	patch_debut( qb, j, m, "mcmess_CheckingCard",
@@ -352,11 +354,11 @@ index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..310431e3e89a2c1290ece07953bb6c12
 +		"text = \"Loading data. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
 +		"add_loading_anim = add_loading_anim }\nno_animate = <no_animate>\nreturn\n" );
 diff --git a/desktop/src/shim_gl.cpp b/desktop/src/shim_gl.cpp
-index 14b82f27d6ab234a192f350c8ed064966d105972..ac6b98da58c02cab6a5d282b5954714675ac287b 100644
+index 14b82f27d6ab234a192f350c8ed064966d105972..2924b71c6ad4bc03ca4da430154f5e5bbb325a97 100644
 --- a/desktop/src/shim_gl.cpp
 +++ b/desktop/src/shim_gl.cpp
-@@ -512,0 +513,23 @@ static GLuint desktop_fantome( void );
-+static Uint64 s_story_ghost_until;
+@@ -512,0 +513,31 @@ static GLuint desktop_fantome( void );
++static Uint64 s_story_ghost_start, s_story_ghost_until;
 +static bool s_fant_vide = true;
 +
 +extern "C" void desktop_start_story_ghosting(int milliseconds)
@@ -364,7 +366,7 @@ index 14b82f27d6ab234a192f350c8ed064966d105972..ac6b98da58c02cab6a5d282b59547146
 +	const Uint64 now = SDL_GetPerformanceCounter();
 +	const Uint64 until = now + SDL_GetPerformanceFrequency() * milliseconds / 1000;
 +	if (now >= s_story_ghost_until)
-+		s_fant_vide = true;
++		s_story_ghost_start = now;
 +	if (until > s_story_ghost_until)
 +		s_story_ghost_until = until;
 +}
@@ -375,19 +377,34 @@ index 14b82f27d6ab234a192f350c8ed064966d105972..ac6b98da58c02cab6a5d282b59547146
 +	const float chaos = desktop_chaos_ghost();
 +	if (chaos > strength)
 +		strength = chaos;
-+	if (strength < 0.90f && SDL_GetPerformanceCounter() < s_story_ghost_until)
-+		strength = 0.90f;
++	const Uint64 now = SDL_GetPerformanceCounter();
++	if (now < s_story_ghost_until)
++	{
++		const float phase = float(now - s_story_ghost_start) /
++		                    float(s_story_ghost_until - s_story_ghost_start);
++		float fade = phase < 0.25f ? phase * 4.0f : (1.0f - phase) * 2.0f;
++		if (fade > 1.0f) fade = 1.0f;
++		const float pulse = 0.96f * fade * fade * (3.0f - 2.0f * fade);
++		if (pulse > strength) strength = pulse;
++	}
 +	return strength;
 +}
-@@ -649 +672 @@ extern "C" void vglSwapBuffers( GLboolean )
+@@ -648,2 +679,5 @@ extern "C" void vglSwapBuffers( GLboolean )
+-	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
 -	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f || desktop_chaos_ghost() > 0.0f
++	// Keep a clean copy of each fully composited frame, including the HUD.
++	// The first transition frame can then blend with the outgoing menu.
++	const bool keep_menu_history = true;
++	const bool gamma = ( keep_menu_history || s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
 +	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || ghosting_strength() > 0.0f
-@@ -1779 +1801,0 @@ static int    s_fant_w = 0, s_fant_h = 0, s_fant_cur = 0, s_fant_etat = 0;
+@@ -1779 +1812,0 @@ static int    s_fant_w = 0, s_fant_h = 0, s_fant_cur = 0, s_fant_etat = 0;
 -static bool   s_fant_vide = true;
-@@ -1951,0 +1974 @@ static GLuint desktop_fantome( void )
+@@ -1951,0 +1985 @@ static GLuint desktop_fantome( void )
 +	const float a = ghosting_strength();
-@@ -1953 +1975,0 @@ static GLuint desktop_fantome( void )
+@@ -1953,2 +1987 @@ static GLuint desktop_fantome( void )
 -	const float a = chaos > desktop_config().ghosting ? chaos : desktop_config().ghosting;
-@@ -2003 +2025 @@ static GLuint desktop_fantome( void )
+-	if( a <= 0.0f || s_fant_etat < 0 )
++	if( s_fant_etat < 0 )
+@@ -2003 +2036 @@ static GLuint desktop_fantome( void )
 -	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f ? 0.8f : a );
 +	glUniform1f( glGetUniformLocation( s_fant_p, "a" ), s_fant_vide ? 0.0f : a > 0.8f && chaos <= 0.0f && SDL_GetPerformanceCounter() >= s_story_ghost_until ? 0.8f : a );
