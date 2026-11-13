@@ -50,6 +50,12 @@ struct SGpuMesh
 	GLuint	ibo;
 	GLuint	texture;
 	unsigned int blend;		// blend mode du materiau, 0 = opaque
+#ifdef THUG_DESKTOP
+	// Xbox alpha cutoff of the material (cut-out textures: car rims, fences),
+	// 0 = none. Passe 1 of a RIGID model borrows its base's vbo (vbo_partage).
+	unsigned int alpha_cutoff;
+	unsigned char vbo_partage;
+#endif
 	// MATFLAG_PASS_COLOR_LOCKED (0x80) de la passe 0 : la teinte du geom ne
 	// s'applique PAS. [SOURCE] XBox/NX/mesh.cpp:607 (HandleColorOverride).
 	// Yeux, logos, une partie du corps : sans ce drapeau, la couleur CAS

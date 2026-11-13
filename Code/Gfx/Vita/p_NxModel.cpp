@@ -427,7 +427,11 @@ CVitaMesh::~CVitaMesh()
 			if( !deja )
 				glDeleteBuffers( 1, &mp_pieces[i].vbo_normales );
 		}
+#ifdef THUG_DESKTOP
+		if( mp_pieces[i].vbo && !mp_pieces[i].vbo_partage )
+#else
 		if( mp_pieces[i].vbo )		// 0 pour une passe 1 (#55)
+#endif
 			glDeleteBuffers( 1, &mp_pieces[i].vbo );
 		if( mp_pieces[i].uvbo )
 			glDeleteBuffers( 1, &mp_pieces[i].uvbo );
@@ -791,6 +795,10 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 		// blanc opaque -- le meme defaut deja corrige pour le decor-monde.
 		p_dst->cbo   = 0;
 		p_dst->blend = p_src->blend_mode;
+#ifdef THUG_DESKTOP
+		p_dst->alpha_cutoff = p_src->alpha_cutoff;
+		p_dst->vbo_partage  = 0;
+#endif
 		p_dst->color_locked = ( p_src->mat_flags0 & 0x80 ) ? 1 : 0;
 		p_dst->no_bfc       = p_src->no_bfc;
 		// UV wibble de la passe 0 (#77), bit 0 du masque du chargeur.
@@ -1006,6 +1014,16 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 			// passe 1 n'a pas a suivre la couleur CAS du vetement.
 			p_dst->mat_checksum = 0;
 			p_dst->decal        = 1;
+#ifdef THUG_DESKTOP
+			// Rigid models (vehicles: Phat Rimz car decals, cop car) draw their
+			// passe 1 on the rigid path with the base's vertices.
+			p_dst->alpha_cutoff = 0;
+			if( !p_base->p_bones && p_base->vbo )
+			{
+				p_dst->vbo = p_base->vbo;
+				p_dst->vbo_partage = 1;
+			}
+#endif
 			p_dst->decal_au     = dk.au;
 			p_dst->decal_av     = dk.av;
 			// #77 : ni UV wibble ni passe ADD heritees de la base (tampons
@@ -3139,8 +3157,13 @@ void CVitaMesh::Draw( const float *p_rgba,
 			pic_tp = n;
 		}
 		const SGpuMesh *p = &mp_pieces[i];
+#ifdef THUG_DESKTOP
+		if( p->decal && !p->vbo_partage )	// skinned passe 1: its own path
+			continue;
+#else
 		if( p->decal )		// passe 1 (#55) : pas de vbo, chemin skinne seulement
 			continue;
+#endif
 
 		// Blend du materiau : les panneaux d'interface (voiles, degrades)
 		// en dependent -- opaques, ils sortent en rectangles blancs.
@@ -3349,7 +3372,28 @@ void CVitaMesh::Draw( const float *p_rgba,
 		// ici. La matrice modelview courante porte deja la vue, la pose du
 		// modele et l'os -- on la capture telle quelle, rien a recalculer.
 		const bool reporter = ( g_vita_differer_modeles && ( p->blend != 0 )
-		                        && ( s_num_reportes < MAX_REPORTES ));
+		                        && ( s_num_reportes < MAX_REPORTES )
+#ifdef THUG_DESKTOP
+		                        && !p->decal
+#endif
+		                        );
+#ifdef THUG_DESKTOP
+		// rigid passe 1: coplanar with its base, drawn right after it
+		if( p->decal )
+		{
+			if( p->texture ) poser_passe1( p );
+			glEnable( GL_POLYGON_OFFSET_FILL );
+			glPolygonOffset( -1.0f, -2.0f );
+			if( p->blend ) glDepthMask( GL_FALSE );
+		}
+		// opaque cut-out (rims, grilles): Xbox alpha test at the cutoff
+		const bool coupe = !p->blend && p->alpha_cutoff;
+		if( coupe )
+		{
+			glEnable( GL_ALPHA_TEST );
+			glAlphaFunc( GL_GEQUAL, p->alpha_cutoff / 255.0f );
+		}
+#endif
 		if( reporter )
 		{
 			SMorceauReporte *r = &s_reportes[s_num_reportes++];
@@ -3382,7 +3426,11 @@ void CVitaMesh::Draw( const float *p_rgba,
 				rig_actif = true;
 			}
 			NxVita::ShaderRigideEclairePiece( mvp, p->vbo, p->nbo_rig, p->cbo, p->uvbo, tex_p,
+#ifdef THUG_DESKTOP
+			                                  p->blend ? 0.35f : p->alpha_cutoff ? ( p->alpha_cutoff - 1 ) / 255.0f : -1.0f,
+#else
 			                                  p->blend ? 0.35f : -1.0f,
+#endif
 			                                  ( p->blend >= 1 ) && ( p->blend <= 4 ));
 			glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, p->ibo );
 			++g_vita_n_draws;
@@ -3474,6 +3522,16 @@ void CVitaMesh::Draw( const float *p_rgba,
 		if( os_pose )
 			glPopMatrix();
 
+#ifdef THUG_DESKTOP
+		if( coupe )
+			glDisable( GL_ALPHA_TEST );
+		if( p->decal )
+		{
+			glDisable( GL_POLYGON_OFFSET_FILL );
+			glDepthFunc( GL_LESS );
+			glDepthMask( GL_TRUE );
+		}
+#endif
 		if( p->blend )
 		{
 			glDisable( GL_ALPHA_TEST );
