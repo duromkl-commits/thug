@@ -424,7 +424,7 @@ void CLoadScreen::sDesktopBoot()
 	sDisplay(NULL, false, true);
 	wait_with_events(SDL_GetTicks(), loading_duration(3, 4));
 	sDisplay("loadscrn_generic", false, false);
-	sStartLoadingBar(loading_duration(7, 14) / 1000.0f);
+	sStartLoadingBar(loading_duration(3, 10) / 1000.0f);
 	wait_for_loading_bar();
 	s_boot_loading = true;
 }
@@ -451,7 +451,7 @@ void CLoadScreen::sDesktopDisplay(const char *filename, bool level_change, bool 
 		wait_with_events(SDL_GetTicks(), 1000);
 	}
 	sDisplay(filename, false, false);
-	sStartLoadingBar((level ? loading_duration(12, 21) : loading_duration(7, 14)) / 1000.0f);
+	sStartLoadingBar((level ? loading_duration(8, 17) : loading_duration(3, 10)) / 1000.0f);
 	wait_for_loading_bar();
 }
 #endif

@@ -5987,8 +5987,25 @@ bool DoNodeAction( Script::CStruct *pParams, Script::CScript *pScript, int actio
 		uint16 numNodes = 0;
 	  //  const uint16 *pMatchingNodes = SkateScript::GetPrefixedNodes( pPrefix, &numNodes );
 		const uint16 *pMatchingNodes = SkateScript::GetPrefixedNodes( prefixChecksum, &numNodes );
+#ifdef THUG_DESKTOP
+		// diagnostic for invisible goal pickups (Speak Hawaiian letters)
+		if( action == NODE_ACTION_CREATE || action == NODE_ACTION_KILL )
+			VLOG( "LVL", "%s prefix %s (%08x): %d nodes (%s)", action == NODE_ACTION_CREATE ? "Create" : "Kill",
+				Script::FindChecksumName( prefixChecksum ), prefixChecksum, numNodes, pScript ? Script::FindChecksumName( pScript->mScriptChecksum ) : "?" );
+#endif
 		for ( i = 0; i < numNodes; i++ )
 		{
+#ifdef THUG_DESKTOP
+			if( action == NODE_ACTION_CREATE )
+			{
+				const bool ok = DoNodeActionFromNodeNum( pMatchingNodes[ i ], action, pScript, pParams );
+				uint32 nm = 0;
+				Script::CStruct *pn = SkateScript::GetNode( pMatchingNodes[ i ] );
+				if( pn ) pn->GetChecksum( CRCD(0xa1dc81f9,"Name"), &nm );
+				VLOG( "LVL", "  create node %d %s -> %d", pMatchingNodes[ i ], Script::FindChecksumName( nm ), ok );
+				continue;
+			}
+#endif
 			if ( DoNodeActionFromNodeNum( pMatchingNodes[ i ], action, pScript, pParams ) )
 			{
 				if ( action == NODE_ACTION_CHECK_IF_ALIVE )
