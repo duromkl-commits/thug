@@ -935,9 +935,18 @@ void	CEngine::s_plat_render_world()
 	ACC( ACC_MONDE );
 }
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_set_screen_blur( int amount );	// shim_gl.cpp
+#endif
 void	CEngine::s_plat_set_screen_blur(uint32 amount)
 {
+#ifdef THUG_DESKTOP
+	// The PS2's frame feedback (0 = off, 255 = only the last frame): the
+	// menus' pulse_blur (STORY MODE...) and some cutscenes use it.
+	desktop_set_screen_blur( (int)amount );
+#else
 	VITA_STUB();
+#endif
 }
 
 #ifdef THUG_DESKTOP

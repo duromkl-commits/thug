@@ -6,6 +6,7 @@
 //****************************************************************************
 
 #ifdef THUG_DESKTOP
+#include "vita_log.h"
 extern "C" float desktop_demented_gravity( void );	// desktop_demented.cpp
 #endif
 #include <sk/objects/rail.h>
@@ -6976,6 +6977,9 @@ void CSkaterCorePhysicsComponent::got_rail ( const Mth::Vector& rail_pos, const 
 		
 		// Into the lip state
 		SetState(LIP);
+#ifdef THUG_DESKTOP
+		VLOG("TRK", "LIP t=%u", (unsigned)Tmr::GetTime());
+#endif
 		
 		// Snap the position
 		GetPos() = rail_pos;

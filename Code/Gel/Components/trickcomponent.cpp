@@ -50,6 +50,9 @@ extern "C" int custom_skater_voice_pitch( unsigned int name_checksum );	// custo
 //   [TRK] equilibre ...        le skater est entre (ou sorti) en manual
 // La premiere etape qui manque dans le journal designe la cause.
 int g_vita_trace_trk = 0;
+#ifdef THUG_DESKTOP
+extern "C" int desktop_full_log( void );
+#endif
 static const char *trk_nom_direction( uint Button )
 {
 	static const char *s_noms[9] = { "?", "Up", "Down", "Left", "Right",
@@ -146,6 +149,9 @@ CTrickComponent::CTrickComponent() : CBaseComponent()
     mp_stats_manager_component=NULL;
 #ifdef THUG_DESKTOP
 	m_flip_dir_avant = m_flip_derniere = 0;
+#ifdef THUG_DESKTOP
+	if( desktop_full_log()) g_vita_trace_trk = 1;	// [TRK] direction presses (lip direction hunt)
+#endif
 	m_flip_t = m_flip_fin = 0;
 #endif
 				 
@@ -455,6 +461,15 @@ void CTrickComponent::RemoveOldButtonEvents(uint32 Button, uint32 OlderThan)
 		}
 	}
 }
+
+#ifdef THUG_DESKTOP
+static bool desktop_est_direction( uint32 ck )
+{
+	for (uint b = PAD_U; b <= PAD_DR; ++b)
+		if (Inp::GetButtonChecksum(b) == ck) return true;
+	return false;
+}
+#endif
 
 bool CTrickComponent::TriggeredInLastNMilliseconds(uint32 ButtonNameChecksum, uint32 Duration, uint32 IgnoreMask)
 {
@@ -1311,6 +1326,9 @@ bool CTrickComponent::QueryEvents(Script::CStruct *pQuery, uint32 UsedMask, uint
 			// Get one button name followed by a duration value.
 			uint32 Duration=get_buttons_and_duration(pComp,1,p_button_names);
 			
+#ifdef THUG_DESKTOP
+			const bool est_direction = desktop_est_direction(p_button_names[0]);
+#endif
 			int Index=mLastEvent;
 			for (int i=0; i<mNumEvents; ++i)
 			{
@@ -1319,6 +1337,19 @@ bool CTrickComponent::QueryEvents(Script::CStruct *pQuery, uint32 UsedMask, uint
 					return false;
 				}
 			
+#ifdef THUG_DESKTOP
+				// Marcus: Up + Triangle into a lip gave the Down lip trick. Lists
+				// test their directions in a fixed order (diagonals, L, R, D, U),
+				// so any older press in the window beat the one he just made.
+				// For a direction, only the newest direction press counts.
+				if (est_direction && !(mpButtonEvents[Index].Used & IgnoreMask) &&
+					mpButtonEvents[Index].EventType==EVENT_BUTTON_PRESSED &&
+					mpButtonEvents[Index].ButtonNameChecksum!=p_button_names[0] &&
+					desktop_est_direction(mpButtonEvents[Index].ButtonNameChecksum))
+				{
+					return false;
+				}
+#endif
 				if (!(mpButtonEvents[Index].Used & IgnoreMask) &&
 					mpButtonEvents[Index].EventType==EVENT_BUTTON_PRESSED &&
 					mpButtonEvents[Index].ButtonNameChecksum==p_button_names[0])
