@@ -16,6 +16,7 @@
 #include <gel/scripting/script.h>
 #include <gel/scripting/struct.h>
 #include <gel/scripting/checksum.h>
+#include <gel/scripting/symboltable.h>
 #include <sk/modules/skate/skate.h>
 #include <sk/modules/skate/gamemode.h>
 #include <sk/objects/skatercareer.h>
@@ -103,11 +104,17 @@ bool DesktopThugZero( void )
 }
 
 // Main menu / front end: the skater rolling around behind the menus takes
-// no pad input (Marcus: no manuals or tricks on the startup screen).
+// no pad input; nor does the skater of a level being left (Marcus: no manuals or tricks on the startup screen).
 bool DesktopFrontEndSkater( void )
 {
 	Mdl::Skate *sk = Mdl::Skate::Instance();
 	if( !sk ) return false;
+	// Also between change_level and the new level's HideLoadingScreen
+	// (gameflow resets is_changing_levels there): the pause menu is gone
+	// and the old level keeps running for a few frames (Marcus: he could
+	// still move the skater just before the loading screen).
+	if( Script::GetInteger( CRCD( 0xe997db9f, "is_changing_levels" )))
+		return true;
 	Game::CGameMode *m = sk->GetGameMode();
 	return m && m->IsFrontEnd();
 }
