@@ -620,6 +620,14 @@ void CVehicleComponent::Finalize (   )
 	}
 	m_body_pos -= center_of_mass;
 	m_skater_pos -= center_of_mass;
+#ifdef THUG_DESKTOP
+	// diagnostic (Marcus: cars sit low, leafblower rider not on the seat)
+	VLOG( "LVL", "vehicle: com (%.1f %.1f %.1f) body (%.1f %.1f %.1f) skater (%.1f %.1f %.1f) visible=%d anim=%s",
+		center_of_mass[X], center_of_mass[Y], center_of_mass[Z], m_body_pos[X], m_body_pos[Y], m_body_pos[Z],
+		m_skater_pos[X], m_skater_pos[Y], m_skater_pos[Z], (int)m_skater_visible, Script::FindChecksumName( m_skater_anim ));
+	for (int n = 0; n < m_num_wheels; ++n)
+		VLOG( "LVL", "  wheel %d at (%.1f %.1f %.1f) r=%.1f", n, mp_wheels[n].pos[X], mp_wheels[n].pos[Y], mp_wheels[n].pos[Z], mp_wheels[n].radius );
+#endif
 	
 	update_dependent_variables();
 	

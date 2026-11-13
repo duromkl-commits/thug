@@ -1104,7 +1104,7 @@ void CAnimationComponent::PlayPrimarySequence( uint32 animName, bool propagate, 
 		static int s_missing_logged = 0;
 		if ( s_missing_logged < 100 && ++s_missing_logged )
 		{
-			VLOG( "ANIM", "anim %s missing from set %s", Script::FindChecksumName( animName ), Script::FindChecksumName( m_animScriptName ) );
+			VLOG( "LVL", "anim %s missing from set %s", Script::FindChecksumName( animName ), Script::FindChecksumName( m_animScriptName ) );
 		}
 		// A standing idle reads better than 'default', which for THPS4's
 		// human set is the bind pose (a T-pose).
