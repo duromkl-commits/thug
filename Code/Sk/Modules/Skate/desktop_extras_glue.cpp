@@ -115,6 +115,11 @@ bool DesktopFrontEndSkater( void )
 	// still move the skater just before the loading screen).
 	if( Script::GetInteger( CRCD( 0xe997db9f, "is_changing_levels" )))
 		return true;
+	// The main menu level whatever the game mode: after picking Story the
+	// mode is already career while the memory card check and the load run
+	// (Marcus: the skater still moved there).
+	if( sk->m_cur_level == 0x9f2bafb7 /* load_skateshop */ )
+		return true;
 	Game::CGameMode *m = sk->GetGameMode();
 	return m && m->IsFrontEnd();
 }
