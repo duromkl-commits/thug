@@ -1270,9 +1270,7 @@ static const char *s_demented_scripts =
 	"if ( <k> = 3 )\n"
 	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
-	"SetTrickName <name>\n"
-	"SetTrickScore 1000\n"
-	"Display\n"
+	// the points come from trickcomponent.cpp (no trick name of its own)
 	"begin\n"
 	"if NOT InAir\n"
 	"CancelRotateDisplay\n"

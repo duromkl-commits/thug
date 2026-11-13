@@ -3097,7 +3097,23 @@ void CTrickComponent::DesktopAirFlips()
 			Script::CStruct p;
 			p.AddInteger( Script::GenerateCRC( "k" ), k );
 			p.AddString( CRCD(0xa1dc81f9, "name"), s_noms[k] );
-			// 1000 each as in THUG2; the combo's repeat penalty makes spam worth less
+			// 1000 each as in THUG2; the combo's repeat penalty makes spam worth less.
+			// Marcus: not a trick of its own in the combo text, so no SetTrickName /
+			// Display (that took over the trick in progress: a special's name and
+			// its special colour). An unnamed trick only adds points to the combo,
+			// like the grind shuffle bonus; blocking, so it doesn't take the spin.
+			if ( GetSkater()->IsLocalClient() )
+			{
+				Mdl::Score *pScore = GetScoreObject();
+				if ( pScore )
+				{
+					char vide[1] = { 0 };
+					Mdl::Score::Flags f = Mdl::Score::vBLOCKING;
+					if ( mp_skater_core_physics_component->IsSwitched() ) f |= Mdl::Score::vSWITCH;
+					pScore->Trigger( vide, 1000, f );
+					mTallyAngles = 0.0f;	// as Display BlockSpin: the next trick starts its own spin
+				}
+			}
 			GetObject()->SpawnScriptPlease( Script::GenerateCRC( "desktop_air_flip" ), &p );
 			m_flip_fin = now + DUREE;
 			s_flip_en_cours = true;
