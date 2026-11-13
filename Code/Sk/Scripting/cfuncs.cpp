@@ -10590,13 +10590,37 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
 // @uparmopt time | the amount of time to display loading bar (default is 0, meaning no loading bar)
 // @flag Freeze | just freeze current screen
 // @flag Blank | clear screen to black
+#ifdef THUG_DESKTOP
+bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *)
+{
+	static bool checked = false;
+	if (checked)
+		return false;
+	checked = true;
+	return true;
+}
+
+#endif
+
 bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	
 	const char	*pScreen = "images\\xxxxx";	
 	pParams->GetText(NONAME,&pScreen);
 	
-	Nx::CLoadScreen::sDisplay( (char*) pScreen, pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze")),pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank")));
+	const bool freeze = pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze"));
+	const bool blank = pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank"));
+#ifdef THUG_DESKTOP
+	if (!freeze && !blank && !Config::Bootstrap())
+	{
+		const bool level_change = pScript && pScript->RefersToScript(Script::GenerateCRC("load_level"));
+		const bool frontend = level_change && Mdl::Skate::Instance()->m_requested_level ==
+			Script::GenerateCRC("load_skateshop");
+		Nx::CLoadScreen::sDesktopDisplay(pScreen, level_change, frontend);
+		return true;
+	}
+#endif
+	Nx::CLoadScreen::sDisplay(pScreen, freeze, blank);
 
 	float duration;
 	if (pParams->GetFloat(NONAME,&duration))

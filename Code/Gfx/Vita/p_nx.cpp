@@ -22,6 +22,9 @@ extern "C" int desktop_ecran_43( void );
 #include <float.h>
 #include <stdlib.h>
 #include <gfx/nx.h>
+#ifdef THUG_DESKTOP
+#include <gfx/NxLoadScreen.h>
+#endif
 #include <gfx/nxtexman.h>
 #include <gfx/nxviewman.h>
 #include <gfx/nxsector.h>
@@ -574,6 +577,12 @@ extern "C" void vita_vgl_init_tot( void )
 		  res_fallback ? "resolution rabaissee" : "resolution accordee" );
 	VLOG( "GFX", "GL_VERSION=%s", (const char *)glGetString( GL_VERSION ));
 
+#ifdef THUG_DESKTOP
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	vglSwapBuffers(GL_FALSE);
+	CLoadScreen::sDesktopBeginBoot();
+#else
 	// Ecran de lancement (vita/src/vita_ecran_boot.c) : l'image de pic0 reste
 	// a l'ecran pendant le demarrage du moteur. A defaut, l'ancien effacement.
 	if( !vita_ecran_boot())
@@ -582,6 +591,7 @@ extern "C" void vita_vgl_init_tot( void )
 		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 		vglSwapBuffers( GL_FALSE );
 	}
+#endif
 
 }
 
@@ -750,7 +760,11 @@ void	CEngine::s_plat_pre_render()
 	NxVita::OmbreCarteRendu();
 	ACC( ACC_OMBRE );
 	NxVita::GammaImageDebut();
+#ifdef THUG_DESKTOP
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#else
 	glClearColor( 0.45f, 0.05f, 0.65f, 1.0f );
+#endif
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	g_vita_image_ouverte = true;	// #48
 	vita_glspy_ouverte = 1; vita_glspy_phase = 1;

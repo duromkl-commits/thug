@@ -71,7 +71,7 @@ set(DESKTOP_SOURCES
 )
 
 if(WIN32)
-  list(APPEND DESKTOP_SOURCES src/win_main.cpp)
+  list(APPEND DESKTOP_SOURCES src/win_main.cpp src/thug_icon.rc)
 endif()
 
 add_executable(thug ${THUG_SOURCES} ${DESKTOP_SOURCES})

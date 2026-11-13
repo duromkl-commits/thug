@@ -55,6 +55,9 @@
 
 #include <gfx/gfxman.h>
 #include <gfx/nx.h>
+#ifdef THUG_DESKTOP
+#include <gfx/NxLoadScreen.h>
+#endif
 #include <gfx/nxmiscfx.h>
 #include <gfx/nxparticlemgr.h>
 
@@ -309,7 +312,12 @@ void		Skate::v_start_cb ( void )
     #ifdef __PLAT_VITA__
 	VLOG( "SKATE", ">> startup_loading_screen" );
 #endif
-	Script::RunScript("startup_loading_screen");
+#ifdef THUG_DESKTOP
+	if (Config::CD() && !Config::Bootstrap())
+		Nx::CLoadScreen::sDesktopBoot();
+	else
+#endif
+		Script::RunScript("startup_loading_screen");
 #ifdef __PLAT_VITA__
 	VLOG( "SKATE", "<< startup_loading_screen ok" );
 #endif

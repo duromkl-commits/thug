@@ -3031,14 +3031,14 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
 // Down = back flip, Left / Right = a roll. desktop_air_flip (custom_music.cpp)
 // turns the body and scores it; landing before it comes round is a bail.
 // The flip in progress (local skater): Land asks DesktopAirFlipBail whether
-// it lands too early. Marcus: 0.7 s, and a little grace at the end so a
+// it lands too early. Marcus: 0.8 s, and a little grace at the end so a
 // flip that's basically round (then a revert) isn't a bail. Grinds, lips
 // and wallrides take it mid-flip and end it.
 static bool s_flip_en_cours = false;
 static bool s_air_trick = false;	// a flip or grab trick done on this jump
 extern "C" void desktop_air_trick_mark( void ) { s_air_trick = true; }
 static Tmr::Time s_flip_debut = 0;
-static const Tmr::Time FLIP_DUREE = 700, FLIP_GRACE = 560;	// round enough after 80%
+static const Tmr::Time FLIP_DUREE = 800, FLIP_GRACE = 640;	// round enough after 80%
 
 // DesktopAirFlipBail (desktop_extras_glue.cpp): landed too early? (clears it)
 extern "C" int desktop_air_flip_bail( void )
@@ -3076,7 +3076,7 @@ void CTrickComponent::DesktopAirFlips()
 		const int k = d == PAD_U ? 0 : d == PAD_D ? 1 : d == PAD_L ? 2 : 3;
 		// THUG2: a roll needs a flip or grab trick going, not just an ollie
 		// (flips too): FlipTrick / GrabTrick mark it (desktop_air_trick_mark)
-		const bool permis = s_air_trick;
+		const bool permis = s_air_trick && (input_mask & (Inp::Data::mA_SQUARE | Inp::Data::mA_CIRCLE));
 		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin && permis )
 		{
 			static const char *s_noms[4] = { "Front Flip", "Back Flip", "Left Roll", "Right Roll" };

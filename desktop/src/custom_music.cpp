@@ -1255,20 +1255,20 @@ static const char *s_demented_scripts =
 	"endif\n"
 	"endscript\n"
 	// THUG2-style flips and rolls (trickcomponent.cpp spawns it on a double tap in
-	// the air): the body goes round once in 0.7 s, 1000 points each (Marcus). Landing
+	// the air): the body goes round once in 0.8 s, 1000 points each (Marcus). Landing
 	// too early is a bail (Land asks DesktopAirFlipBail); a rail, lip or wall ends it
 	"script desktop_air_flip k = 0 name = \"Front Flip\"\n"
 	"if ( <k> = 0 )\n"
-	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 1 )\n"
-	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 2 )\n"
-	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 3 )\n"
-	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"SetTrickName <name>\n"
 	"SetTrickScore 1000\n"
@@ -1717,7 +1717,7 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 			m.push_back( Modif{ j[b].pos, 0, w1.o } );
 			if( f ) { Ecrit w4; compile_q( w4, "endif\n" ); m.push_back( Modif{ j[f].pos, 0, w4.o } ); }
 		}
-		const uint32_t caches[] = { crc( "menu_cas" ), crc( "menu_retry_goal" ), crc( "menu_end_current_goal" ), crc( "menu_chapters" ), crc( "menu_skip_to_gap" ) };	// + View Gaps (Marcus)
+		const uint32_t caches[] = { crc( "menu_cas" ), crc( "menu_retry_goal" ), crc( "menu_end_current_goal" ), crc( "menu_chapters" ), crc( "menu_skip_to_gap" ), crc( "menu_save_game" ) };	// + View Gaps (Marcus)
 		const uint32_t props = crc( "SetScreenElementProps" );
 		int nb = 0;
 		for( size_t e = k + 2; e + 2 < fin_; ++e )
@@ -2859,6 +2859,26 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		for( size_t i = 0; i < sizeof( son ) / sizeof( son[0] ); ++i ) wrap_lignes( qb, j, m, son[i], "PauseMusic", NULL );
 	}
 	patch_histoire( qb, j, m );
+	// Use the existing save selection with the desktop filesystem-backed card.
+	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
+		"if DesktopFirstSaveCheck\n"
+		"change DoAutoload = 0\n"
+		"SpawnScript wait_and_pause_skater params = { time = 1 }\n"
+		"CheckForCardOnBootup\n"
+		"return\nendif\nchange DoAutoload = 0\n" );
+	patch_debut(qb, j, m, "create_main_menu", "change attempted_xbox_autoload = 1\n");
+	patch_debut(qb, j, m, "xbox_autoload_message",
+		"change attempted_xbox_autoload = 1\nlaunch_main_menu\nreturn\n");
+	patch_debut( qb, j, m, "career_autoload_launch_current_level",
+		"change show_career_startup_menu = 1\n" );
+	patch_debut( qb, j, m, "mcmess_CheckingCard",
+		"create_dialog_box_with_wait { title = \"Checking ...\" text_dims = (256.0, 0.0)\n"
+		"text = \"Checking memory card (8MB) (for PlayStation 2) in MEMORY CARD slot 1. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
+		"add_loading_anim = add_loading_anim no_bg = <no_bg> }\nreturn\n" );
+	patch_debut( qb, j, m, "mcmess_LoadingData",
+		"create_dialog_box_with_wait { title = \"Loading ...\" text_dims = (256.0, 0.0)\n"
+		"text = \"Loading data. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
+		"add_loading_anim = add_loading_anim }\nno_animate = <no_animate>\nreturn\n" );
 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
 	// flips/rolls landed before they come round bail (trickcomponent.cpp)
 	patch_debut( qb, j, m, "Land", "if DesktopAirFlipBail\nGoto DoingTrickBail\nendif\n" );

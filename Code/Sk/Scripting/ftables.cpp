@@ -683,6 +683,7 @@ SCFunction CFunctionLookupTable[]=
 	{"DesktopSelectSkater",		CFuncs::ScriptDesktopSelectSkater},
 	{"DesktopAddModelItems",	CFuncs::ScriptDesktopAddModelItems},
 	{"DesktopQuitGame",			CFuncs::ScriptDesktopQuitGame},
+	{"DesktopFirstSaveCheck", CFuncs::ScriptDesktopFirstSaveCheck},
 	{"DesktopZeroArm",			CFuncs::ScriptDesktopZeroArm},
 	{"DesktopAirFlipBail",		CFuncs::ScriptDesktopAirFlipBail},
 	{"DesktopAirTrickMark",		CFuncs::ScriptDesktopAirTrickMark},

@@ -7814,6 +7814,18 @@ void CSkaterCorePhysicsComponent::ollie_off_rail_rotate (   )
 	}
 	else return;
 
+#ifdef THUG_DESKTOP
+	// Give a directed stall exit enough horizontal motion to steer.
+	if (GetState() == RAIL && m_desk_stall)
+	{
+		Mth::Vector along(GetVel()[X], 0.0f, GetVel()[Z]);
+		if (along.LengthSqr() > 0.0f)
+		{
+			along.Normalize();
+			GetVel() += along * GetPhysicsFloat(CRCD(0x457bb395, "Rail_Speed_Boost"));
+		}
+	}
+#endif
 	GetVel().RotateY(rot);		 
 	GetMatrix().RotateYLocal(rot);				
 	m_lerping_display_matrix.RotateYLocal(rot);				
