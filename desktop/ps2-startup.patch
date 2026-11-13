@@ -1,118 +1,49 @@
-diff --git a/Code/Gel/Components/trickcomponent.cpp b/Code/Gel/Components/trickcomponent.cpp
-index 7592e0a..3e4052d 100644
---- a/Code/Gel/Components/trickcomponent.cpp
-+++ b/Code/Gel/Components/trickcomponent.cpp
-@@ -3031,14 +3031,14 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
- // Down = back flip, Left / Right = a roll. desktop_air_flip (custom_music.cpp)
- // turns the body and scores it; landing before it comes round is a bail.
- // The flip in progress (local skater): Land asks DesktopAirFlipBail whether
--// it lands too early. Marcus: 0.7 s, and a little grace at the end so a
-+// it lands too early. Marcus: 0.8 s, and a little grace at the end so a
- // flip that's basically round (then a revert) isn't a bail. Grinds, lips
- // and wallrides take it mid-flip and end it.
- static bool s_flip_en_cours = false;
- static bool s_air_trick = false;	// a flip or grab trick done on this jump
- extern "C" void desktop_air_trick_mark( void ) { s_air_trick = true; }
- static Tmr::Time s_flip_debut = 0;
--static const Tmr::Time FLIP_DUREE = 700, FLIP_GRACE = 560;	// round enough after 80%
-+static const Tmr::Time FLIP_DUREE = 800, FLIP_GRACE = 640;	// round enough after 80%
- 
- // DesktopAirFlipBail (desktop_extras_glue.cpp): landed too early? (clears it)
- extern "C" int desktop_air_flip_bail( void )
-@@ -3076,7 +3076,7 @@ void CTrickComponent::DesktopAirFlips()
- 		const int k = d == PAD_U ? 0 : d == PAD_D ? 1 : d == PAD_L ? 2 : 3;
- 		// THUG2: a roll needs a flip or grab trick going, not just an ollie
- 		// (flips too): FlipTrick / GrabTrick mark it (desktop_air_trick_mark)
--		const bool permis = s_air_trick;
-+		const bool permis = s_air_trick && (input_mask & (Inp::Data::mA_SQUARE | Inp::Data::mA_CIRCLE));
- 		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin && permis )
- 		{
- 			static const char *s_noms[4] = { "Front Flip", "Back Flip", "Left Roll", "Right Roll" };
 diff --git a/Code/Gfx/NxLoadScreen.h b/Code/Gfx/NxLoadScreen.h
-index 182acdc..2eedce2 100644
+index 182acdca14dcf4f2b4672791aac75eaad198416b..2eedce2b33d72e0c0e02d311ec789a612ebf0844 100644
 --- a/Code/Gfx/NxLoadScreen.h
 +++ b/Code/Gfx/NxLoadScreen.h
-@@ -19,6 +19,12 @@ public:
- 	static void					sStartLoadingBar(float seconds);
- 	static void					sHide();
- 	static bool					sIsActive() { return s_active; }
+@@ -21,0 +22,6 @@ public:
 +#ifdef THUG_DESKTOP
 +	static void					sDesktopDrawBar();
 +	static void					sDesktopBeginBoot();
 +	static void					sDesktopBoot();
 +	static void					sDesktopDisplay(const char *filename, bool level_change, bool returning_to_menu);
 +#endif
- 
- 	static void					sSetLoadingBarPos(int x, int y);
- 	static void					sSetLoadingBarSize(int width, int height);
 diff --git a/Code/Gfx/Vita/p_nx.cpp b/Code/Gfx/Vita/p_nx.cpp
-index 6ef1d75..bbfe154 100644
+index 6ef1d75c656c3e5cd7f253e5d6acf69adc047756..bbfe154287b7bb737f703d297fef65b9e025f78b 100644
 --- a/Code/Gfx/Vita/p_nx.cpp
 +++ b/Code/Gfx/Vita/p_nx.cpp
-@@ -22,6 +22,9 @@ extern "C" int desktop_ecran_43( void );
- #include <float.h>
- #include <stdlib.h>
- #include <gfx/nx.h>
+@@ -24,0 +25,3 @@ extern "C" int desktop_ecran_43( void );
 +#ifdef THUG_DESKTOP
 +#include <gfx/NxLoadScreen.h>
 +#endif
- #include <gfx/nxtexman.h>
- #include <gfx/nxviewman.h>
- #include <gfx/nxsector.h>
-@@ -574,6 +577,12 @@ extern "C" void vita_vgl_init_tot( void )
- 		  res_fallback ? "resolution rabaissee" : "resolution accordee" );
- 	VLOG( "GFX", "GL_VERSION=%s", (const char *)glGetString( GL_VERSION ));
- 
+@@ -576,0 +580,6 @@ extern "C" void vita_vgl_init_tot( void )
 +#ifdef THUG_DESKTOP
 +	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 +	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 +	vglSwapBuffers(GL_FALSE);
 +	CLoadScreen::sDesktopBeginBoot();
 +#else
- 	// Ecran de lancement (vita/src/vita_ecran_boot.c) : l'image de pic0 reste
- 	// a l'ecran pendant le demarrage du moteur. A defaut, l'ancien effacement.
- 	if( !vita_ecran_boot())
-@@ -582,6 +591,7 @@ extern "C" void vita_vgl_init_tot( void )
- 		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
- 		vglSwapBuffers( GL_FALSE );
- 	}
+@@ -584,0 +594 @@ extern "C" void vita_vgl_init_tot( void )
 +#endif
- 
- }
- 
-@@ -750,7 +760,11 @@ void	CEngine::s_plat_pre_render()
- 	NxVita::OmbreCarteRendu();
- 	ACC( ACC_OMBRE );
- 	NxVita::GammaImageDebut();
+@@ -752,0 +763,3 @@ void	CEngine::s_plat_pre_render()
 +#ifdef THUG_DESKTOP
 +	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 +#else
- 	glClearColor( 0.45f, 0.05f, 0.65f, 1.0f );
+@@ -753,0 +767 @@ void	CEngine::s_plat_pre_render()
 +#endif
- 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
- 	g_vita_image_ouverte = true;	// #48
- 	vita_glspy_ouverte = 1; vita_glspy_phase = 1;
 diff --git a/Code/Gfx/Vita/p_nx_managers.cpp b/Code/Gfx/Vita/p_nx_managers.cpp
-index 7f5994f..b9dd54f 100644
+index 7f5994f05388e9e4a4e6b5629af3f8b364e0d118..b9dd54f8b1d85112994291bf778160e00e6a42a1 100644
 --- a/Code/Gfx/Vita/p_nx_managers.cpp
 +++ b/Code/Gfx/Vita/p_nx_managers.cpp
-@@ -24,6 +24,12 @@
- #include "p_NxFont.h"
- 
- #include <vitaGL.h>
+@@ -26,0 +27,6 @@
 +#ifdef THUG_DESKTOP
 +#include <SDL.h>
 +#include <cstring>
 +extern "C" void desktop_pump_events();
 +extern "C" int desktop_play_movie(const char *name, float volume);
 +#endif
- 
- #include "p_NxLight.h"
- #include "p_shader_decor.h"
-@@ -162,6 +168,42 @@ void	CFog::s_plat_fog_update(void)
- // moteur appelle s_plat_display une fois, puis charge plusieurs secondes sans
- // jamais repasser par ici.
- static Nx::CVitaTexture *sp_load_screen = NULL;
+@@ -164,0 +171,36 @@ static Nx::CVitaTexture *sp_load_screen = NULL;
 +#ifdef THUG_DESKTOP
 +static Uint32 s_boot_started;
 +static Uint32 s_bar_started;
@@ -149,34 +80,16 @@ index 7f5994f..b9dd54f 100644
 +	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 +}
 +#endif
- 
- 
- // Dessine la texture courante en plein ecran. Separee de la presentation pour
-@@ -210,6 +252,10 @@ static void dessine_ecran_chargement( void )
- 	glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
- 
- 	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+@@ -212,0 +255,4 @@ static void dessine_ecran_chargement( void )
 +#ifdef THUG_DESKTOP
 +	if (s_bar_duration)
 +		CLoadScreen::sDesktopDrawBar();
 +#endif
- 	glDisableClientState( GL_VERTEX_ARRAY );
- 
- 	// Etat restitue : poser un etat GL sans le rendre se paie chez le voisin,
-@@ -248,6 +294,9 @@ void	CLoadScreen::s_plat_display(const char *filename, bool just_freeze, bool bl
- 
- 	if( blank || !filename )
- 	{
+@@ -250,0 +297,3 @@ void	CLoadScreen::s_plat_display(const char *filename, bool just_freeze, bool bl
 +#ifdef THUG_DESKTOP
 +		s_plat_hide();
 +#endif
- 		glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
- 		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
- 		vglSwapBuffers( GL_FALSE );
-@@ -294,8 +343,118 @@ void	CLoadScreen::s_plat_display(const char *filename, bool just_freeze, bool bl
- 
- void	CLoadScreen::s_plat_start_loading_bar(float seconds)
- {
+@@ -296,0 +346,7 @@ void	CLoadScreen::s_plat_start_loading_bar(float seconds)
 +#ifdef THUG_DESKTOP
 +	if (!sp_load_screen)
 +		return;
@@ -184,7 +97,7 @@ index 7f5994f..b9dd54f 100644
 +	s_bar_duration = static_cast<Uint32>(seconds * 1000.0f + 0.5f);
 +	s_bar_started = SDL_GetTicks();
 +#else
- 	VITA_STUB();
+@@ -297,0 +354,102 @@ void	CLoadScreen::s_plat_start_loading_bar(float seconds)
 +#endif
 +}
 +
@@ -287,68 +200,24 @@ index 7f5994f..b9dd54f 100644
 +	sDisplay(filename, false, false);
 +	sStartLoadingBar((level ? loading_duration(8, 17) : loading_duration(3, 10)) / 1000.0f);
 +	wait_for_loading_bar();
- }
+@@ -298,0 +457 @@ void	CLoadScreen::s_plat_start_loading_bar(float seconds)
 +#endif
- 
- void	CLoadScreen::s_plat_hide()
- {
-@@ -315,10 +474,15 @@ void	CLoadScreen::s_plat_clear()
- {
- 	VITA_STUB();
- 
+@@ -317,0 +477,4 @@ void	CLoadScreen::s_plat_clear()
 +#ifdef THUG_DESKTOP
 +	s_bar_duration = 0;
 +	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 +#else
- 	// Premier vrai rendu du portage : effacer le framebuffer.
- 	// Bleu nuit plutot que noir, pour distinguer �� le moteur efface �� de
- 	// �� rien ne se passe �� ? un ecran noir est ambigu.
- 	glClearColor( 0.0f, 0.0f, 0.25f, 1.0f );
+@@ -321,0 +485 @@ void	CLoadScreen::s_plat_clear()
 +#endif
- 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
- }
- 
-diff --git a/Code/Sk/Components/SkaterCorePhysicsComponent.cpp b/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
-index e88e692..e2b4743 100644
---- a/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
-+++ b/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
-@@ -7814,6 +7814,18 @@ void CSkaterCorePhysicsComponent::ollie_off_rail_rotate (   )
- 	}
- 	else return;
- 
-+#ifdef THUG_DESKTOP
-+	// Give a directed stall exit enough horizontal motion to steer.
-+	if (GetState() == RAIL && m_desk_stall)
-+	{
-+		Mth::Vector along(GetVel()[X], 0.0f, GetVel()[Z]);
-+		if (along.LengthSqr() > 0.0f)
-+		{
-+			along.Normalize();
-+			GetVel() += along * GetPhysicsFloat(CRCD(0x457bb395, "Rail_Speed_Boost"));
-+		}
-+	}
-+#endif
- 	GetVel().RotateY(rot);		 
- 	GetMatrix().RotateYLocal(rot);				
- 	m_lerping_display_matrix.RotateYLocal(rot);				
 diff --git a/Code/Sk/Modules/Skate/skate.cpp b/Code/Sk/Modules/Skate/skate.cpp
-index 5fe7411..5463bfe 100644
+index 5fe7411b43be0bbb2e186e4d997367359f30d344..5463bfea0a84b443a084ce93beccbda22242e81c 100644
 --- a/Code/Sk/Modules/Skate/skate.cpp
 +++ b/Code/Sk/Modules/Skate/skate.cpp
-@@ -55,6 +55,9 @@
- 
- #include <gfx/gfxman.h>
- #include <gfx/nx.h>
+@@ -57,0 +58,3 @@
 +#ifdef THUG_DESKTOP
 +#include <gfx/NxLoadScreen.h>
 +#endif
- #include <gfx/nxmiscfx.h>
- #include <gfx/nxparticlemgr.h>
- 
-@@ -309,7 +312,12 @@ void		Skate::v_start_cb ( void )
-     #ifdef __PLAT_VITA__
- 	VLOG( "SKATE", ">> startup_loading_screen" );
- #endif
+@@ -312 +315,6 @@ void		Skate::v_start_cb ( void )
 -	Script::RunScript("startup_loading_screen");
 +#ifdef THUG_DESKTOP
 +	if (Config::CD() && !Config::Bootstrap())
@@ -356,17 +225,11 @@ index 5fe7411..5463bfe 100644
 +	else
 +#endif
 +		Script::RunScript("startup_loading_screen");
- #ifdef __PLAT_VITA__
- 	VLOG( "SKATE", "<< startup_loading_screen ok" );
- #endif
 diff --git a/Code/Sk/Scripting/cfuncs.cpp b/Code/Sk/Scripting/cfuncs.cpp
-index 142185c..5b9cbe9 100644
+index 142185c22bcccdebd9546d08a5ac7f5a7be38642..5b9cbe903a7f14521f77a77b2dba440236bcc30f 100644
 --- a/Code/Sk/Scripting/cfuncs.cpp
 +++ b/Code/Sk/Scripting/cfuncs.cpp
-@@ -10590,13 +10590,37 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
- // @uparmopt time | the amount of time to display loading bar (default is 0, meaning no loading bar)
- // @flag Freeze | just freeze current screen
- // @flag Blank | clear screen to black
+@@ -10592,0 +10593,12 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
 +#ifdef THUG_DESKTOP
 +bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *)
 +{
@@ -379,12 +242,7 @@ index 142185c..5b9cbe9 100644
 +
 +#endif
 +
- bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript )
- {
- 	
- 	const char	*pScreen = "images\\xxxxx";	
- 	pParams->GetText(NONAME,&pScreen);
- 	
+@@ -10599 +10611,13 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
 -	Nx::CLoadScreen::sDisplay( (char*) pScreen, pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze")),pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank")));
 +	const bool freeze = pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze"));
 +	const bool blank = pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank"));
@@ -399,91 +257,43 @@ index 142185c..5b9cbe9 100644
 +	}
 +#endif
 +	Nx::CLoadScreen::sDisplay(pScreen, freeze, blank);
- 
- 	float duration;
- 	if (pParams->GetFloat(NONAME,&duration))
 diff --git a/Code/Sk/Scripting/cfuncs.h b/Code/Sk/Scripting/cfuncs.h
-index 689a716..fe08625 100644
+index 689a7162c364d97b37b0989f0fe5e2c8417ec4a0..fe08625662d284f8c77e8e4c9b1a7d7b74006549 100644
 --- a/Code/Sk/Scripting/cfuncs.h
 +++ b/Code/Sk/Scripting/cfuncs.h
-@@ -339,6 +339,9 @@ bool ScriptSetCurrentGameType( Script::CStruct *pParams, Script::CScript *pScrip
- bool ScriptDumpNetMessageStats( Script::CStruct *pParams, Script::CScript *pScript );
- bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript );
- bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript );
+@@ -341,0 +342,3 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
 +#ifdef THUG_DESKTOP
 +bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *);
 +#endif
- bool ScriptHideLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript );
- bool ScriptObserveNextSkater( Script::CStruct *pParams, Script::CScript *pScript );
- bool ScriptPrintMemInfo( Script::CStruct *pParams, Script::CScript *pScript );
 diff --git a/Code/Sk/Scripting/ftables.cpp b/Code/Sk/Scripting/ftables.cpp
-index 35e3dab..0141dd6 100644
+index 35e3dab2e8df1c3b5b8c161c5f2d7e502470f22e..0141dd64f3df6a1f475b838af6549c052b8037a3 100644
 --- a/Code/Sk/Scripting/ftables.cpp
 +++ b/Code/Sk/Scripting/ftables.cpp
-@@ -683,6 +683,7 @@ SCFunction CFunctionLookupTable[]=
- 	{"DesktopSelectSkater",		CFuncs::ScriptDesktopSelectSkater},
- 	{"DesktopAddModelItems",	CFuncs::ScriptDesktopAddModelItems},
- 	{"DesktopQuitGame",			CFuncs::ScriptDesktopQuitGame},
+@@ -685,0 +686 @@ SCFunction CFunctionLookupTable[]=
 +	{"DesktopFirstSaveCheck", CFuncs::ScriptDesktopFirstSaveCheck},
- 	{"DesktopZeroArm",			CFuncs::ScriptDesktopZeroArm},
- 	{"DesktopAirFlipBail",		CFuncs::ScriptDesktopAirFlipBail},
- 	{"DesktopAirTrickMark",		CFuncs::ScriptDesktopAirTrickMark},
-diff --git a/desktop/CMakeLists.txt b/desktop/CMakeLists.txt
-index 7bf26eb..f7f44ce 100644
---- a/desktop/CMakeLists.txt
-+++ b/desktop/CMakeLists.txt
-@@ -71,7 +71,7 @@ set(DESKTOP_SOURCES
- )
- 
- if(WIN32)
--  list(APPEND DESKTOP_SOURCES src/win_main.cpp)
-+  list(APPEND DESKTOP_SOURCES src/win_main.cpp src/thug_icon.rc)
- endif()
- 
- add_executable(thug ${THUG_SOURCES} ${DESKTOP_SOURCES})
 diff --git a/desktop/src/custom_music.cpp b/desktop/src/custom_music.cpp
-index 7375008..df1baf5 100644
+index 73750081d47bf2c8f38e17c7acae9f5f9c0582fa..c4233c11d4ae1648d7e61d4dea793d6e4629d8e2 100644
 --- a/desktop/src/custom_music.cpp
 +++ b/desktop/src/custom_music.cpp
-@@ -1255,20 +1255,20 @@ static const char *s_demented_scripts =
- 	"endif\n"
- 	"endscript\n"
- 	// THUG2-style flips and rolls (trickcomponent.cpp spawns it on a double tap in
+@@ -1258 +1258 @@ static const char *s_demented_scripts =
 -	// the air): the body goes round once in 0.7 s, 1000 points each (Marcus). Landing
 +	// the air): the body goes round once in 0.8 s, 1000 points each (Marcus). Landing
- 	// too early is a bail (Land asks DesktopAirFlipBail); a rail, lip or wall ends it
- 	"script desktop_air_flip k = 0 name = \"Front Flip\"\n"
- 	"if ( <k> = 0 )\n"
+@@ -1262 +1262 @@ static const char *s_demented_scripts =
 -	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
 +	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
- 	"endif\n"
- 	"if ( <k> = 1 )\n"
+@@ -1265 +1265 @@ static const char *s_demented_scripts =
 -	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
 +	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
- 	"endif\n"
- 	"if ( <k> = 2 )\n"
+@@ -1268 +1268 @@ static const char *s_demented_scripts =
 -	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
 +	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
- 	"endif\n"
- 	"if ( <k> = 3 )\n"
+@@ -1271 +1271 @@ static const char *s_demented_scripts =
 -	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
 +	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
- 	"endif\n"
- 	"SetTrickName <name>\n"
- 	"SetTrickScore 1000\n"
-@@ -1717,7 +1717,7 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
- 			m.push_back( Modif{ j[b].pos, 0, w1.o } );
- 			if( f ) { Ecrit w4; compile_q( w4, "endif\n" ); m.push_back( Modif{ j[f].pos, 0, w4.o } ); }
- 		}
+@@ -1720 +1720 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
 -		const uint32_t caches[] = { crc( "menu_cas" ), crc( "menu_retry_goal" ), crc( "menu_end_current_goal" ), crc( "menu_chapters" ), crc( "menu_skip_to_gap" ) };	// + View Gaps (Marcus)
 +		const uint32_t caches[] = { crc( "menu_cas" ), crc( "menu_retry_goal" ), crc( "menu_end_current_goal" ), crc( "menu_chapters" ), crc( "menu_skip_to_gap" ), crc( "menu_save_game" ) };	// + View Gaps (Marcus)
- 		const uint32_t props = crc( "SetScreenElementProps" );
- 		int nb = 0;
- 		for( size_t e = k + 2; e + 2 < fin_; ++e )
-@@ -2861,6 +2861,26 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
- 		for( size_t i = 0; i < sizeof( son ) / sizeof( son[0] ); ++i ) wrap_lignes( qb, j, m, son[i], "PauseMusic", NULL );
- 	}
- 	patch_histoire( qb, j, m );
+@@ -2863,0 +2864,20 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 +	// Use the existing save selection with the desktop filesystem-backed card.
 +	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
 +		"if DesktopFirstSaveCheck\n"
@@ -504,7 +314,41 @@ index 7375008..df1baf5 100644
 +		"create_dialog_box_with_wait { title = \"Loading ...\" text_dims = (256.0, 0.0)\n"
 +		"text = \"Loading data. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
 +		"add_loading_anim = add_loading_anim }\nno_animate = <no_animate>\nreturn\n" );
- 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
- 	// flips/rolls landed before they come round bail (trickcomponent.cpp)
- 	patch_debut( qb, j, m, "Land", "if DesktopAirFlipBail\nGoto DoingTrickBail\nendif\n" );
+diff --git a/desktop/CMakeLists.txt b/desktop/CMakeLists.txt
+index 7bf26eb08447d7cb6b6331c54599824b75dfb89c..f7f44ceb74dda59f38c27f3f787c4dbd47fdd41f 100644
+--- a/desktop/CMakeLists.txt
++++ b/desktop/CMakeLists.txt
+@@ -74 +74 @@ if(WIN32)
+-  list(APPEND DESKTOP_SOURCES src/win_main.cpp)
++  list(APPEND DESKTOP_SOURCES src/win_main.cpp src/thug_icon.rc)
+diff --git a/Code/Gel/Components/trickcomponent.cpp b/Code/Gel/Components/trickcomponent.cpp
+index 7592e0aafeafb20a9fc89d4bdbcfff25894f9ba2..3e4052d0585739afcb0dd74fc11a8cf213b5ad41 100644
+--- a/Code/Gel/Components/trickcomponent.cpp
++++ b/Code/Gel/Components/trickcomponent.cpp
+@@ -3034 +3034 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
+-// it lands too early. Marcus: 0.7 s, and a little grace at the end so a
++// it lands too early. Marcus: 0.8 s, and a little grace at the end so a
+@@ -3041 +3041 @@ static Tmr::Time s_flip_debut = 0;
+-static const Tmr::Time FLIP_DUREE = 700, FLIP_GRACE = 560;	// round enough after 80%
++static const Tmr::Time FLIP_DUREE = 800, FLIP_GRACE = 640;	// round enough after 80%
+@@ -3079 +3079 @@ void CTrickComponent::DesktopAirFlips()
+-		const bool permis = s_air_trick;
++		const bool permis = s_air_trick && (input_mask & (Inp::Data::mA_SQUARE | Inp::Data::mA_CIRCLE));
+diff --git a/Code/Sk/Components/SkaterCorePhysicsComponent.cpp b/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
+index e88e692f8c4e88eda472d47c8e31a0ee9141cb33..e2b47430be4f7a7b685e47edd3242d8015d9c48a 100644
+--- a/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
++++ b/Code/Sk/Components/SkaterCorePhysicsComponent.cpp
+@@ -7816,0 +7817,12 @@ void CSkaterCorePhysicsComponent::ollie_off_rail_rotate (   )
++#ifdef THUG_DESKTOP
++	// Give a directed stall exit enough horizontal motion to steer.
++	if (GetState() == RAIL && m_desk_stall)
++	{
++		Mth::Vector along(GetVel()[X], 0.0f, GetVel()[Z]);
++		if (along.LengthSqr() > 0.0f)
++		{
++			along.Normalize();
++			GetVel() += along * GetPhysicsFloat(CRCD(0x457bb395, "Rail_Speed_Boost"));
++		}
++	}
++#endif
 
