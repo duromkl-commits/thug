@@ -438,13 +438,9 @@ void CLoadScreen::sDesktopDisplay(const char *filename, bool level_change, bool 
 	s_boot_loading = false;
 	if (boot_frontend)
 		return;
-	if (returning_to_menu)
-	{
-		sDisplay(filename, false, false);
-		return;
-	}
-
-	const bool level = level_change && !main_menu;
+	// Back to the main menu is a level load like any other (Marcus: it was
+	// near instant): same 8-17 s bar.
+	const bool level = returning_to_menu || ( level_change && !main_menu );
 	if (!level)
 	{
 		sDisplay(NULL, false, true);
