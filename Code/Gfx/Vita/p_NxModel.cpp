@@ -523,8 +523,15 @@ static bool passe_decal( const NxVita::SVitaMesh *p_src, int k, SPasseDecal *d )
 
 static bool passe_k_dessinable( const NxVita::SVitaMesh *p_src, int k, CTexDict *p_tex_dict )
 {
+#ifdef THUG_DESKTOP
+	// Rigid models too (vehicles: their decals, drawn with the base's
+	// vertices, see vbo_partage).
+	if( !p_tex_dict )
+		return false;
+#else
 	if( !p_tex_dict || !p_src->p_weights || !p_src->p_bones )
 		return false;
+#endif
 	if( p_src->num_passes < (unsigned int)( k + 1 ))
 		return false;
 	SPasseDecal d;
@@ -535,8 +542,15 @@ static bool passe_k_dessinable( const NxVita::SVitaMesh *p_src, int k, CTexDict 
 		return false;
 	// Passe 2 : seulement par-dessus une passe 1 BLEND dessinee, le cas du
 	// CAS (tatouages, logos, calques) -- pas de saut de passe a interpreter.
+#ifdef THUG_DESKTOP
+	// ...or over a passe 1 reflection (environment map): the car bodies are
+	// paint, chrome reflection, then the decal (veh_custom, police cars).
+	if(( k == 2 ) && !passe_k_dessinable( p_src, 1, p_tex_dict ) && !( p_src->mat_flags2 & ( 1 << 3 )))
+		return false;
+#else
 	if(( k == 2 ) && !passe_k_dessinable( p_src, 1, p_tex_dict ))
 		return false;
+#endif
 	if( !p_src->p_indices || ( p_src->num_indices <= 0 ))
 		return false;
 	CTexture *p_tex = p_tex_dict->GetTexture( d.tex );
