@@ -351,4 +351,69 @@ index e88e692f8c4e88eda472d47c8e31a0ee9141cb33..e2b47430be4f7a7b685e47edd3242d80
 +		}
 +	}
 +#endif
-
+diff --git a/Code/Sk/Modules/Skate/desktop_demented.cpp b/Code/Sk/Modules/Skate/desktop_demented.cpp
+index f2eadcc..92b7187 100644
+--- a/Code/Sk/Modules/Skate/desktop_demented.cpp
++++ b/Code/Sk/Modules/Skate/desktop_demented.cpp
+@@ -1762,0 +1763,59 @@ namespace Mdl
++// Sick-story catalog: log the goals as the level loads so the Demented goal
++// randomizer can be built against the real parameters and player-facing text.
++// The log is deliberately read-only; it does not mutate goal data.
++static void desktop_log_sick_goal_catalog( Skate &mdl )
++{
++	static uint32 s_level = 0;
++	static float s_elapsed = -1.0f;
++	Game::CGameMode *mode = mdl.GetGameMode();
++	Game::CGoalManager *gm = Game::GetGoalManager();
++	const bool sick_story = mode && !mode->IsFrontEnd()
++		&& mode->IsTrue( crc( "is_career" )) && gm
++		&& gm->GetDifficultyLevel( true ) == Game::GOAL_MANAGER_DIFFICULTY_HIGH;
++	if( !sick_story || s_run.actif ) { s_level = 0; s_elapsed = -1.0f; return; }
++	const uint32 level = mdl.m_cur_level;
++	if( level != s_level ) { s_level = level; s_elapsed = 0.0f; return; }
++	if( s_elapsed < 0.0f ) return;
++	s_elapsed += Tmr::FrameLength();
++	if( s_elapsed < 8.0f ) return;
++	s_elapsed = -1.0f;
++	const int n = gm->GetNumGoals();
++	VLOG( "GOALCAT", "BEGIN level=%08x difficulty=SICK goals=%d chapter=%d stage=%d",
++		level, n, gm->GetCurrentChapter(), gm->GetCurrentStage() );
++	static const char *text_keys[] = { "view_goals_text", "goal_description", "description",
++		"goal_intro_text", "goal_start_text", "intro_text", "success_text" };
++	static const char *int_keys[] = { "score", "number", "required_count", "num_markers", "marker_count", "time" };
++	for( int i = 0; i < n; ++i )
++	{
++		Game::CGoal *g = gm->GetGoalByIndex( i );
++		if( !g || !g->GetParams() ) continue;
++		Script::CStruct *p = g->GetParams();
++		const char *goal_name = Script::FindChecksumName( g->GetGoalId() );
++		VLOG( "GOALCAT", "GOAL id=%08x name=%s locked=%d active=%d won=%d initialized=%d",
++			g->GetGoalId(), goal_name ? goal_name : "", g->IsLocked(), g->IsActive(),
++			g->HasWonGoal(), g->IsInitialized() );
++		for( unsigned int k = 0; k < sizeof( int_keys ) / sizeof( int_keys[0] ); ++k )
++		{
++			int value = 0;
++			if( p->GetInteger( crc( int_keys[k] ), &value, Script::NO_ASSERT ))
++				VLOG( "GOALCAT", "  %s=%d", int_keys[k], value );
++		}
++		for( unsigned int k = 0; k < sizeof( text_keys ) / sizeof( text_keys[0] ); ++k )
++		{
++			const char *value = NULL;
++			if( p->GetText( crc( text_keys[k] ), &value, Script::NO_ASSERT ) && value )
++				VLOG( "GOALCAT", "  %s=%s", text_keys[k], value );
++		}
++		Script::CArray *tricks = NULL;
++		if( p->GetArray( crc( "required_tricks" ), &tricks, Script::NO_ASSERT ) && tricks )
++		{
++			for( int k = 0; k < (int)tricks->GetSize(); ++k )
++			{
++				const char *trick_name = Script::FindChecksumName( tricks->GetChecksum( k ));
++				VLOG( "GOALCAT", "  required_trick[%d]=%s", k, trick_name ? trick_name : "" );
++			}
++		}
++	}
++	VLOG( "GOALCAT", "END level=%08x", level );
++}
++
+@@ -1764,0 +1824 @@ void DesktopDementedUpdate( Skate &mdl )
++	desktop_log_sick_goal_catalog( mdl );
