@@ -2532,9 +2532,27 @@ void CVehicleComponent::apply_environment_collisions (   )
 	line_feeler.SetCache(&m_collision_cache);
 	
 	m_num_collision_points = 0;
+#ifdef THUG_DESKTOP
+	// Marcus: cars drive halfway into walls. Do the body feelers see them?
+	static int s_frame = 0, s_lignes = 0;
+	const bool trace = ( ++s_frame % 20 ) == 0 && s_lignes < 150;
+#endif
 	for (int collider_idx = vVP_NUM_COLLIDERS; collider_idx--; )
 	{
 		SCollider& collider = mp_colliders[collider_idx];
+#ifdef THUG_DESKTOP
+		if (trace)
+		{
+			rect_feeler.SetRectangle(collider.world);
+			const bool hit = rect_feeler.GetCollision();
+			++s_lignes;
+			VLOG("LVL", "car collider %d corner (%.0f %.0f %.0f) e1 (%.0f %.0f %.0f) e2 (%.0f %.0f %.0f) hit=%d surfaces=%d pos (%.0f %.0f %.0f)",
+				collider_idx, collider.world.m_corner[X], collider.world.m_corner[Y], collider.world.m_corner[Z],
+				collider.world.m_first_edge[X], collider.world.m_first_edge[Y], collider.world.m_first_edge[Z],
+				collider.world.m_second_edge[X], collider.world.m_second_edge[Y], collider.world.m_second_edge[Z],
+				(int)hit, hit ? rect_feeler.GetNumCollisionSurfaces() : 0, m_pos[X], m_pos[Y], m_pos[Z]);
+		}
+#endif
 		
 		// first we use a rectangular feeler
 		
