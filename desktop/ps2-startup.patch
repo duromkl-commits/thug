@@ -363,21 +363,22 @@ index f2eadcc..92b7187 100644
 +{
 +	static uint32 s_level = 0;
 +	static float s_elapsed = -1.0f;
++	static bool s_logged_hook = false;
 +	Game::CGameMode *mode = mdl.GetGameMode();
 +	Game::CGoalManager *gm = Game::GetGoalManager();
-+	const bool sick_story = mode && !mode->IsFrontEnd()
-+		&& mode->IsTrue( crc( "is_career" )) && gm
-+		&& gm->GetDifficultyLevel( true ) == Game::GOAL_MANAGER_DIFFICULTY_HIGH;
-+	if( !sick_story || s_run.actif ) { s_level = 0; s_elapsed = -1.0f; return; }
++	if( !s_logged_hook ) { VLOG( "GOALCAT", "LOGGER hook reached" ); s_logged_hook = true; }
++	const bool in_game = mode && !mode->IsFrontEnd() && gm;
++	if( !in_game ) { s_level = 0; s_elapsed = -1.0f; return; }
 +	const uint32 level = mdl.m_cur_level;
-+	if( level != s_level ) { s_level = level; s_elapsed = 0.0f; return; }
++	if( level != s_level ) { s_level = level; s_elapsed = 0.0f; VLOG( "GOALCAT", "WATCH level=%08x", level ); return; }
 +	if( s_elapsed < 0.0f ) return;
 +	s_elapsed += Tmr::FrameLength();
 +	if( s_elapsed < 8.0f ) return;
 +	s_elapsed = -1.0f;
 +	const int n = gm->GetNumGoals();
-+	VLOG( "GOALCAT", "BEGIN level=%08x difficulty=SICK goals=%d chapter=%d stage=%d",
-+		level, n, gm->GetCurrentChapter(), gm->GetCurrentStage() );
++	VLOG( "GOALCAT", "BEGIN level=%08x difficulty=%d career=%d goals=%d chapter=%d stage=%d",
++		level, gm->GetDifficultyLevel( true ), mode->IsTrue( crc( "is_career" )), n,
++		gm->GetCurrentChapter(), gm->GetCurrentStage() );
 +	static const char *text_keys[] = { "view_goals_text", "goal_description", "description",
 +		"goal_intro_text", "goal_start_text", "intro_text", "success_text" };
 +	static const char *int_keys[] = { "score", "number", "required_count", "num_markers", "marker_count", "time" };
