@@ -102,4 +102,14 @@ bool DesktopThugZero( void )
 	return c && c->GetGlobalFlag( 511 );
 }
 
+// Main menu / front end: the skater rolling around behind the menus takes
+// no pad input (Marcus: no manuals or tricks on the startup screen).
+bool DesktopFrontEndSkater( void )
+{
+	Mdl::Skate *sk = Mdl::Skate::Instance();
+	if( !sk ) return false;
+	Game::CGameMode *m = sk->GetGameMode();
+	return m && m->IsFrontEnd();
+}
+
 #endif // THUG_DESKTOP

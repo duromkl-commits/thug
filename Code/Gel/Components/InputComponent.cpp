@@ -29,6 +29,7 @@ extern "C" int desktop_mirror_steer( void );
 
 #ifdef THUG_DESKTOP
 bool DesktopDemented( void );	// desktop_demented.cpp
+bool DesktopFrontEndSkater( void );	// desktop_extras_glue.cpp
 #endif
 
 namespace Obj
@@ -398,6 +399,9 @@ void CInputComponent::handle_input ( Inp::Data* input )
 	build_input_mask(input);
 
 	bool ignore = ignore_button_presses();
+#ifdef THUG_DESKTOP
+	if (DesktopFrontEndSkater()) ignore = true;
+#endif
 	if (IsInputDisabled() || ignore)
 	{
 		m_pad.Zero();
@@ -424,6 +428,9 @@ void CInputComponent::handle_input2 ( Inp::Data* input )
 //	build_input_mask(input);
 
 	bool ignore = ignore_button_presses();
+#ifdef THUG_DESKTOP
+	if (DesktopFrontEndSkater()) ignore = true;
+#endif
 	if (IsInputDisabled() || ignore)
 	{
 		m_pad2.Zero();

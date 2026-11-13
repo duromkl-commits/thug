@@ -27,7 +27,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <math.h>
 
 #include "vita_log.h"
@@ -1467,50 +1466,6 @@ static bool load_scene_body( void *p_file, SVitaSceneGeom *p_geom )
 }
 
 
-#ifdef THUG_DESKTOP
-// The KISS peds' platform boots reach below the soles of the skeleton, so
-// as skaters their boots went through the board (Marcus). Their meshes are
-// lifted until the lowest point sits at 0, where every other skater's soles
-// are; on foot in their level that also stands them on the ground.
-static bool contient( const char *h, const char *a )	// case-blind strstr (no strcasestr on mingw)
-{
-	for( ; *h; ++h )
-	{
-		const char *x = h, *y = a;
-		while( *x && *y && tolower( (unsigned char)*x ) == tolower( (unsigned char)*y )) { ++x; ++y; }
-		if( !*y ) return true;
-	}
-	return false;
-}
-
-static void desktop_kiss_lift( SVitaSceneGeom *p_geom )
-{
-	const char *n = sp_current_file;
-	if( !n || !contient( n, "ped_kiss_" ) || contient( n, "_prop" ))
-		return;
-	float bas = 1e9f;
-	for( int i = 0; i < p_geom->num_meshes; ++i )
-	{
-		const SVitaMesh &m = p_geom->p_meshes[i];
-		if( !m.p_positions ) continue;
-		for( int v = 0; v < m.num_vertices; ++v ) if( m.p_positions[3 * v + 1] < bas ) bas = m.p_positions[3 * v + 1];
-	}
-	if( bas >= -0.25f || bas < -12.0f )
-		return;
-	const float *faits[256]; int nf = 0;
-	for( int i = 0; i < p_geom->num_meshes; ++i )
-	{
-		SVitaMesh &m = p_geom->p_meshes[i];
-		bool deja = !m.p_positions;
-		for( int k = 0; k < nf && !deja; ++k ) deja = faits[k] == m.p_positions;
-		if( deja ) continue;
-		for( int v = 0; v < m.num_vertices; ++v ) m.p_positions[3 * v + 1] -= bas;
-		if( nf < 256 ) faits[nf++] = m.p_positions;
-	}
-	VLOG( "SCN", "'%s' : platform boots, lifted %.1f in", n, -bas );
-}
-#endif
-
 bool LoadSceneGeometry( const char *p_name, SVitaSceneGeom *p_geom )
 {
 	sp_current_file = p_name ? p_name : "?";
@@ -1526,9 +1481,6 @@ bool LoadSceneGeometry( const char *p_name, SVitaSceneGeom *p_geom )
 	}
 
 	load_scene_body( p_file, p_geom );
-#ifdef THUG_DESKTOP
-	desktop_kiss_lift( p_geom );
-#endif
 
 	File::Close( p_file );
 
@@ -1585,9 +1537,6 @@ bool LoadSceneGeometryFromMemory( const void *p_data, int size,
 	s_mem_size = (size_t)size;
 
 	load_scene_body( NULL, p_geom );
-#ifdef THUG_DESKTOP
-	desktop_kiss_lift( p_geom );
-#endif
 
 	s_mem = NULL;
 

@@ -1755,6 +1755,37 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 	}
 }
 
+// Main menu Options: no "MTX Teaser" (Marcus). Each options_motox item is
+// wrapped in "if IsPS2", which is false on desktop.
+static void patch_sans_mtx( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t id = crc( "id" ), motox = crc( "options_motox" ), add = crc( "theme_menu_add_item" );
+	int nb = 0;
+	for( size_t e = 1; e + 2 < j.size(); ++e )
+	{
+		if( !( est_nom( qb, j[e], id ) && qb[j[e + 1].pos] == T_EGAL && est_nom( qb, j[e + 2], motox ))) continue;
+		size_t d = e;
+		while( d > 0 && !est_nom( qb, j[d], add ) && qb[j[d].pos] != T_ENDSCRIPT ) --d;
+		if( !est_nom( qb, j[d], add )) continue;
+		size_t g = d + 1;
+		while( g < j.size() && qb[j[g].pos] != T_STRUCT ) ++g;
+		int n = 0;
+		size_t f = 0;
+		for( ; g < j.size(); ++g )
+		{
+			if( qb[j[g].pos] == T_STRUCT ) ++n;
+			else if( qb[j[g].pos] == T_FSTRUCT && --n == 0 ) { f = g + 1; break; }
+		}
+		if( !f || f >= j.size() ) continue;
+		Ecrit w1; compile_q( w1, "if IsPS2\n" );
+		m.push_back( Modif{ j[d].pos, 0, w1.o } );
+		Ecrit w2; w2.eol(); compile_q( w2, "endif" );
+		m.push_back( Modif{ j[f].pos, 0, w2.o } );
+		++nb;
+	}
+	VLOG( "MUS", "main menu: %d MTX items hidden", nb );
+}
+
 // Main menu (levels\\mainmenu\\mainmenu_scripts.qb): "Quit Game" under
 // Options, closing the game through DesktopQuitGame.
 static void patch_quitter( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
@@ -2836,6 +2867,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_niveaux( qb, j, m );
 	patch_air_shuffle( qb, j, m );
 	patch_quitter( qb, j, m );
+	patch_sans_mtx( qb, j, m );
 	patch_portraits_menu( qb, j, m );
 	patch_portraits_select( qb, j, m );
 	patch_pause_extras( qb, j, m );
