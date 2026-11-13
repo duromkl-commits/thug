@@ -355,7 +355,7 @@ diff --git a/Code/Sk/Modules/Skate/desktop_demented.cpp b/Code/Sk/Modules/Skate/
 index f2eadcc..92b7187 100644
 --- a/Code/Sk/Modules/Skate/desktop_demented.cpp
 +++ b/Code/Sk/Modules/Skate/desktop_demented.cpp
-@@ -1762,0 +1763,59 @@ namespace Mdl
+@@ -1762,0 +1763,61 @@ namespace Mdl
 +// Sick-story catalog: log the goals as the level loads so the Demented goal
 +// randomizer can be built against the real parameters and player-facing text.
 +// The log is deliberately read-only; it does not mutate goal data.
@@ -416,5 +416,5 @@ index f2eadcc..92b7187 100644
 +	VLOG( "GOALCAT", "END level=%08x", level );
 +}
 +
-@@ -1764,0 +1824 @@ void DesktopDementedUpdate( Skate &mdl )
+@@ -1764,0 +1826 @@ void DesktopDementedUpdate( Skate &mdl )
 +	desktop_log_sick_goal_catalog( mdl );
