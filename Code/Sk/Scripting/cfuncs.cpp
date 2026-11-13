@@ -10617,6 +10617,17 @@ bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *)
 	return true;
 }
 
+// @script | DesktopControlOpt | desktop: controls option i (0 No Air Shuffles, 1 No Flips/Rolls) is on; with toggle, flips it first
+extern "C" int desktop_control_opt( int i );
+extern "C" int desktop_control_opt_toggle( int i );
+bool ScriptDesktopControlOpt(Script::CStruct *pParams, Script::CScript *)
+{
+	int i = 0;
+	pParams->GetInteger(CRCD(0x1993c98e,"i"), &i, Script::NO_ASSERT);
+	if (pParams->ContainsFlag(Script::GenerateCRC("toggle")))
+		return desktop_control_opt_toggle(i) != 0;
+	return desktop_control_opt(i) != 0;
+}
 #endif
 
 bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript )

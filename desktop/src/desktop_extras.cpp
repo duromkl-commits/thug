@@ -52,3 +52,35 @@ extern "C" int extras_file_write( const char *file, const void *data, unsigned s
 	remove( c.c_str());
 	return rename( t.c_str(), c.c_str()) == 0;
 }
+
+// Controls menu options (Marcus 2026-11-13): 0 = No Air Shuffles,
+// 1 = No Flips/Rolls. Kept in thug_controls.txt beside the exe ("01").
+static int s_opts[2];
+static bool s_opts_lus = false;
+
+static void opts_lire( void )
+{
+	if( s_opts_lus ) return;
+	s_opts_lus = true;
+	unsigned n = 0;
+	char *d = (char *)extras_file_read( "thug_controls.txt", &n );
+	for( unsigned i = 0; d && i < n && i < 2; ++i )
+		s_opts[i] = d[i] == '1';
+	free( d );
+}
+
+extern "C" int desktop_control_opt( int i )
+{
+	opts_lire();
+	return i >= 0 && i < 2 ? s_opts[i] : 0;
+}
+
+extern "C" int desktop_control_opt_toggle( int i )
+{
+	opts_lire();
+	if( i < 0 || i >= 2 ) return 0;
+	s_opts[i] = !s_opts[i];
+	const char t[2] = { (char)( '0' + s_opts[0] ), (char)( '0' + s_opts[1] ) };
+	extras_file_write( "thug_controls.txt", t, 2 );
+	return s_opts[i];
+}

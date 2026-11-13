@@ -1755,6 +1755,88 @@ static void patch_pause_extras( const unsigned char *qb, const std::vector<Jeton
 	}
 }
 
+// Controls menu (Marcus 2026-11-13): "No Air Shuffles" and "No Flips/Rolls"
+// in Common and in Player 1 in a level (the story pause menu's merged
+// page), after No Walking, laid out like the game's own on/off items.
+// DesktopControlOpt keeps them in thug_controls.txt.
+static const char *s_controls_scripts =
+	"script desktop_controls_items\n"
+	"show = 0\n"
+	"if ( <controller_number> = -1 )\n"
+	"show = 1\n"
+	"endif\n"
+	"if ( <controller_number> = 1 )\n"
+	"if NOT LevelIs load_skateshop\n"
+	"show = 1\n"
+	"endif\n"
+	"endif\n"
+	"if ( <show> = 1 )\n"
+	"theme_menu_add_item { text = \"No Air Shuffles\" id = menu_desktop_noshuffle focus_script = controller_config_focus unfocus_script = controller_config_unfocus pad_choose_script = nullscript }\n"
+	"theme_menu_add_item { text = \"No Flips/Rolls\" id = menu_desktop_noflips focus_script = controller_config_focus unfocus_script = controller_config_unfocus pad_choose_script = nullscript }\n"
+	"endif\n"
+	"endscript\n"
+	"script desktop_controls_values\n"
+	"if NOT ScreenElementExists id = menu_desktop_noshuffle\n"
+	"return\n"
+	"endif\n"
+	"FormatText ChecksumName = text_color \"%i_UNHIGHLIGHTED_TEXT_COLOR\" i = ( THEME_COLOR_PREFIXES [ current_theme_prefix ] )\n"
+	"desktop_controls_value parent = menu_desktop_noshuffle vid = menu_desktop_noshuffle_value o = 0 text_color = <text_color>\n"
+	"desktop_controls_value parent = menu_desktop_noflips vid = menu_desktop_noflips_value o = 1 text_color = <text_color>\n"
+	"endscript\n"
+	"script desktop_controls_value\n"
+	"if DesktopControlOpt i = <o>\n"
+	"v = \"on\"\n"
+	"else\n"
+	"v = \"off\"\n"
+	"endif\n"
+	"CreateScreenElement { type = TextElement parent = <parent> id = <vid> font = small just = [ center top ] pos = (142,-17) text = <v> rgba = <text_color> }\n"
+	"CreateScreenElement { type = SpriteElement parent = <parent> texture = left_arrow rgba = [ 128 128 128 0 ] pos = (122,-17) just = [ right top ] scale = 0.75 }\n"
+	"CreateScreenElement { type = SpriteElement parent = <parent> texture = right_arrow rgba = [ 128 128 128 0 ] pos = (162,-17) just = [ left top ] scale = 0.75 }\n"
+	"SetScreenElementProps { id = <parent> event_handlers = [ { pad_left desktop_controls_change params = { o = <o> vid = <vid> left } } { pad_right desktop_controls_change params = { o = <o> vid = <vid> } } ] replace_handlers }\n"
+	"endscript\n"
+	"script desktop_controls_change\n"
+	"if DesktopControlOpt i = <o> toggle\n"
+	"SetScreenElementProps id = <vid> text = \"on\"\n"
+	"else\n"
+	"SetScreenElementProps id = <vid> text = \"off\"\n"
+	"endif\n"
+	"GetTags\n"
+	"if GotParam left\n"
+	"RunScriptOnScreenElement id = { <id> child = 5 } menu_blink_arrow\n"
+	"else\n"
+	"RunScriptOnScreenElement id = { <id> child = 6 } menu_blink_arrow\n"
+	"endif\n"
+	"generic_menu_pad_choose_sound\n"
+	"TemporarilyDisableInput time = 100\n"
+	"endscript\n";
+
+static void patch_controls( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "create_controller_config_menu" ), id = crc( "id" ), done = crc( "menu_done" ),
+		gotparam = crc( "GotParam" ), fin_menu = crc( "finish_themed_sub_menu" );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+	{
+		if( qb[j[k].pos] != T_SCRIPT || !est_nom( qb, j[k + 1], n )) continue;
+		size_t e = k + 2, a = 0, b = 0;
+		for( ; e + 2 < j.size() && qb[j[e].pos] != T_ENDSCRIPT; ++e )
+		{
+			if( !a && est_nom( qb, j[e], id ) && qb[j[e + 1].pos] == T_EGAL && est_nom( qb, j[e + 2], done )) a = e;
+			if( !b && est_nom( qb, j[e], fin_menu )) b = e;
+		}
+		if( !a || !b ) { VLOG( "MUS", "controls menu: not found" ); return; }
+		while( a > k && !est_nom( qb, j[a], gotparam )) --a;	// if GotParam from_options (the Done item)
+		if( a <= k + 1 ) { VLOG( "MUS", "controls menu: Done not found" ); return; }
+		Ecrit w0; compile_q( w0, s_controls_scripts );
+		m.push_back( Modif{ j[k].pos, 0, w0.o } );
+		Ecrit w1; compile_q( w1, "desktop_controls_items controller_number = <controller_number>\n" );
+		m.push_back( Modif{ j[a - 1].pos, 0, w1.o } );
+		Ecrit w2; compile_q( w2, "desktop_controls_values\n" );
+		m.push_back( Modif{ j[b].pos, 0, w2.o } );
+		VLOG( "MUS", "controls menu: No Air Shuffles / No Flips added" );
+		return;
+	}
+}
+
 // Main menu Options: no "MTX Teaser" (Marcus). Each options_motox item is
 // wrapped in "if IsPS2", which is false on desktop.
 static void patch_sans_mtx( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
@@ -2868,6 +2950,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_air_shuffle( qb, j, m );
 	patch_quitter( qb, j, m );
 	patch_sans_mtx( qb, j, m );
+	patch_controls( qb, j, m );
 	patch_portraits_menu( qb, j, m );
 	patch_portraits_select( qb, j, m );
 	patch_pause_extras( qb, j, m );

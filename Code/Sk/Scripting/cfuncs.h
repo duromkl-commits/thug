@@ -341,6 +341,7 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript );
 bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript );
 #ifdef THUG_DESKTOP
 bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopControlOpt(Script::CStruct *, Script::CScript *);
 #endif
 bool ScriptHideLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript );
 bool ScriptObserveNextSkater( Script::CStruct *pParams, Script::CScript *pScript );

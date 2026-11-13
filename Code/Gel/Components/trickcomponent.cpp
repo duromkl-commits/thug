@@ -52,6 +52,7 @@ extern "C" int custom_skater_voice_pitch( unsigned int name_checksum );	// custo
 int g_vita_trace_trk = 0;
 #ifdef THUG_DESKTOP
 extern "C" int desktop_full_log( void );
+extern "C" int desktop_control_opt( int i );	// desktop_extras.cpp: 0 No Air Shuffles, 1 No Flips/Rolls
 #endif
 static const char *trk_nom_direction( uint Button )
 {
@@ -1908,6 +1909,11 @@ bool CTrickComponent::TrickIsDefined(Script::CStruct *pTrick)
 	uint32 ScriptChecksum=0;
 	if (pTrick->GetChecksum(0xa6d2d890/* Scr */,&ScriptChecksum))
 	{
+#ifdef THUG_DESKTOP
+		// Controls menu "No Air Shuffles" (Marcus): the shuffle isn't a trick
+		if (ScriptChecksum==0x9ed95ce7/* WalkingAirShuffle */ && desktop_control_opt(0))
+			return false;
+#endif
 		return true;
 	}
 	if (pTrick->GetChecksum(0x22e168c1/* Scripts */,&ScriptChecksum))
@@ -3083,6 +3089,8 @@ void CTrickComponent::DesktopAirFlips()
 		// THUG2: a roll needs a flip or grab trick going, not just an ollie
 		// (flips too): FlipTrick / GrabTrick mark it (desktop_air_trick_mark)
 		const bool permis = s_air_trick && (input_mask & (Inp::Data::mA_SQUARE | Inp::Data::mA_CIRCLE));
+		// Controls menu "No Flips/Rolls" (Marcus)
+		if ( desktop_control_opt(1) ) { m_flip_derniere = 0; m_flip_dir_avant = d; return; }
 		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin && permis )
 		{
 			static const char *s_noms[4] = { "Front Flip", "Back Flip", "Left Roll", "Right Roll" };
