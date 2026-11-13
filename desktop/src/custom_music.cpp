@@ -2057,9 +2057,9 @@ static const PersoGTA s_gta[] = {
 	{ "bmydrug", "GTA BMYDRUG", 0 },
 	{ "wmydrug", "GTA WMYDRUG", 0 },
 	{ "hmydrug", "GTA HMYDRUG", 0 },
-	{ "dwfolc", "GTA DWFOLC", 1 },
 	{ "dwmolc1", "GTA DWMOLC1", 0 },
 	{ "dwmolc2", "GTA DWMOLC2", 0 },
+	{ "dwfolc", "GTA DWFOLC", 1 },
 	{ "dwmylc1", "GTA DWMYLC1", 0 },
 	{ "hmogar", "GTA HMOGAR", 0 },
 	{ "wmygol1", "GTA WMYGOL1", 0 },
@@ -2160,8 +2160,6 @@ static const PersoGTA s_gta[] = {
 	// (xps_to_thug.py), GTA III, The Warriors, Half-Life, Kingdom Hearts
 	// (gtaobj_to_thug.py), the Simpsons (tpose_to_thug.py); data/models/gta/<name>/.
 	// The last field shrinks the whole skater (body_shape scale): kids, cartoon heads.
-	{ "bdup", "B Dup", 0 },
-	{ "bettina", "Bettina", 1 },
 	{ "burgershot", "Burger Shot Guy", 0 },
 	{ "catalina", "Catalina", 1 },
 	{ "cesar", "Cesar Vialpando", 0 },

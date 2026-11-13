@@ -96,7 +96,7 @@ R = {
 'bmybu': ('Businessman D', 'Businessman', 34, 'Los Santos, SA', 'street normal money'),
 'bmybe': ('Beach Guy', 'Beach', 21, 'Santa Maria Beach, SA', 'vert athletic beach'),
 'bmydj': ('DJ', 'DJ', 27, 'Los Santos, SA', 'street athletic music'),
-'bmyri': ('Rich Kid', 'Rich', 23, 'Los Santos, SA', 'street normal money'),
+'bmyri': ('Gordon Gartrell', 'Gordon', 23, 'Los Santos, SA', 'street normal money'),
 'bmycr': ('Crack Dealer', 'Crack', 25, 'Los Santos, SA', 'street normal street'),
 'bmyst': ('Street Guy A', 'Street', 20, 'Los Santos, SA', 'street athletic street'),
 'wmybmx': ('BMX Rider', 'BMX', 17, 'Los Santos, SA', 'vert skinny street'),
@@ -107,9 +107,9 @@ R = {
 'bmydrug': ('Drug Dealer D', 'Drug', 26, 'Los Santos, SA', 'street normal money'),
 'wmydrug': ('Drug Dealer E', 'Drug', 24, 'San Fierro, SA', 'street skinny dark'),
 'hmydrug': ('Drug Dealer F', 'Drug', 28, 'Los Santos, SA', 'street normal dark'),
-'dwfolc': ('Old Redneck Woman', 'Old', 66, 'Bone County, SA', 'street old western'),
 'dwmolc1': ('Old Redneck A', 'Old', 59, 'Bone County, SA', 'street old western'),
 'dwmolc2': ('Old Redneck B', 'Old', 64, 'Bone County, SA', 'street old dark'),
+'dwfolc': ('Old Redneck C', 'Old', 66, 'Bone County, SA', 'street old western'),
 'dwmylc1': ('Young Redneck', 'Young', 26, 'Bone County, SA', 'street normal western'),
 'hmogar': ('Old Gardener', 'Old', 61, 'Los Santos, SA', 'street old nature'),
 'wmygol1': ('Golfer A', 'Golfer', 35, 'Las Venturas, SA', 'street normal money'),
@@ -202,8 +202,6 @@ R = {
 'twiggy': ('Twiggy A', 'Twiggy', 27, 'Brimstone', 'street skinny comic'),
 
 # --- 2026-11-10 pack: GTA SA story cast (better rips, replace the old ones) --
-'bdup': ('B Dup', 'Mark', 32, 'Los Santos, SA', 'street normal money'),
-'bettina': ('Bettina', 'Bettina', 30, 'Los Santos, SA', 'street normal female'),
 'burgershot': ('Burger Shot Guy', 'Burger', 22, 'Los Santos, SA', 'street normal comic'),
 'catalina': ('Catalina', 'Catalina', 29, 'Fern Ridge, SA', 'street normal female'),
 'cesar': ('Cesar Vialpando', 'Cesar', 26, 'Los Santos, SA', 'street athletic fast'),

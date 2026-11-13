@@ -268,40 +268,6 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
                     m[b] = m.get(b, 0.0) + a * y
                 newW[i] = m
 
-    # the chest's sides under the armpit stay on the chest: a model wider
-    # than the pros had them on the bicep, and they poked out when the arms
-    # came down. Anything lower than the T-posed sleeve's underside (sleeve
-    # measured 5-7 in out from the shoulder) is torso: its arm weight fades
-    # out over 1.5 in above that, as on the pros.
-    armb1 = {index[b % x] for x in SIDES for b in ARM_ALL if b % x in index}
-    bx, by = t['Bone_Bicep_L'][0], t['Bone_Bicep_L'][1]
-    slv = Q[(np.abs(Q[:, 0]) > bx + 4) & (np.abs(Q[:, 0]) < bx + 9) & (np.abs(Q[:, 1] - by) < 8)]
-    low = Q[(Q[:, 1] > by - 13) & (Q[:, 1] < by - 7)]
-    if len(slv) > 3 and len(low) > 10:
-        under = slv[:, 1].min() - 0.5
-        moved = 0
-        # inside the chest's own width (taken well below the armpit) or the
-        # shoulder joint: torso below the armpit
-        inner = np.abs(Q[:, 0]) < max(bx + 2.5, np.percentile(np.abs(low[:, 0]), 98) + 1.5)
-        near = np.abs(Q[:, 0]) < bx + 4	# the armpit, not the arm further out
-        for i in np.where(((near & (Q[:, 1] < under + 1.5)) | (inner & (Q[:, 1] < by - 1))) & (Q[:, 1] > by - 16))[0]:
-            w = newW[i]
-            if not any(b in armb1 for b in w):
-                continue
-            f = float(np.clip((Q[i, 1] - under) / 1.5, 0, 1))
-            if inner[i]:
-                f = min(f, float(np.clip((Q[i, 1] - (by - 4)) / 3, 0, 1)))
-            if f >= 1:
-                continue
-            k = {b: (y * f if b in armb1 else y) for b, y in w.items()}
-            if sum(y for b, y in k.items() if b not in armb1) <= 1e-6:
-                k[index['Bone_Chest']] = k.get(index['Bone_Chest'], 0.0) + (1 - f)
-            sm = sum(k.values())
-            newW[i] = {b: y / sm for b, y in k.items() if y > 0}
-            moved += 1
-        if log:
-            log('fit: %d chest-side vertices kept off the arms below %.1f in' % (moved, under))
-
     # a leg's vertices never follow the other leg (trouser hems stuck to
     # the opposite ankle when the legs part)
     legb = {x: {index[b % x] for b in LEG_ALL if b % x in index} for x in SIDES}
