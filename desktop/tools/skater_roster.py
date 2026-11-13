@@ -86,6 +86,7 @@ R = {
 'PedPro_Rodrigez': ('Paul Rodriguez', 'Paul', 19, 'Los Angeles, CA', 'pro:rodriguez'),
 'PedPro_Reynolds': ('Andrew Reynolds', 'Andrew', 25, 'Lakeland, FL', 'pro:reynolds'),
 'PedPro_Vallely': ('Mike Vallely', 'Mike', 33, 'Edison, NJ', 'pro:vallely'),
+'Skater_Creature': ('Creature', 'Creature', 0, 'Unknown', 'vert normal dark'),
 # --- GTA San Andreas -----------------------------------------------------
 'andre': ('Andre', 'Andre', 45, 'San Fierro, SA', 'street normal dark'),
 'male01': ('Male 01', 'Male', 28, 'Los Santos, SA', 'street normal plain'),

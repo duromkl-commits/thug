@@ -1255,20 +1255,20 @@ static const char *s_demented_scripts =
 	"endif\n"
 	"endscript\n"
 	// THUG2-style flips and rolls (trickcomponent.cpp spawns it on a double tap in
-	// the air): the body goes round once in 0.7 s, 1000 points each (Marcus). Landing
+	// the air): the body goes round once in 0.8 s, 1000 points each (Marcus). Landing
 	// too early is a bail (Land asks DesktopAirFlipBail); a rail, lip or wall ends it
 	"script desktop_air_flip k = 0 name = \"Front Flip\"\n"
 	"if ( <k> = 0 )\n"
-	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 1 )\n"
-	"RotateDisplay x Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay x Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 2 )\n"
-	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = 360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = 360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"if ( <k> = 3 )\n"
-	"RotateDisplay z Duration = 0.7 seconds StartAngle = 0 EndAngle = -360 SinePower = 0 RotationOffset = (0,30,0)\n"
+	"RotateDisplay z Duration = 0.8 seconds StartAngle = 0 EndAngle = -360 SinePower = 2 RotationOffset = (0,30,0)\n"
 	"endif\n"
 	"SetTrickName <name>\n"
 	"SetTrickScore 1000\n"
@@ -2309,7 +2309,45 @@ static const std::vector<int> &gta_presents( void )
 	return v;
 }
 
-// ped_body = [ ... ] (cas_ped_m.qb): the GTA bodies go first.
+// Optional native skater models which are not part of THUG's stock profile list.
+// Register the profile and body only when both model files are installed.
+struct ModeleExtra { const char *nom, *affiche, *dossier, *mesh, *desc; int femme; };
+static const ModeleExtra s_modeles_extra[] = {
+	{ "Skater_Creature", "Creature", "Skater_Secret", "Skater_Creature", "desktop_creature", 0 },
+#include "rethawed_skater_roster.inc"
+};
+enum { NB_MODELES_EXTRA = sizeof( s_modeles_extra ) / sizeof( s_modeles_extra[0] ) };
+
+static bool modele_extra_installe( const ModeleExtra &p )
+{
+	char vita[256], chemin[1024];
+	const char *extensions[] = { "skin.xbx", "tex.xbx" };
+	for( const char *ext : extensions )
+	{
+		snprintf( vita, sizeof( vita ), "ux0:data/thug/Data/models/%s/%s.%s", p.dossier, p.mesh, ext );
+		desktop_host_path( vita, chemin, sizeof( chemin ));
+		FILE *f = fopen( chemin, "rb" );
+		if( !f ) return false;
+		fclose( f );
+	}
+	return true;
+}
+
+static const std::vector<int> &modeles_extra_presents( void )
+{
+	static std::vector<int> v;
+	static bool vu = false;
+	if( !vu )
+	{
+		vu = true;
+		for( int i = 0; i < NB_MODELES_EXTRA; ++i )
+			if( modele_extra_installe( s_modeles_extra[i] )) v.push_back( i );
+		VLOG( "MUS", "optional skaters: %d of %d installed", (int)v.size(), NB_MODELES_EXTRA );
+	}
+	return v;
+}
+
+// ped_body = [ ... ] (cas_ped_m.qb): optional and GTA bodies go first.
 static void patch_gta_corps( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
 {
 	const uint32_t n = crc( "ped_body" );
@@ -2319,8 +2357,16 @@ static void patch_gta_corps( const unsigned char *qb, const std::vector<Jeton> &
 		size_t a = sans_eol( qb, j, k + 2 );
 		if( a >= j.size() || qb[j[a].pos] != T_TAB ) continue;
 		const std::vector<int> &g = gta_presents();
-		if( g.empty()) return;
+		const std::vector<int> &x = modeles_extra_presents();
+		if( g.empty() && x.empty()) return;
 		Ecrit w;
+		for( size_t i = 0; i < x.size(); ++i )
+		{
+			const ModeleExtra &p = s_modeles_extra[x[i]];
+			char t[256];
+			snprintf( t, sizeof( t ), "{ desc_id = %s mesh = \"models/%s/%s.skin\" no_random }\n", p.desc, p.dossier, p.mesh );
+			compile_q( w, t );
+		}
 		for( size_t i = 0; i < g.size(); ++i )
 		{
 			char t[256];
@@ -2329,7 +2375,7 @@ static void patch_gta_corps( const unsigned char *qb, const std::vector<Jeton> &
 			compile_q( w, t );
 		}
 		m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
-		VLOG( "MUS", "ped_body: %d GTA bodies added", (int)g.size());
+		VLOG( "MUS", "ped_body: %d optional + %d GTA bodies added", (int)x.size(), (int)g.size());
 		return;
 	}
 }
@@ -2501,6 +2547,17 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			          p.nom, forme );
 			looks.push_back( t );
 		}
+		// Keep optional profile indices after GTA profiles to preserve their existing indices.
+		const std::vector<int> &x = modeles_extra_presents();
+		for( size_t i = 0; i < x.size(); ++i )
+		{
+			const ModeleExtra &p = s_modeles_extra[x[i]];
+			PietonJouable pj = { p.nom, p.affiche, p.femme, "" };
+			tous.push_back( pj );
+			char t[256];
+			snprintf( t, sizeof( t ), "ped_body = { desc_id = %s } ped_board = { desc_id = Skateboard }", p.desc );
+			looks.push_back( t );
+		}
 		Ecrit w1;
 		Ecrit w2; w2.eol();
 		s_voix.clear();
@@ -2526,7 +2583,7 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 		VLOG( "PCM", "bail voices: %d skaters with clips in data/voices", (int)s_banques.size());
 		m.push_back( Modif{ j[a].pos, 0, w1.o } );
 		m.push_back( Modif{ j.back().pos, 0, w2.o } );
-		VLOG( "MUS", "skaters: %d peds + %d GTA added", nb, (int)g.size());
+		VLOG( "MUS", "skaters: %d peds + %d GTA + %d optional added", nb, (int)g.size(), (int)x.size());
 		return;
 	}
 }
@@ -2861,6 +2918,26 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		for( size_t i = 0; i < sizeof( son ) / sizeof( son[0] ); ++i ) wrap_lignes( qb, j, m, son[i], "PauseMusic", NULL );
 	}
 	patch_histoire( qb, j, m );
+	// Use the existing save selection with the desktop filesystem-backed card.
+	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
+		"if DesktopFirstSaveCheck\n"
+		"change DoAutoload = 0\n"
+		"SpawnScript wait_and_pause_skater params = { time = 1 }\n"
+		"CheckForCardOnBootup\n"
+		"return\nendif\nchange DoAutoload = 0\n" );
+	patch_debut(qb, j, m, "create_main_menu", "change attempted_xbox_autoload = 1\n");
+	patch_debut(qb, j, m, "xbox_autoload_message",
+		"change attempted_xbox_autoload = 1\nlaunch_main_menu\nreturn\n");
+	patch_debut( qb, j, m, "career_autoload_launch_current_level",
+		"change show_career_startup_menu = 1\n" );
+	patch_debut( qb, j, m, "mcmess_CheckingCard",
+		"create_dialog_box_with_wait { title = \"Checking ...\" text_dims = (256.0, 0.0)\n"
+		"text = \"Checking memory card (8MB) (for PlayStation 2) in MEMORY CARD slot 1. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
+		"add_loading_anim = add_loading_anim no_bg = <no_bg> }\nreturn\n" );
+	patch_debut( qb, j, m, "mcmess_LoadingData",
+		"create_dialog_box_with_wait { title = \"Loading ...\" text_dims = (256.0, 0.0)\n"
+		"text = \"Loading data. Do not remove memory card (8MB) (for PlayStation 2), controller, or reset/switch off the console.\"\n"
+		"add_loading_anim = add_loading_anim }\nno_animate = <no_animate>\nreturn\n" );
 	// THUG Zero: armed by its story menu item, disarmed by any other way out.
 	// flips/rolls landed before they come round bail (trickcomponent.cpp)
 	patch_debut( qb, j, m, "Land", "if DesktopAirFlipBail\nGoto DoingTrickBail\nendif\n" );
