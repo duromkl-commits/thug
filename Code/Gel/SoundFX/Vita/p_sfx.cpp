@@ -662,7 +662,22 @@ void StopAllSoundFX( void )
 
 void PauseSoundsPlease( void )
 {
+#ifdef THUG_DESKTOP
+	// Xbox (p_sfx.cpp:1040) only turns playing voices down to silence: the
+	// skater's rolling loop and car engine loops keep their voice, and the
+	// engine's per-frame volume updates bring them back after unpausing.
+	// Stopping them left those loops dead (silent until re-triggered).
+	verrouille();
+	for( int i = 0; i < NUM_VOICES; ++i )
+		if( s_voix[i].active )
+		{
+			s_voix[i].vol_g = 0;
+			s_voix[i].vol_d = 0;
+		}
+	deverrouille();
+#else
 	StopAllSoundFX();
+#endif
 }
 
 

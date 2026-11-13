@@ -74,6 +74,10 @@ struct SMorceauReporte
 	float           mv[16];
 	float           rgba[4];
 	bool            a_rgba;
+#ifdef THUG_DESKTOP
+	GLuint          cbo;		// lit colours of this instance (0 = p->cbo)
+	bool            lit;		// cbo is at half scale: draw with RGB_SCALE 2
+#endif
 };
 
 #define MAX_REPORTES 256
@@ -2757,10 +2761,15 @@ void VitaDessinerModelesReportes( void )
 		if( !mro )
 			glDepthMask( desktop_profondeur_portrait() ? GL_TRUE : GL_FALSE );
 
-		if( p->cbo )
+#ifdef THUG_DESKTOP
+		const GLuint cbo_r = r->cbo ? r->cbo : p->cbo;
+#else
+		const GLuint cbo_r = p->cbo;
+#endif
+		if( cbo_r )
 		{
 			glEnableClientState( GL_COLOR_ARRAY );
-			glBindBuffer( GL_ARRAY_BUFFER, p->cbo );
+			glBindBuffer( GL_ARRAY_BUFFER, cbo_r );
 			glColorPointer( 4, GL_UNSIGNED_BYTE, 0, NULL );
 		}
 		else
@@ -2801,8 +2810,31 @@ void VitaDessinerModelesReportes( void )
 		// Halos de la rampe et des phares (#77) : UV wibble.
 		const bool uvw_pose = p->texture && p->uvbo
 		                      && uvw_modele_poser( p->uvw0, p->uvw_par0 );
+#ifdef THUG_DESKTOP
+		const bool echelle = r->lit && r->tex && p->uvbo;
+		if( echelle )
+		{
+			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC1_RGB, GL_PRIMARY_COLOR );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_TEXTURE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_PRIMARY_COLOR );
+			const GLfloat deux = 2.0f;
+			glTexEnvfv( GL_TEXTURE_ENV, GL_RGB_SCALE, &deux );
+		}
+#endif
 		glDrawElements( GL_TRIANGLE_STRIP, p->num_indices,
 		                GL_UNSIGNED_SHORT, NULL );
+#ifdef THUG_DESKTOP
+		if( echelle )
+		{
+			const GLfloat un = 1.0f;
+			glTexEnvfv( GL_TEXTURE_ENV, GL_RGB_SCALE, &un );
+			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+		}
+#endif
 		if( uvw_pose )
 			uvw_modele_lever();
 	}
@@ -3258,7 +3290,7 @@ void CVitaMesh::Draw( const float *p_rgba,
 		}
 		rig_p = rig_p && ( p->nbo_rig != 0 );
 		// #78 : couleurs eclairees de CETTE instance, pas du maillage partage.
-		SLumInstance *li = ( lit_p && !rig_p && sp_lum_inst && ( i < s_lum_inst_n ))
+		SLumInstance *li = ( lit_p && sp_lum_inst && ( i < s_lum_inst_n ))
 		                 ? &sp_lum_inst[i] : NULL;
 		if( lit_p && !rig_p )
 			eclairer_piece( &mp_pieces[i], lum, tex_p, li );
@@ -3417,6 +3449,20 @@ void CVitaMesh::Draw( const float *p_rgba,
 			r->a_rgba = ( p_rgba != NULL );
 			if( p_rgba )
 				for( int k = 0; k < 4; ++k ) r->rgba[k] = p_rgba[k];
+#ifdef THUG_DESKTOP
+			// Translucent pieces of lit models (car rims, aa16ecb5 on the
+			// Muska SUV) were drawn with their raw baked colours, which are
+			// near black on the shaded side (0x06): black wheel discs. Xbox
+			// lights them like the opaque pieces (instance.cpp).
+			r->cbo = 0; r->lit = false;
+			if( lit_p && tex_p )
+			{
+				if( rig_p )
+					eclairer_piece( &mp_pieces[i], lum, tex_p, li );
+				r->cbo = ( li && li->cbo ) ? li->cbo : p->cbo_rig;
+				r->lit = ( r->cbo != 0 );
+			}
+#endif
 		}
 		else if( rig_p )
 		{
