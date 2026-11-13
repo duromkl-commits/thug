@@ -2633,6 +2633,18 @@ void CTrickComponent::SetExtraTricks(Script::CStruct *pParams, Script::CScript *
 	Dbg_MsgAssert(pScript,("NULL pScript"));
 	
 	mGotExtraTricks=true;
+#ifdef THUG_DESKTOP
+	{
+		// Marcus: No Reverts didn't stop reverts. Who still hands them out?
+		static int s_n = 0;
+		uint32 t = 0;
+		pParams->GetChecksum(CRCD(0x1e26fd3e,"Tricks"),&t);
+		if (t == 0xee1d4d7e /* Reverts */ && s_n++ < 30)
+			VLOG("LVL", "reverts given by %s (%08x), no reverts flag %d",
+				Script::FindChecksumName(pScript->GetBaseScript()), (unsigned)pScript->GetBaseScript(),
+				(int)Mdl::Skate::Instance()->GetCareer()->GetGlobalFlag(225));
+	}
+#endif
 	
 	mExtraTricksInfiniteDuration=true;
 	float Duration=0.0f;

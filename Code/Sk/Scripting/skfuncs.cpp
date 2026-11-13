@@ -76,6 +76,9 @@
 
 #include <sys/file/filesys.h>
 #include <sys/file/pre.h>
+#ifdef THUG_DESKTOP
+#include "vita_log.h"
+#endif
 
 /*****************************************************************************
 **								DBG Information								**
@@ -3979,6 +3982,9 @@ bool ScriptSetGlobalFlag(Script::CStruct *pParams, Script::CScript *pScript)
 	pParams->GetInteger(CRCD(0x2e0b1465, "flag"), &flag, true);  		// Note we assert if "flag" is missing
 	
 	s_get_career(flag,pParams)->SetGlobalFlag(flag);
+#ifdef THUG_DESKTOP
+	if (flag >= 225 && flag <= 227) VLOG("LVL", "SetGlobalFlag %d", flag);
+#endif
 	
 	return true;
 }
@@ -4006,6 +4012,9 @@ bool ScriptUnSetGlobalFlag(Script::CStruct *pParams, Script::CScript *pScript)
 
 	
 	s_get_career(flag,pParams)->UnSetGlobalFlag(flag);
+#ifdef THUG_DESKTOP
+	if (flag >= 225 && flag <= 227) VLOG("LVL", "UnSetGlobalFlag %d", flag);
+#endif
 	
 	return true;
 }
