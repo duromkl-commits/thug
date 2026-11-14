@@ -2589,12 +2589,12 @@ static std::string profil_pieton( int i, const PietonJouable &p, const MetaSkate
 		stats += t;
 	}
 	char tricks[64];
-	if( d.tricks[0] == '{' ) snprintf( tricks, sizeof( tricks ), "desktop_tricks_%d", i );
+	if( d.tricks[0] == '{' ) snprintf( tricks, sizeof( tricks ), "desktop_tricks_%s", p.nom );
 	else snprintf( tricks, sizeof( tricks ), "%s", d.tricks );
 	char t[4096];
 	snprintf( t, sizeof( t ),
 		"{ display_name = \"%s\" first_name = \"%s\" file_name = \"Unimplemented\" skater_index = %d\n"
-		"default_appearance = desktop_pedlook_%d name = desktop_ped_%d stance = %s pushstyle = %s trickstyle = %s\n"
+		"default_appearance = desktop_pedlook_%s name = desktop_ped_%s stance = %s pushstyle = %s trickstyle = %s\n"
 		"is_pro = 1 is_head_locked = 1 is_locked = 1 is_male = %d age = %d hometown = \"%s\" points_available = 0 desktop_headshot = \"ped\"\n"
 		"%s\n"
 		"sponsors = [ ] trick_mapping = { } default_trick_mapping = %s no_edit no_edit_groups = [ secret_options ]\n"
@@ -2605,7 +2605,7 @@ static std::string profil_pieton( int i, const PietonJouable &p, const MetaSkate
 		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
 		"{ trickslot = Unassigned trickname = Unassigned } { trickslot = Unassigned trickname = Unassigned }\n"
 		"] } }\n",
-		m ? d.affiche : p.affiche, d.prenom, 100 + i, i, i, d.stance, d.pousse, d.style,
+		m ? d.affiche : p.affiche, d.prenom, 100 + i, p.nom, p.nom, d.stance, d.pousse, d.style,
 		p.femme ? 0 : 1, d.age, d.ville, stats.c_str(), tricks, d.specials );
 	return t;
 }
@@ -2683,11 +2683,11 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			compile_q( w1, profil_pieton( (int)i, tous[i], me ).c_str());
 			// Not named like the profile: the select screen uses the profile name as a
 			// screen element id, and a global struct of that name would replace it.
-			std::string t = "desktop_pedlook_" + std::to_string( i ) + " = { " + avec_planche( looks[i], me ) + " }\n";
+			std::string t = std::string( "desktop_pedlook_" ) + tous[i].nom + " = { " + avec_planche( looks[i], me ) + " }\n";
 			if( me && me->tricks[0] == '{' )
-				t += "desktop_tricks_" + std::to_string( i ) + " = " + me->tricks + "\n";
+				t += std::string( "desktop_tricks_" ) + tous[i].nom + " = " + me->tricks + "\n";
 			compile_q( w2, t.c_str());
-			const uint32_t nom_crc = crc(( "desktop_ped_" + std::to_string( i )).c_str());
+			const uint32_t nom_crc = crc(( std::string( "desktop_ped_" ) + tous[i].nom ).c_str());
 			if( me && me->voix > 0 )
 				s_voix.push_back( std::make_pair( nom_crc, me->voix ));
 			charge_banque( nom_crc, tous[i].nom );

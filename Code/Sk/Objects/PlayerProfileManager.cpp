@@ -19,6 +19,9 @@
 #include <gel/scripting/checksum.h>
 
 #include <gfx/facetexture.h>
+#ifdef THUG_DESKTOP
+#include "vita_log.h"
+#endif
 
 /*****************************************************************************
 **								DBG Information								**
@@ -335,6 +338,15 @@ int CPlayerProfileManager::GetCurrentProfileIndex()
 
 void CPlayerProfileManager::ApplyTemplateToCurrentProfile( uint32 checksum )
 {
+#ifdef THUG_DESKTOP
+	// A save can name a skater that is gone (extra skaters removed or renamed):
+	// the created skater instead of a NULL profile (froze at the end of the load)
+	if ( !m_Profiles.GetItem( checksum ) )
+	{
+		VLOG( "DSK", "profile %08x not found, using the created skater", checksum );
+		checksum = CRCD(0xa7be964,"custom");
+	}
+#endif
 	Mem::Manager::sHandle().PushContext(Mem::Manager::sHandle().SkaterInfoHeap());
 	if ( m_CurrentProfileIndex == 0 )
 	{
