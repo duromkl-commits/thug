@@ -90,9 +90,11 @@ static uint32 hasard( uint32 n )
 enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_MIRROR, MOD_CHAOS, MOD_SURPRISE,
        MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Countdown", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
-                                           "Chaos", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
-// Randomizers page back (Marcus 2026-11-14): Chaos, Sound Salad and Word Salad
-// are toggles, off by default; Obscure is always on, not a toggle
+                                           "Random World", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
+// Randomizers page (Marcus 2026-11-14, second take): two options, one or
+// the other, off by default. Random World = every randomizer (time of day,
+// colours, models, voices, Sound Salad, Word Salad); Chaos = all of that
+// plus the Chaos events. Obscure is always on, not a toggle
 static bool s_arme[NB_MODS] = { false, false, true, false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
@@ -471,14 +473,18 @@ static bool rando_on( int m ) { return s_run.actif && !s_run.fini && s_run.mods[
 // Marcus merged some: Sound Salad brings Random Voices, Random World brings
 // Random Colours and Random Models; Perma Bail and Fragile never both.
 // Obscure is its own toggle again (2026-11-14)
-static bool mod_cache( int i )	// folded into another, not listed
+static bool mod_cache( int i )	// folded into Random World / Chaos, not listed
 {
-	return i == MOD_CHAOS || i == MOD_R_VOIX || i == MOD_R_COULEURS || i == MOD_R_DONNEURS;
+	return i == MOD_R_VOIX || i == MOD_R_COULEURS || i == MOD_R_DONNEURS || i == MOD_R_SONS || i == MOD_R_MOTS
+	    || ( i == MOD_R_MONDE && s_run.actif && s_run.mods[MOD_CHAOS] );	// Chaos says it all
 }
 static void lier_mods( bool *m, int change )
 {
-	m[MOD_R_VOIX] = m[MOD_R_SONS];
-	m[MOD_R_COULEURS] = m[MOD_R_DONNEURS] = m[MOD_CHAOS] = m[MOD_R_MONDE];	// Marcus: Random World + Chaos = "Chaos"
+	// Random World and Chaos: one or the other
+	if( m[MOD_CHAOS] && m[MOD_R_MONDE] ) { if( change == MOD_CHAOS ) m[MOD_R_MONDE] = false; else m[MOD_CHAOS] = false; }
+	const bool monde = m[MOD_R_MONDE] || m[MOD_CHAOS];
+	m[MOD_R_VOIX] = m[MOD_R_SONS] = m[MOD_R_MOTS] = m[MOD_R_COULEURS] = m[MOD_R_DONNEURS] = monde;
+	if( change == -1 ) m[MOD_R_MONDE] = monde;	// the run: Chaos brings Random World's time of day too
 	if( m[MOD_PERMA] && m[MOD_FRAGILE] ) { if( change == MOD_FRAGILE ) m[MOD_PERMA] = false; else m[MOD_FRAGILE] = false; }
 	m[MOD_R_NOMS] = m[MOD_R_ANIMS] = false;
 }
