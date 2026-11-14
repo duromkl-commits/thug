@@ -457,6 +457,18 @@ R = {
 'mp_bruno': ('Trenchcoat Mobster', 'Mobster', 30, 'New York, NY', 'street normal dark'),
 'mp_aesir': ('Aesir Security', 'Security', 30, 'New York, NY', 'street normal army'),
 'mp_killersuit': ('Killer Suit', 'Suit', 30, 'New York, NY', 'street normal army'),
+'q1_ranger': ('Ranger', 'Ranger', 30, 'Quake', 'street normal army'),
+'q1_grunt': ('Grunt', 'Grunt', 25, 'Quake', 'street normal army'),
+'q1_enforcer': ('Enforcer', 'Enforcer', 30, 'Quake', 'vert heavy army'),
+'q1_knight': ('Knight', 'Knight', 500, 'Quake', 'vert normal dark'),
+'q1_deathknight': ('Death Knight', 'Knight', 900, 'Quake', 'vert heavy dark'),
+'q1_ogre': ('Ogre', 'Ogre', 100, 'Quake', 'vert heavy dark'),
+'q1_zombie': ('Zombie', 'Zombie', 300, 'Quake', 'street skinny dark'),
+'q1_shambler': ('Shambler', 'Shambler', 1000, 'Quake', 'vert heavy dark'),
+'q1_mummy': ('Mummy', 'Mummy', 3000, 'Dissolution of Eternity', 'street skinny dark'),
+'q1_guardian': ('Guardian', 'Guardian', 3000, 'Dissolution of Eternity', 'vert heavy dark'),
+'q1_guardian_b': ('Guardian', 'Guardian', 3000, 'Dissolution of Eternity', 'vert heavy dark'),
+'q1_guardian_c': ('Guardian', 'Guardian', 3000, 'Dissolution of Eternity', 'vert heavy dark'),
 }
 
 # No bail voice at all (Marcus: Kairi stays silent).

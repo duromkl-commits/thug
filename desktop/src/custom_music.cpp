@@ -2548,6 +2548,18 @@ static const PersoGTA s_gta[] = {
 	{ "mp_bruno", "Trenchcoat Mobster", 0, "maxpayne" },
 	{ "mp_aesir", "Aesir Security", 0, "maxpayne" },
 	{ "mp_killersuit", "Killer Suit", 0, "maxpayne" },
+	{ "q1_ranger", "Ranger", 0, "quake" },
+	{ "q1_grunt", "Grunt", 0, "quake" },
+	{ "q1_enforcer", "Enforcer", 0, "quake" },
+	{ "q1_knight", "Knight", 0, "quake" },
+	{ "q1_deathknight", "Death Knight", 0, "quake", 1.1f },
+	{ "q1_ogre", "Ogre", 0, "quake", 1.15f },
+	{ "q1_zombie", "Zombie", 0, "quake" },
+	{ "q1_shambler", "Shambler", 0, "quake", 1.3f },
+	{ "q1_mummy", "Mummy", 0, "quake" },
+	{ "q1_guardian", "Guardian", 0, "quake", 1.1f },
+	{ "q1_guardian_b", "Guardian", 0, "quake", 1.1f },
+	{ "q1_guardian_c", "Guardian", 0, "quake", 1.1f },
 };
 static const char *gta_dossier( const PersoGTA &g ) { return g.dossier ? g.dossier : "gta"; }
 enum { NB_GTA = sizeof( s_gta ) / sizeof( s_gta[0] ) };
