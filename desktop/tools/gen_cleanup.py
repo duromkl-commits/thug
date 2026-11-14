@@ -22,7 +22,7 @@ vdir = sys.argv[2]
 own = sorted({l.split('/')[1].lower() for f in os.listdir(vdir) if f.endswith('.txt')
               for l in open(os.path.join(vdir, f)) if l.startswith('own/')})
 # every skater folder we ever shipped
-roots = sorted(set(keep) | {'gta', 'rdr', 'thps2', 'cinc', 'rtcw', 'kingpin', 'maxpayne', 'quake', 'quake2', 'hrot',
+roots = sorted(set(keep) | {'gta', 'rdr', 'thps2', 'cinc', 'rtcw', 'kingpin', 'maxpayne', 'quake', 'quake2', 'hrot', 'gmod',
                             'rethawed/thps1', 'rethawed/thps3', 'rethawed/thps4', 'rethawed/other', 'rethawed/mods'})
 L = ['# Deletes scrapped skaters (models + bail voices) from THUG. Put this next to thug.exe and run clean-skaters.bat.',
      'param([switch]$Yes)', '$ErrorActionPreference = "Stop"',

@@ -100,6 +100,32 @@ _RTMV = {k for _p, k, _n, _f, _s, v in _RTM if v}
 _HR = {'hr_pathologist': 'doktor', 'hr_miner': 'hornik', 'hr_kejdovec': 'kejdovec', 'hr_skapuc': 'maska',
        'hr_smaskou': 'maska', 'hr_corpse': 'zombie'}
 QUAKE.update({k: [('HROT/' + v, r'(?i)(pain|dead|wake|maska)')] for k, v in _HR.items()})
+# Garry's Mod packs (gmod_skaters.py): the addons' own grunts. Max Payne reuses
+# the game's staged MaxPayne/<group> sets; Manhunt and Deus Ex sounds are staged
+# as GMod/Manhunt/<group> and GMod/DeusEx/<male|female|child>; the Ranger is
+# Quake's player. Own-voice characters at pitch 100, groups at profile pitch.
+from gmod_skaters import L as _GML  # noqa: E402
+GMOD = {}
+_GM100 = set()
+for _pk, _pa, k, n, f, _sc, _a, _h, _t in _GML:
+    if k.startswith('gm_mp_'):
+        g = ('max' if n == 'Max Payne' else 'junkie' if 'Junkie' in n else 'killersuit' if 'Killer' in n
+             else 'merc' if n in ('Mercenary', 'Aesir Security') else 'female' if f else 'mobster')
+        GMOD[k] = [('MaxPayne/' + g, r'(gethit|death)')]
+        if g == 'max':
+            _GM100.add(k)
+    elif k.startswith('gm_mh_'):
+        g = ('cash' if 'Cash' in n else 'piggsy' if n == 'Piggsy' else 'chicks' if f
+             else 'cerberus' if n.startswith(('Cerberus', 'SWAT', 'Cop')) else 'hunter')
+        GMOD[k] = [('GMod/Manhunt/' + g, r'.')]
+        if g in ('cash', 'piggsy'):
+            _GM100.add(k)
+    elif k.startswith('gm_dx_'):
+        g = 'child' if 'Child' in n else 'female' if f else 'male'
+        GMOD[k] = [('GMod/DeusEx/' + g, r'.')]
+    elif k == 'gm_qe_ranger':
+        GMOD[k] = [('Quake/player', r'^(pain|death)')]
+        _GM100.add(k)
 MIN_S, MAX_S = 0.15, 1.8
 MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 
@@ -181,7 +207,13 @@ for key, (name, first, age, town, tags) in R.items():
     rng = random.Random('thug-voice:' + key)
     if key in SILENT:
         continue
-    if key in RTCW or key in KINGPIN or key in MAXPAYNE or key in QUAKE:
+    if key in GMOD:
+        clips = []
+        for d, rx in GMOD[key]:
+            clips += pool(d, rx, 'own/' + d.lower().replace('/', '_'), MAX_OWN)
+        p = 100 if key in _GM100 else pitch.get(key, 0) or rng.randint(96, 104)
+        own_n += 1
+    elif key in RTCW or key in KINGPIN or key in MAXPAYNE or key in QUAKE:
         clips = []
         for d, rx in (RTCW.get(key) or KINGPIN.get(key) or MAXPAYNE.get(key) or QUAKE[key]):
             clips += pool(d, rx, 'own/' + d.lower().replace('/', '_'), MAX_OWN)
