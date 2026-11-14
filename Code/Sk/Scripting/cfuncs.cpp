@@ -5795,8 +5795,7 @@ bool ScriptKillFromNodeIndex( int nodeIndex, Script::CScript *pScript )
 				// We only want to get sectors from the main scene, as that is what the node array applies to															
 				Nx::CScene * p_main_scene = Nx::CEngine::sGetMainScene();
 				Nx::CSector *p_sector = p_main_scene->GetSector(checksumName);
-				Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",checksumName,Script::FindChecksumName(checksumName)));
-				p_sector->SetActive(false);
+				if (p_sector) p_sector->SetActive(false);
 				//Bsp::SetWorldSectorFlag(  checksumName, mSD_KILLED );
 
 				// If this node is an occluder, let the occlusion code know that this occluder is no longer enabled.
@@ -7068,7 +7067,7 @@ bool ScriptSetUVWibbleParams(Script::CStruct *pParams, Script::CScript *pScript)
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	// Extract all the parameters
     float u_velocity;
@@ -7111,7 +7110,7 @@ bool ScriptEnableExplicitUVWibble(Script::CStruct *pParams, Script::CScript *pSc
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	p_sector->UseExplicitUVWibble(true);
 
@@ -7131,7 +7130,7 @@ bool ScriptDisableExplicitUVWibble(Script::CStruct *pParams, Script::CScript *pS
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	p_sector->UseExplicitUVWibble(false);
 
@@ -7153,7 +7152,7 @@ bool ScriptSetUVWibbleOffsets(Script::CStruct *pParams, Script::CScript *pScript
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	// Extract all the parameters
     float u_offset;
@@ -8896,8 +8895,7 @@ bool ScriptSetVisibilityFromNodeIndex( int nodeIndex, bool invisible, int viewpo
 				// We only want to get sectors from the main scene, as that is what the node array applies to															
 				Nx::CScene * p_main_scene = Nx::CEngine::sGetMainScene();
 				Nx::CSector *p_sector = p_main_scene->GetSector(checksumName);
-				Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",checksumName,Script::FindChecksumName(checksumName)));
-
+				if (!p_sector) break;
 				uint32 orig_flag = p_sector->GetVisibility();
 				uint32 flag = 0x1; 
 				if (viewport_number == 1)
@@ -8980,8 +8978,7 @@ bool ScriptCheckExistenceFromNodeIndex( int nodeIndex )
 				// We only want to get sectors from the main scene, as that is what the node array applies to															
 				Nx::CScene * p_main_scene = Nx::CEngine::sGetMainScene();
 				Nx::CSector *p_sector = p_main_scene->GetSector(checksumName);
-				Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",checksumName,Script::FindChecksumName(checksumName)));
-				return (p_sector->IsActive());
+				return (p_sector && p_sector->IsActive());
 				//return ( Bsp::WorldSectorIsAlive( checksumName ) );
 			}
 			break;

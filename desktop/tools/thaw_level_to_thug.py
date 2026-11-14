@@ -438,13 +438,13 @@ INERT_CLASSES = {crc('GameObject'), crc('Pedestrian'), crc('Vehicle'), crc('Part
                  crc('ParticleEmitter')}
 
 
-def node_fixer(root_structs):
+def node_fixer(root_structs, sectors=()):
     """Node array fix-up: THAW's node compression and model objects.
 
     Bigger zones store shared node fields once, as root structs
     (ncomp_LevelGeometry_1 = { Class = LevelGeometry CreatedAtStart ... })
     that nodes name as a bare flag; they are expanded in place. Objects that
-    need THAW models (game objects, peds, cars, particles) are made inert."""
+    need THAW models (game objects, peds, cars, particles) are made inert, as are LevelObjects whose sector is missing."""
     def fix(nodes):
         out = []
         for n in nodes:
@@ -455,7 +455,8 @@ def node_fixer(root_structs):
                 else:
                     e.append((k, v))
             cls = dict((k, v) for k, v in e if k).get(crc('Class'))
-            if cls in INERT_CLASSES:
+            nm = dict((k, v) for k, v in e if k).get(crc('Name'))
+            if cls in INERT_CLASSES or (cls == crc('LevelObject') and nm not in sectors):
                 e = [(k, Q.Key(INERT) if k == crc('Class') else v) for k, v in e
                      if k not in (crc('Model'),) and not (k == 0 and v == crc('CreatedAtStart'))]
             out.append(Q.Struct(e))
@@ -480,7 +481,7 @@ def convert_level(pak, L, dst):
     main = next(b for n, b in qbs.items() if n.endswith('/%s.qb.wpc' % zone))
     snd = level_sounds(qbs.values())
     roots = {c: v for t, c, v in Q.QB(main).items if isinstance(v, Q.Struct)}
-    q, _ = qb_to_thug(main, renames, {crc('NodeArray'): node_fixer(roots)},
+    q, _ = qb_to_thug(main, renames, {crc('NodeArray'): node_fixer(roots, set(sectors))},
                       extra={crc('LoadTerrain'): snd} if snd else None)
     scn_raw = next(b for t, n, b in files if t == T_SCN)
     names = light_dark_names(sector_geometry(scn_raw), prefix_strings(qbs.values()))
