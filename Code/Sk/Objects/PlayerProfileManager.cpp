@@ -653,6 +653,9 @@ void CPlayerProfileManager::LoadAllProProfileInfo(Script::CStruct *pStuff)
 	uint32 CurrentSkaterNameChecksum=0;
 	pStuff->GetChecksum("CurrentSkater",&CurrentSkaterNameChecksum);
 	ApplyTemplateToCurrentProfile(CurrentSkaterNameChecksum);
+#ifdef THUG_DESKTOP
+	m_DesktopSavedSkater = CurrentSkaterNameChecksum;
+#endif
 	Mem::Manager::sHandle().PopContext();
 }
 

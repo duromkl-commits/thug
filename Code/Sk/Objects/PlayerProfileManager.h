@@ -70,6 +70,8 @@ class CPlayerProfileManager : public Spt::Class
 		uint32					DesktopNextSkater(uint32 current);
 		void					DesktopLend(uint32 pro);
 		void					DesktopEndLend( bool hand_back = true );
+		// the skater a save was made with (its CurrentSkater), 0 if none
+		uint32					m_DesktopSavedSkater = 0;
 #endif
 		CSkaterProfile*			GetCurrentProfile();
 		CSkaterProfile*			GetProfile(int i);

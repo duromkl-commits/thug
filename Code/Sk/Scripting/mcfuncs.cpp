@@ -1198,6 +1198,17 @@ static void s_read_story_skater_info(CStruct *p_storySkaterInfo, CStruct *p_cust
     pSkater->LoadChapterStatusInfo(p_storySkaterInfo);
     
     pPlayerProfileManager->LoadCASProfileInfo(p_customSkater, true);
+#ifdef THUG_DESKTOP
+	// The story loads as the created skater; a save made as another skater
+	// (Change Player Model, extra skaters) goes back to that one (Marcus)
+	{
+		extern bool ScriptDesktopSelectSkaterLent( uint32 name );
+		const uint32 saved = pPlayerProfileManager->m_DesktopSavedSkater;
+		Obj::CSkaterProfile* pSaved = saved ? pPlayerProfileManager->GetProfileTemplate( saved ) : NULL;
+		if ( pSaved && pSaved->IsPro() )
+			ScriptDesktopSelectSkaterLent( saved );
+	}
+#endif
 }
 
 static void s_read_custom_skater_info(CStruct *p_customSkater)
