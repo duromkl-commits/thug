@@ -41,6 +41,15 @@ static void echantillon( int k )
 		}
 	}
 	ResumeThread( s_principal );
+	// Straight to thug_hang.txt first, with nothing that takes a CRT or
+	// logger lock, so the report lands even if the logger is what is stuck.
+	char buf[2048]; int l = wsprintfA( buf, "sample %d pc %s+0x%lx\r\n", k, dans_exe( pc ) ? "thug.exe" : "?",
+	          (unsigned long)( dans_exe( pc ) ? pc - s_base : pc ));
+	for( int i = 0; i < n; ++i )
+		l += wsprintfA( buf + l, "  stack thug.exe+0x%lx\r\n", (unsigned long)( pile[i] - s_base ));
+	HANDLE f = CreateFileA( "thug_hang.txt", FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+	                        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+	if( f != INVALID_HANDLE_VALUE ) { DWORD w; WriteFile( f, buf, l, &w, NULL ); CloseHandle( f ); }
 	vita_log_printf( "WDOG", "hang sample %d at %s+0x%lx", k, dans_exe( pc ) ? "thug.exe" : "?",
 	          (unsigned long)( dans_exe( pc ) ? pc - s_base : pc ));
 	for( int i = 0; i < n; ++i )
@@ -50,16 +59,30 @@ static void echantillon( int k )
 
 static DWORD WINAPI veille( void * )
 {
-	LONG vu = -1; int immobile = 0, attente = 20;
+	// 6 s without a frame: Windows calls a window "not responding" after 5,
+	// and people kill it soon after. A long but healthy load also trips this;
+	// that only costs a few log lines.
+	LONG vu = -1; int immobile = 0, faits = 0;
+	DeleteFileA( "thug_hang.txt" );
 	for( ;; )
 	{
 		Sleep( 1000 );
 		const LONG b = s_battement;
-		if( b != vu ) { vu = b; immobile = 0; attente = 20; continue; }
-		if( b == 0 || ++immobile < attente ) continue;	// not started drawing yet
-		vita_log_printf( "WDOG", "no frame for %d s", immobile );
-		for( int k = 0; k < 3; ++k ) { echantillon( k ); Sleep( 1000 ); }
-		immobile = 0; attente = 60;
+		if( b != vu ) { vu = b; immobile = 0; faits = 0; continue; }
+		if( b == 0 ) continue;	// not started drawing yet
+		++immobile;
+		if( immobile >= 6 && faits < 10 && ( immobile - 6 ) % 3 == 0 )
+		{
+			HANDLE f = CreateFileA( "thug_hang.txt", FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+			                        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+			if( f != INVALID_HANDLE_VALUE )
+			{
+				char t[64]; DWORD w; int l = wsprintfA( t, "no frame for %d s\r\n", immobile );
+				WriteFile( f, t, l, &w, NULL ); CloseHandle( f );
+			}
+			vita_log_printf( "WDOG", "no frame for %d s", immobile );
+			echantillon( faits++ );
+		}
 	}
 	return 0;
 }
@@ -113,9 +136,9 @@ extern "C" void desktop_crash_handler_install( void )
 	CreateThread( NULL, 0, veille, NULL, 0, NULL );
 }
 
-// Hang report: no frame shown for 20 s (the game stuck in a loop, Windows'
-// "not responding") -> the main thread's position and stack go to thug.log,
-// three samples a second apart, then again if it is still stuck 60 s on.
+// Hang report: no frame shown for 6 s (the game stuck in a loop, Windows'
+// "not responding") -> the main thread's position and stack go to
+// thug_hang.txt and thug.log, every 3 s, up to 10 samples.
 extern "C" void desktop_watchdog_beat( void ) { InterlockedIncrement( &s_battement ); }
 
 #else

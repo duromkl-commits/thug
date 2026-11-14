@@ -5296,6 +5296,7 @@ bool ScriptUnloadAllLevelGeometry(Script::CStruct *pParams, Script::CScript *pSc
 
 bool ScriptLoadScene(Script::CStruct *pParams, Script::CScript *pScript)
 {
+	VLOG( "LVL", "LoadScene" );
 	bool is_dictionary = pParams->ContainsFlag(CRCD(0x3d559e7d,"is_dictionary"));  		// piece dictionary, like the park editor
 	bool is_sky = pParams->ContainsFlag(CRCD(0xb5bd28d8,"is_sky"));						// a sky dome
 	bool is_net = pParams->ContainsFlag(CRCD(0x417149c8,"is_net"));						// the _net version
@@ -6272,6 +6273,7 @@ void	CleanupBeforeParseNodeArray()
 // @script | ParseNodeArray | Parses the loaded node array 
 bool ScriptParseNodeArray( Script::CStruct *pParams, Script::CScript *pScript )
 {
+	VLOG( "LVL", "ParseNodeArray: start" );
 	Mem::PushMemProfile("ParseNodeArray");
 
 	CleanupBeforeParseNodeArray();	
@@ -6287,6 +6289,7 @@ bool ScriptParseNodeArray( Script::CStruct *pParams, Script::CScript *pScript )
 	Obj::CRailManager *p_rail_man = skate_mod->GetRailManager();
 	Dbg_MsgAssert(p_rail_man,("Missing rail manager"));					 
 	p_rail_man->AddRailsFromNodeArray(pNodeArray );					 									  
+	VLOG( "LVL", "ParseNodeArray: rails added, %d nodes", (int)pNodeArray->GetSize() );
 	Mem::PopMemProfile();
 	
 	// Nav nodes are added separately.
@@ -6534,11 +6537,15 @@ bool ScriptParseNodeArray( Script::CStruct *pParams, Script::CScript *pScript )
 		}				
 	}	
 	
+	VLOG( "LVL", "ParseNodeArray: nodes created" );
 	Dbg_MsgAssert(!fail, ("ParseNodeArray FAILED, see above for reasons labled FAILED BECAUSE \n"));
 	
 	Obj::Proxim_AddedAll();
+	VLOG( "LVL", "ParseNodeArray: proxim done" );
 	p_rail_man->AddedAll();
+	VLOG( "LVL", "ParseNodeArray: rails done" );
 	Mdl::Skate::Instance()->GetGapChecklist()->FindGaps();
+	VLOG( "LVL", "ParseNodeArray: gaps found" );
 
 	/*
 	// STUPID HACK
@@ -6644,6 +6651,7 @@ static char LastNodeArrayLoaded[128];
 // @uparm "string" | File name to load
 bool ScriptLoadNodeArray(Script::CStruct *pParams, Script::CScript *pScript)
 {
+	VLOG( "LVL", "LoadNodeArray: start" );
 	Mem::PushMemProfile("LoadNodeArray");
 	
 	// Remove any spawned scripts that might have been left over from the previous level.
