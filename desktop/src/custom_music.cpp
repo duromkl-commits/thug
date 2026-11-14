@@ -2656,6 +2656,21 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			          p.nom, forme );
 			looks.push_back( t );
 		}
+		// Alphabetical by the name shown (Marcus), after THUG's own skaters
+		{
+			std::vector<size_t> o( tous.size());
+			for( size_t i = 0; i < o.size(); ++i ) o[i] = i;
+			auto nom_vu = [&]( size_t i ) {
+				const MetaSkater *me = meta_de( tous[i].nom );
+				return me ? me->affiche : tous[i].affiche;
+			};
+			std::stable_sort( o.begin(), o.end(), [&]( size_t x, size_t y ) {
+				return strcasecmp( nom_vu( x ), nom_vu( y )) < 0;
+			} );
+			std::vector<PietonJouable> t2; std::vector<std::string> l2;
+			for( size_t i : o ) { t2.push_back( tous[i] ); l2.push_back( looks[i] ); }
+			tous.swap( t2 ); looks.swap( l2 );
+		}
 		Ecrit w1;
 		Ecrit w2; w2.eol();
 		s_voix.clear();
