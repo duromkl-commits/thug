@@ -17,7 +17,7 @@ is THUG's engine two games on, so most things map across directly:
    per object (like the THPS4 converter).
  - qb: THAW's item-tree qb with LZSS scripts -> THUG's token stream. The
    script bytecode is THUG's, except THAW's short-offset if/else.
-   <zone>_NodeArray is renamed <L>_NodeArray. Game objects (CTF flags, crowns:
+   <zone>_NodeArray is renamed NodeArray (THUG's LoadNodeArray wants that name). Game objects (CTF flags, crowns:
    THAW models) are made inert. Gap scripts carry over as they are.
 Personal use with your own copy of the game data.
 """
@@ -323,10 +323,10 @@ def convert_level(pak, L, dst):
     open(os.path.join(o, L + '.scn.xbx'), 'wb').write(scn)
     col = convert_col(next(b for t, n, b in files if t == T_COL))
     open(os.path.join(o, L + '.col.xbx'), 'wb').write(col)
-    renames = {crc(zone + '_NodeArray'): crc(L + '_NodeArray')}
+    renames = {crc(zone + '_NodeArray'): crc('NodeArray')}
     qbs = {n: b for t, n, b in files if n.endswith('.qb.wpc')}
     main = next(b for n, b in qbs.items() if n.endswith('/%s.qb.wpc' % zone))
-    q, _ = qb_to_thug(main, renames, {crc(L + '_NodeArray'): fix_nodes})
+    q, _ = qb_to_thug(main, renames, {crc('NodeArray'): fix_nodes})
     open(os.path.join(o, L + '.qb'), 'wb').write(q)
     sc = next((b for n, b in qbs.items() if n.endswith('/%s_scripts.qb.wpc' % zone)), None)
     s, _ = qb_to_thug(sc) if sc else (b'\x01\x00', None)
