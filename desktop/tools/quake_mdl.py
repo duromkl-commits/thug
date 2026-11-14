@@ -55,3 +55,22 @@ def read(d, pal):
 
 def palette(lmp):
     return np.frombuffer(lmp, np.uint8, 768).reshape(256, 3)
+
+
+def read_md2(d):
+    """Quake 2 .md2 ('IDP2' v8) -> dict(skins [names], tris [[(v, s, t) x3]], frames, size).
+    Skins are separate .pcx files, so only their names come back."""
+    assert d[:4] == b'IDP2', d[:4]
+    (ver, sw, sh, fsize, nsk, nv, nst, nt, ngl, nf, osk, ost, otr, ofr, ogl, oend) = struct.unpack('<16i', d[4:68])
+    skins = [d[osk + 64 * i:osk + 64 * i + 64].split(b'\0')[0].decode('latin1') for i in range(nsk)]
+    st = np.frombuffer(d, '<i2', nst * 2, ost).reshape(nst, 2).astype(float)
+    tr = np.frombuffer(d, '<i2', nt * 6, otr).reshape(nt, 6)
+    frames = []
+    for i in range(nf):
+        o = ofr + fsize * i
+        sc = np.array(struct.unpack('<3f', d[o:o + 12])); tl = np.array(struct.unpack('<3f', d[o + 12:o + 24]))
+        name = d[o + 24:o + 40].split(b'\0')[0].decode('latin1')
+        v = np.frombuffer(d, np.uint8, nv * 4, o + 40).reshape(nv, 4)[:, :3].astype(float)
+        frames.append((name, v * sc + tl))
+    T = [[(int(t[k]), st[t[3 + k], 0] / sw, st[t[3 + k], 1] / sh) for k in range(3)] for t in tr]
+    return dict(skins=skins, tris=T, frames=frames, size=(sw, sh))

@@ -82,6 +82,16 @@ _QV = {'q1_ranger': 'player', 'q1_grunt': 'soldier', 'q1_enforcer': 'enforcer', 
        'q1_deathknight': 'hknight', 'q1_ogre': 'ogre', 'q1_zombie': 'zombie', 'q1_mummy': 'zombie',
        'q1_shambler': 'shambler', 'q1_guardian': 'guard', 'q1_guardian_b': 'guard', 'q1_guardian_c': 'guard'}
 QUAKE = {k: [('Quake/' + v, r'^(pain|death|khurt|kdeath|ogpain|ogdth|z_pain|shurt|sdeath)')] for k, v in _QV.items()}
+# Quake 2: player model sounds (players/<model>) and monster pain/death sounds
+_Q2M = {'lightguard': 'soldier', 'shotgunguard': 'soldier', 'machinegunguard': 'soldier', 'enforcer': 'infantry',
+        'gunner': 'gunner', 'berserker': 'berserk', 'ironmaiden': 'chick', 'brains': 'brain', 'tank': 'tank',
+        'tankcommander': 'tank', 'insane': 'insane', 'insane_b': 'insane', 'insane_c': 'insane'}
+QUAKE2 = {}
+for k in R:
+    if k.startswith('q2_'):
+        _m = _Q2M.get(k[3:]) or ('female' if 'female' in R[k][4].split() else 'cyborg' if k[3:] in ('oni911', 'ps9000', 'tyr574') else 'male')
+        QUAKE2[k] = [('Quake2/' + _m, r'(?i)(pain|death|deth|insane)')]
+QUAKE.update(QUAKE2)
 MIN_S, MAX_S = 0.15, 1.8
 MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 
@@ -168,7 +178,7 @@ for key, (name, first, age, town, tags) in R.items():
         for d, rx in (RTCW.get(key) or KINGPIN.get(key) or MAXPAYNE.get(key) or QUAKE[key]):
             clips += pool(d, rx, 'own/' + d.lower().replace('/', '_'), MAX_OWN)
         # the same clips for a whole group: their profile pitch tells them apart
-        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') or (key in KINGPIN and '/male/' in KINGPIN[key][0][0]) or key in ('mp_max', 'mp_youngmax') or key in QUAKE else pitch.get(key, 0) or rng.randint(96, 104)
+        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') or (key in KINGPIN and '/male/' in KINGPIN[key][0][0]) or key in ('mp_max', 'mp_youngmax') or (key in QUAKE and (key not in QUAKE2 or key == 'q2_bitterman' or key[3:] in _Q2M)) else pitch.get(key, 0) or rng.randint(96, 104)
         own_n += 1
     elif key in OWN or key in OWN2:
         d, rx = OWN[key] if key in OWN else OWN2[key]
