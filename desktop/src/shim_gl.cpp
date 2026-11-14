@@ -139,6 +139,7 @@ static bool screen_targets_create( void )
 
 // -- vgl* ------------------------------------------------------------------------
 extern "C" void desktop_crash_handler_install( void );
+extern "C" void desktop_watchdog_beat( void );
 static void cadence_vsync( void );
 
 static bool   s_mode_pair = false;
@@ -707,6 +708,7 @@ extern "C" void vglSwapBuffers( GLboolean )
 		s_lag_der = SDL_GetPerformanceCounter();
 	}
 	SDL_GL_SwapWindow( s_window );
+	desktop_watchdog_beat();
 	cadence_mesure();
 	dgl_glBindFramebuffer_real( GL_FRAMEBUFFER, s_bound_fb ? s_bound_fb : s_fbo );
 	if( scissor ) glEnable( GL_SCISSOR_TEST );
