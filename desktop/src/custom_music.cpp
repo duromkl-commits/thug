@@ -2940,7 +2940,7 @@ struct NiveauTH4 { const char *dossier, *nom; int numero; const char *startup, *
 static const NiveauTH4 s_niveaux_th4[] = {
 	{ "Sch", "College", 22, "sch_Startup",
 	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
-	{ "SF2", "San Francisco", 23, "sf2_Startup",
+	{ "SF2", "San Francisco (THPS4)", 23, "sf2_Startup",
 	  "ambient_red = 69 ambient_green = 72 ambient_blue = 79 ambient_mod_factor = 0.3 heading_0 = -50 pitch_0 = -127 red_0 = 130 green_0 = 120 blue_0 = 97 mod_factor_0 = 1.4 heading_1 = 50 pitch_1 = -117 red_1 = 55 green_1 = 58 blue_1 = 61 mod_factor_1 = 0.2 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
 	{ "Alc", "Alcatraz", 24, "ALC_Startup",
 	  "ambient_red = 69 ambient_green = 72 ambient_blue = 79 ambient_mod_factor = 0.3 heading_0 = 120 pitch_0 = -127 red_0 = 130 green_0 = 120 blue_0 = 97 mod_factor_0 = 1.4 heading_1 = -45 pitch_1 = -110 red_1 = 58 green_1 = 62 blue_1 = 66 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
@@ -2954,7 +2954,12 @@ static const NiveauTH4 s_niveaux_th4[] = {
 	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 24 green_1 = 25 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
 	{ "Cnv", "Carnival", 29, "Cnv_Startup",
 	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.5 heading_0 = 90 pitch_0 = -60 red_0 = 75 green_0 = 75 blue_0 = 75 mod_factor_0 = 0.7 heading_1 = 0 pitch_1 = -90 red_1 = 0 green_1 = 0 blue_1 = 0 mod_factor_1 = 1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
-	{ "Hof", "Chicago", 31, "hof_Startup",
+	{ "Hof", "Chicago (MHPBMX2)", 31, "hof_Startup",
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.5 heading_0 = 90 pitch_0 = -60 red_0 = 75 green_0 = 75 blue_0 = 75 mod_factor_0 = 0.7 heading_1 = 0 pitch_1 = -90 red_1 = 0 green_1 = 0 blue_1 = 0 mod_factor_1 = 1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	// THPS1-3 levels from ReTHAWed (desktop/tools/thaw_level_to_thug.py),
+	// folders rt_<zone>: no startup script and no sky of their own. Free
+	// skate only for now (not in THUG's story level select).
+	{ "rt_ware", "Warehouse", 32, NULL,
 	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.5 heading_0 = 90 pitch_0 = -60 red_0 = 75 green_0 = 75 blue_0 = 75 mod_factor_0 = 0.7 heading_1 = 0 pitch_1 = -90 red_1 = 0 green_1 = 0 blue_1 = 0 mod_factor_1 = 1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
 };
 
@@ -2970,7 +2975,13 @@ static bool niveau_installe( const char *dossier )
 
 static std::string struct_niveau( const NiveauTH4 &n )
 {
-	char t[4096];
+	char t[4096], ciel[128], depart[128];
+	ciel[0] = depart[0] = 0;
+	if( n.startup )
+	{
+		snprintf( ciel, sizeof( ciel ), "sky = \"%s_Sky\"\n", n.dossier );
+		snprintf( depart, sizeof( depart ), "startup_script = %s\n", n.startup );
+	}
 	snprintf( t, sizeof( t ),
 		"Level_TH4_%s = {\n"
 		"structure_name = Level_TH4_%s\n"
@@ -2980,12 +2991,12 @@ static std::string struct_niveau( const NiveauTH4 &n )
 		"loading_time = 9\n"
 		"pre = \"NJ.pre\"\n"
 		"level = \"%s\"\n"
-		"sky = \"%s_Sky\"\n"
+		"%s"
 		"qb = \"levels\\%s\\%s.qb\"\n"
 		"level_qb = \"levels\\%s\\%s_scripts.qb\"\n"
 		"default_stats = 5\n"
 		"level_number = %d\n"
-		"startup_script = %s\n"
+		"%s"
 		"goals_script = TH4_Goals_%s\n"
 		"%s\n"
 		"}\n"
@@ -3001,8 +3012,8 @@ static std::string struct_niveau( const NiveauTH4 &n )
 		"endif\n"
 		"endif\n"
 		"endscript\n",
-		n.dossier, n.dossier, n.dossier, n.nom, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier,
-		n.numero, n.startup, n.dossier, n.lumieres, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier );
+		n.dossier, n.dossier, n.dossier, n.nom, n.dossier, ciel, n.dossier, n.dossier, n.dossier, n.dossier,
+		n.numero, depart, n.dossier, n.lumieres, n.dossier, n.dossier, n.dossier, n.dossier, n.dossier );
 	return t;
 }
 
@@ -3010,8 +3021,8 @@ static std::string choix_niveau( const NiveauTH4 &n )
 {
 	char t[512];
 	snprintf( t, sizeof( t ),
-		"{ text = \"%s\" level_num = %d points_to_unlock = 0 num_am_goals = 0 num_goals = 0 flag = LEVEL_UNLOCKED_NJ level = load_TH4_%s }\n",
-		n.nom, n.numero, n.dossier );
+		"{ text = \"%s\" level_num = %d points_to_unlock = 0 num_am_goals = 0 num_goals = 0 flag = LEVEL_UNLOCKED_NJ level = load_TH4_%s%s }\n",
+		n.nom, n.numero, n.dossier, n.startup ? "" : " desktop_rt = 1" );
 	return t;
 }
 
@@ -3272,6 +3283,15 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	// the THPS4 levels, each open once its flag is set; THUG's story doesn't
 	// list them. Saving writes the PS4 career's own file, never a story save.
 	patch_debut( qb, j, m, "level_select_menu_add_item",
+		// ReTHAWed's THPS1-3 levels: free skate only for now
+		"if GotParam desktop_rt\n"
+		"if GameModeEquals is_career\n"
+		"return\n"
+		"endif\n"
+		"if DesktopTH4Active\n"
+		"return\n"
+		"endif\n"
+		"endif\n"
 		"if DesktopTH4Level level = <level>\n"
 		"if DesktopTH4Active\n"
 		"<flag> = <th4_flag>\n"
