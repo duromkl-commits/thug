@@ -92,6 +92,10 @@ for k in R:
         _m = _Q2M.get(k[3:]) or ('female' if 'female' in R[k][4].split() else 'cyborg' if k[3:] in ('oni911', 'ps9000', 'tyr574') else 'male')
         QUAKE2[k] = [('Quake2/' + _m, r'(?i)(pain|death|deth|insane)')]
 QUAKE.update(QUAKE2)
+# HROT: own sets where the game has them (headsmen have none: generic voices)
+_HR = {'hr_pathologist': 'doktor', 'hr_miner': 'hornik', 'hr_kejdovec': 'kejdovec', 'hr_skapuc': 'maska',
+       'hr_smaskou': 'maska', 'hr_corpse': 'zombie'}
+QUAKE.update({k: [('HROT/' + v, r'(?i)(pain|dead|wake|maska)')] for k, v in _HR.items()})
 MIN_S, MAX_S = 0.15, 1.8
 MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 
@@ -178,7 +182,7 @@ for key, (name, first, age, town, tags) in R.items():
         for d, rx in (RTCW.get(key) or KINGPIN.get(key) or MAXPAYNE.get(key) or QUAKE[key]):
             clips += pool(d, rx, 'own/' + d.lower().replace('/', '_'), MAX_OWN)
         # the same clips for a whole group: their profile pitch tells them apart
-        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') or (key in KINGPIN and '/male/' in KINGPIN[key][0][0]) or key in ('mp_max', 'mp_youngmax') or (key in QUAKE and (key not in QUAKE2 or key == 'q2_bitterman' or key[3:] in _Q2M)) else pitch.get(key, 0) or rng.randint(96, 104)
+        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') or (key in KINGPIN and '/male/' in KINGPIN[key][0][0]) or key in ('mp_max', 'mp_youngmax') or (key in QUAKE and (key in _HR or key not in QUAKE2 or key == 'q2_bitterman' or key[3:] in _Q2M)) else pitch.get(key, 0) or rng.randint(96, 104)
         own_n += 1
     elif key in OWN or key in OWN2:
         d, rx = OWN[key] if key in OWN else OWN2[key]

@@ -60,6 +60,15 @@ MARKS2 = {
                  propbox=[(-50, 50, 16, 26, 10, 22)]),
     'insane': dict(R=((1, -9, 18), (1, -12, 9), (1, -12, 1)), L=((1, 9, 18), (1, 12, 9), (1, 11, 1)), neck=21, crotch=2,
                    legbox=(-20, 20, -9.5, 9.5)),
+    # HROT (HROT.pak md2s, keyed by file name; bind frame = first idle)
+    'doktor': dict(R=((2, -8, 37), (2, -11, 30), (2, -12, 22)), L=((2, 8, 37), (2, 12, 30), (2, 13, 21)), neck=39, crotch=12),
+    'hornik': dict(R=((0, -5, 33), (0, -11, 37), (0, -10, 46)), L=((0, 5, 33), (0, 12, 37), (0, 10, 46)), neck=35, crotch=19),
+    'kejdovec': dict(R=((3, -10, 38), (3, -14, 30), (3, -16, 21)), L=((3, 10, 38), (3, 15, 30), (3, 16, 21)), neck=40, crotch=14),
+    'skapuci': dict(R=((2, -6, 38), (-2, -10, 30), (5, -4, 24)), L=((4, 5, 37), (9, 9, 29), (13, 7, 39)), neck=41, crotch=10),
+    'smaskou': dict(R=((2, -6, 38), (-2, -10, 30), (5, -4, 24)), L=((4, 5, 37), (9, 9, 29), (13, 7, 39)), neck=41, crotch=10),
+    'zombie': dict(R=((0, -4, 33), (-3, -5, 28), (-6, -5, 25)), L=((2, 4, 33), (10, 4, 24), (17, 6, 21)), neck=35, crotch=17),
+    'kapic': dict(R=((0, -6, 31), (2, -8, 23), (8, -4, 21)), L=((0, 6, 31), (2, 8, 23), (10, 6, 21)), neck=33, crotch=10),
+    'kapic2': dict(R=((0, -6, 31), (3, -7, 24), (8, -3, 20)), L=((0, 5, 31), (4, 6, 24), (9, 2, 21)), neck=33, crotch=10),
 }
 
 
@@ -75,11 +84,13 @@ def marks(name, table=MARKS):
 def load(mdl, pal, skin, td):
     if mdl.lower().endswith('.md2'):	# Quake 2: model named by its folder, skin is a .pcx
         r = Q.read_md2(open(mdl, 'rb').read())
-        base = os.path.basename(os.path.dirname(mdl))
+        base = os.path.splitext(os.path.basename(mdl))[0]
+        if base not in MARKS2:
+            base = os.path.basename(os.path.dirname(mdl))
         L = marks(base, MARKS2)
         names = [f[0] for f in r['frames']]
         fr = MARKS2[base].get('frame')
-        ri = names.index(fr) if fr else next(i for i, n in enumerate(names) if n.lower().startswith(('stand', 'wait')))
+        ri = names.index(fr) if fr else next(i for i, n in enumerate(names) if n.lower().startswith(('stand', 'wait', 'idle')))
         Image.open(skin).convert('RGBA').save(os.path.join(td, 'skin.png'))
     else:
         r = Q.read(open(mdl, 'rb').read(), pal)
@@ -120,5 +131,5 @@ if __name__ == '__main__':
         mdl, _, sk = spec.partition(':')
         with tempfile.TemporaryDirectory() as td:
             B, pos, N, uvs, tris, VW, mir = load(mdl, pal, sk, td)
-            nv, nt, a, b = build(data, out, key, B, pos, N, uvs, tris, VW, td, 'quake2' if mdl.endswith('.md2') else 'quake')
+            nv, nt, a, b = build(data, out, key, B, pos, N, uvs, tris, VW, td, os.environ.get('SUB') or ('quake2' if mdl.endswith('.md2') else 'quake'))
             print('%s: %d vertices, %d triangles, height %.1f%s' % (key, nv, nt, b[1], ' MIRRORED' if mir else ''))

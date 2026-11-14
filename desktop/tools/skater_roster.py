@@ -510,6 +510,14 @@ R = {
 'q2_insane': ('Insane Marine', 'Marine', 30, 'Quake II', 'street skinny dark'),
 'q2_insane_b': ('Insane Marine', 'Marine', 30, 'Quake II', 'street skinny dark'),
 'q2_insane_c': ('Insane Marine', 'Marine', 30, 'Quake II', 'street skinny dark'),
+'hr_pathologist': ('Pathologist', 'Pathologist', 35, 'HROT', 'street normal dark'),
+'hr_miner': ('Miner', 'Miner', 35, 'HROT', 'street heavy dark'),
+'hr_kejdovec': ('Kejdovec', 'Kejdovec', 35, 'HROT', 'street normal dark'),
+'hr_skapuc': ('Skapuc', 'Skapuc', 35, 'HROT', 'street normal dark'),
+'hr_smaskou': ('Smaskou', 'Smaskou', 35, 'HROT', 'street normal dark'),
+'hr_corpse': ('Walking Corpse', 'Corpse', 35, 'HROT', 'street skinny dark'),
+'hr_headsman': ('Headsman', 'Headsman', 35, 'HROT', 'street normal dark'),
+'hr_headsman_gun': ('Headsman with Shotgun', 'Headsman', 35, 'HROT', 'street normal dark'),
 }
 
 # No bail voice at all (Marcus: Kairi stays silent).

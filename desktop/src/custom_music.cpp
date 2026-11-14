@@ -2601,6 +2601,14 @@ static const PersoGTA s_gta[] = {
 	{ "q2_insane", "Insane Marine", 0, "quake2" },
 	{ "q2_insane_b", "Insane Marine", 0, "quake2" },
 	{ "q2_insane_c", "Insane Marine", 0, "quake2" },
+	{ "hr_pathologist", "Pathologist", 0, "hrot" },
+	{ "hr_miner", "Miner", 0, "hrot" },
+	{ "hr_kejdovec", "Kejdovec", 0, "hrot" },
+	{ "hr_skapuc", "Skapuc", 0, "hrot" },
+	{ "hr_smaskou", "Smaskou", 0, "hrot" },
+	{ "hr_corpse", "Walking Corpse", 0, "hrot" },
+	{ "hr_headsman", "Headsman", 0, "hrot", 1.05f },
+	{ "hr_headsman_gun", "Headsman with Shotgun", 0, "hrot", 1.05f },
 };
 static const char *gta_dossier( const PersoGTA &g ) { return g.dossier ? g.dossier : "gta"; }
 enum { NB_GTA = sizeof( s_gta ) / sizeof( s_gta[0] ) };
