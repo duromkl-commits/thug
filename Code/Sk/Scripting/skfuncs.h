@@ -162,6 +162,7 @@ bool ScriptDesktopDementedStart(Script::CStruct *pParams, Script::CScript *pScri
 bool ScriptDesktopDementedStop(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedNeedsDeal(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedHidesGoal(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDmGoal(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedIsOn(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedNeedsDialog(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedDialogShown(Script::CStruct *pParams, Script::CScript *pScript);

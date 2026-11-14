@@ -2112,6 +2112,98 @@ bool ScriptDesktopDementedHidesGoal( Script::CStruct *pParams, Script::CScript *
 	return est_pro( id ) && id != pro_courant();
 }
 
+// Goal randomization (Marcus's 13 Nov list): goal scripts patched by
+// custom_music.cpp call this for each value it rolls. It sets param 'name' in
+// the calling script: the original ('def') outside Demented, else a roll fixed
+// by the run's seed and 'key' (the same all run, whichever script asks).
+//   lo/hi/step: a number (int, or a "1,250,000" string with fmt = "Get %s points")
+//   cles = [...]: one of these checksums (a trick slot)
+//   eric = start / eric: Eric's score race, his total grows evenly to a rolled
+//   final (lo..hi) over 'time' seconds, set into 'name' as an int
+static uint64 s_eric_t0 = 0;
+static void milliers( char *o, size_t n, int v )
+{
+	char b[24]; snprintf( b, sizeof( b ), "%d", v );
+	const int l = (int)strlen( b );
+	size_t k = 0;
+	for( int i = 0; i < l && k + 1 < n; ++i )
+	{
+		if( i && ( l - i ) % 3 == 0 && k + 1 < n ) o[k++] = ',';
+		if( k + 1 < n ) o[k++] = b[i];
+	}
+	o[k] = 0;
+}
+bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	uint32 nom = 0;
+	pParams->GetChecksum( crc( "name" ), &nom, Script::NO_ASSERT );
+	if( !nom || !pScript || !pScript->GetParams()) return true;
+	Script::CStruct *o = pScript->GetParams();
+	const bool dm = s_run.actif && !s_run.fini;
+	int cle = 0;
+	pParams->GetInteger( crc( "key" ), &cle, Script::NO_ASSERT );
+	const uint64 g = sous_graine( s_run.graine, 0x60A1ull + (uint64)cle );
+	uint32 eric = 0;
+	if( pParams->GetChecksum( crc( "eric" ), &eric, Script::NO_ASSERT ))
+	{
+		if( eric == crc( "start" )) { s_eric_t0 = Tmr::GetTime(); return true; }
+		if( !dm ) return true;
+		int lo = 175000, hi = 1050000, step = 5000; float duree = 60.0f;
+		pParams->GetInteger( crc( "lo" ), &lo, Script::NO_ASSERT );
+		pParams->GetInteger( crc( "hi" ), &hi, Script::NO_ASSERT );
+		pParams->GetInteger( crc( "step" ), &step, Script::NO_ASSERT );
+		pParams->GetFloat( crc( "time" ), &duree, Script::NO_ASSERT );
+		if( step < 1 ) step = 1;
+		const int fin = lo + (int)( g % (uint64)(( hi - lo ) / step + 1 )) * step;
+		float f = (float)( Tmr::GetTime() - s_eric_t0 ) / 1000.0f / duree;
+		if( f > 1.0f ) f = 1.0f;
+		if( f < 0.0f ) f = 0.0f;
+		int v = (int)( fin * f ) / 10 * 10;
+		o->RemoveComponent( nom );
+		o->AddInteger( nom, v );
+		return true;
+	}
+	Script::CArray *cles = NULL;
+	if( pParams->GetArray( crc( "cles" ), &cles, Script::NO_ASSERT ) && cles && cles->GetSize())
+	{
+		uint32 v = 0;
+		pParams->GetChecksum( crc( "def" ), &v, Script::NO_ASSERT );
+		if( dm ) v = cles->GetChecksum( (int)( g % cles->GetSize()));
+		o->RemoveComponent( nom );
+		o->AddChecksum( nom, v );
+		return true;
+	}
+	const char *fmt = NULL;
+	pParams->GetString( crc( "fmt" ), &fmt, Script::NO_ASSERT );
+	o->RemoveComponent( nom );
+	if( !dm )
+	{
+		const char *t = NULL; int v = 0;
+		if( pParams->GetString( crc( "def" ), &t, Script::NO_ASSERT )) o->AddString( nom, t );
+		else { pParams->GetInteger( crc( "def" ), &v, Script::NO_ASSERT ); o->AddInteger( nom, v ); }
+		return true;
+	}
+	int lo = 0, hi = 0, step = 1;
+	pParams->GetInteger( crc( "lo" ), &lo, Script::NO_ASSERT );
+	pParams->GetInteger( crc( "hi" ), &hi, Script::NO_ASSERT );
+	pParams->GetInteger( crc( "step" ), &step, Script::NO_ASSERT );
+	if( step < 1 ) step = 1;
+	if( hi < lo ) hi = lo;
+	const int v = lo + (int)( g % (uint64)(( hi - lo ) / step + 1 )) * step;
+	if( fmt )
+	{
+		char n[24], t[160];
+		milliers( n, sizeof( n ), v );
+		const char *p = strstr( fmt, "%s" );
+		if( p ) snprintf( t, sizeof( t ), "%.*s%s%s", (int)( p - fmt ), fmt, n, p + 2 );
+		else snprintf( t, sizeof( t ), "%s", fmt );
+		o->AddString( nom, t );
+	}
+	else o->AddInteger( nom, v );
+	VLOG( "DSK", "demented: goal roll key %d = %d", cle, v );
+	return true;
+}
+
 // @script | DesktopDementedIsOn | desktop: menu item id desktop_mod_<i>: is that modifier on
 bool ScriptDesktopDementedIsOn( Script::CStruct *pParams, Script::CScript *pScript )
 {

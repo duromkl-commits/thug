@@ -2849,6 +2849,101 @@ static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, 
 		}
 }
 
+// Demented goal randomization: in script 'nom', each value of field 'champ'
+// (an int, a name, or a string; 'vieux' = its value, NULL for any string)
+// becomes <arg_N>, and a DesktopDmGoal call that sets arg_N ('appel', with
+// def = the original value) goes in at the top of the script.
+static void patch_dm( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
+                      const char *nom, const char *champ, int type, uint32_t vieux, const char *appel )
+{
+	const uint32_t n = crc( nom ), c = champ ? crc( champ ) : 0;
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+		{
+			size_t a = k + 2;
+			while( a < j.size() && qb[j[a].pos] != T_EOL && qb[j[a].pos] != T_EOLNUM ) ++a;
+			if( a >= j.size()) return;
+			static int s_num = 0;	// arg names unique across calls (several per script)
+			int num = 0;
+			for( size_t b = k + 2; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+			{
+				const unsigned char t = qb[j[b].pos];
+				if( t != type ) continue;
+				if( type == T_CHAINE ? ( vieux != 0 ) : ( lit32( qb + j[b].pos + 1 ) != vieux )) continue;
+				if( c )
+				{
+					if( b < 2 || qb[j[b - 1].pos] != T_EGAL || !est_nom( qb, j[b - 2], c )) continue;
+				}
+				char arg[32]; snprintf( arg, sizeof( arg ), "desktop_dm_%d", s_num++ ); ++num;
+				std::string q = std::string( "DesktopDmGoal name = " ) + arg + " " + appel + " def = ";
+				if( type == T_ENTIER ) { char v[16]; snprintf( v, sizeof( v ), "%d", (int)lit32( qb + j[b].pos + 1 )); q += v; }
+				else if( type == T_NOM ) { char v[16]; snprintf( v, sizeof( v ), "#%08x", lit32( qb + j[b].pos + 1 )); q += v; }
+				else q += std::string( "\"" ) + (const char *)( qb + j[b].pos + 5 ) + "\"";
+				q += "\n";
+				Ecrit w; compile_q( w, q.c_str());
+				m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
+				Ecrit r; r.octet( T_ARG ); r.nom( arg );
+				m.push_back( Modif{ j[b].pos, j[b].taille, r.o } );
+			}
+			VLOG( "MUS", "%s: %d goal values randomizable", nom, num );
+			return;
+		}
+}
+
+// Puts 'texte' in script 'nom' just before the first call of 'appel'.
+static void patch_avant( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
+                         const char *nom, const char *appel, const char *texte )
+{
+	const uint32_t n = crc( nom ), a = crc( appel );
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+		{
+			for( size_t b = k + 2; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+				if( est_nom( qb, j[b], a ) && ( qb[j[b - 1].pos] == T_EOL || qb[j[b - 1].pos] == T_EOLNUM ))
+				{
+					Ecrit w; compile_q( w, texte );
+					m.push_back( Modif{ j[b].pos, 0, w.o } );
+					return;
+				}
+			return;
+		}
+}
+
+// Marcus's 13 Nov list (Demented only; DesktopDmGoal gives the originals
+// back outside it): New Jersey's chapter 1-3 goals.
+static void patch_dm_goals( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	// Eric's Challenge: the Melon (Circle+Left) is any grab slot, all three parts
+	static const char *eric[] = { "NJ_AddGoal_EricChallenge1of3", "NJ_Trickspot4Trigger1", "NJ_Trickspot4Trigger2",
+		"NJ_AddGoal_EricChallenge2of3", "NJ_TrickChecker_IsMelon", "NJ_AddGoal_EricChallengeReverts",
+		"NJ_TS7_TrickCheck", "NJ_TS7_TrickCheckFromManual" };
+	for( size_t i = 0; i < sizeof( eric ) / sizeof( eric[0] ); ++i )
+		patch_dm( qb, j, m, eric[i], NULL, T_NOM, crc( "Air_CircleL" ),
+			"key = 1 cles = [ Air_CircleU Air_CircleD Air_CircleL Air_CircleR Air_CircleUL Air_CircleUR Air_CircleDL Air_CircleDR ]" );
+	// Impress Joey: the Kickflip (Square+Left) is any flip slot
+	static const char *joey[] = { "NJ_AddGoal_TrashTrick1of3", "NJ_AddGoal_TrashTrick2of3", "NJ_TrickspotTrigger1", "NJ_TrickspotTrigger2" };
+	for( size_t i = 0; i < sizeof( joey ) / sizeof( joey[0] ); ++i )
+		patch_dm( qb, j, m, joey[i], NULL, T_NOM, crc( "Air_SquareL" ),
+			"key = 2 cles = [ Air_SquareU Air_SquareD Air_SquareL Air_SquareR Air_SquareUL Air_SquareUR Air_SquareDL Air_SquareDR ]" );
+	// Impress Muska 150,000 - 1,250,000
+	static const int muska[] = { 10000, 30000, 150000 };
+	for( int i = 0; i < 3; ++i ) patch_dm( qb, j, m, "NJ_AddGoal_ImpressMuska", "score", T_ENTIER, muska[i], "key = 3 lo = 150000 hi = 1250000 step = 5000" );
+	// Flyers for the Muska demo: 8 to all 18 in the level
+	patch_dm( qb, j, m, "NJ_AddGoal_MuskaDemoFlyers", "number", T_ENTIER, 8, "key = 4 lo = 8 hi = 18" );
+	// Demo the new playground setup 100,000 - 1,000,000
+	static const int jeux[] = { 15000, 20000, 100000 };
+	for( int i = 0; i < 3; ++i ) patch_dm( qb, j, m, "NJ_AddGoal_PlaygroundDemo", "score", T_ENTIER, jeux[i], "key = 5 lo = 100000 hi = 1000000 step = 5000" );
+	patch_dm( qb, j, m, "NJ_AddGoal_PlaygroundDemo", "goal_text", T_CHAINE, 0, "key = 5 lo = 100000 hi = 1000000 step = 5000 fmt = \"Get %s points\"" );
+	// Impress the Bratty Kid 150,000 - 750,000
+	static const int brat[] = { 5000, 25000, 140000 };
+	for( int i = 0; i < 3; ++i ) patch_dm( qb, j, m, "NJ_Addgoal_BratImpress", "score", T_ENTIER, brat[i], "key = 6 lo = 150000 hi = 750000 step = 5000" );
+	patch_dm( qb, j, m, "NJ_Addgoal_BratImpress", "goal_text", T_CHAINE, 0, "key = 6 lo = 150000 hi = 750000 step = 5000 fmt = \"Get %s points    Don't touch the street\"" );
+	// Beat Eric's Score: his final total 175,000 - 1,050,000, reached evenly over the minute
+	patch_debut( qb, j, m, "NJ_Goal_Trickspot9_Start", "DesktopDmGoal name = score eric = start\n" );
+	patch_avant( qb, j, m, "NJ_Goal_Trickspot9_Score_add", "FormatText",
+		"DesktopDmGoal name = score eric = go key = 7 lo = 175000 hi = 1050000 step = 5000 time = 60.0\n" );
+}
+
 // Imported levels (desktop): THPS4's levels, converted to THUG files by
 // desktop/tools/thps4_to_thug.py into Data\\levels\\<L>. levels.qb gets a
 // level struct and load script for each (level numbers past THUG's own; no
@@ -3033,6 +3128,7 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		for( size_t i = 0; i < sizeof( son ) / sizeof( son[0] ); ++i ) wrap_lignes( qb, j, m, son[i], "PauseMusic", NULL );
 	}
 	patch_histoire( qb, j, m );
+	patch_dm_goals( qb, j, m );
 	// Use the existing save selection with the desktop filesystem-backed card.
 	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
 		"if DesktopFirstSaveCheck\n"
