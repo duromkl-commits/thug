@@ -2,7 +2,7 @@
 """Writes clean-skaters.ps1 (+ .bat): deletes skater model folders and bail voice
 files the current exe no longer lists (scrapped skaters, past and present).
 
-    gen_cleanup.py <out dir>
+    gen_cleanup.py <out dir> <voice_banks.py output dir>
 
 Only touches our own folders: data/models/<the skater folders> and
 data/voices/*.txt bail files + data/voices/own. Keep list = s_gta in
@@ -18,9 +18,12 @@ for nom, dos in re.findall(r'^\s*\{ "([^"]+)", "[^"]*", \d+(?:, "([^"]+)")?', sr
 sys.path.insert(0, here)
 from skater_roster import R  # noqa: E402
 voices = sorted(k.lower() for k in R)
+vdir = sys.argv[2]
+own = sorted({l.split('/')[1].lower() for f in os.listdir(vdir) if f.endswith('.txt')
+              for l in open(os.path.join(vdir, f)) if l.startswith('own/')})
 # every skater folder we ever shipped
 roots = sorted(set(keep) | {'gta', 'rdr', 'thps2', 'cinc', 'rtcw', 'kingpin', 'maxpayne', 'quake', 'quake2', 'hrot',
-                            'rethawed/thps1', 'rethawed/thps3', 'rethawed/thps4', 'rethawed/other'})
+                            'rethawed/thps1', 'rethawed/thps3', 'rethawed/thps4', 'rethawed/other', 'rethawed/mods'})
 L = ['# Deletes scrapped skaters (models + bail voices) from THUG. Put this next to thug.exe and run clean-skaters.bat.',
      'param([switch]$Yes)', '$ErrorActionPreference = "Stop"',
      '$data = Join-Path $PSScriptRoot "data"',
@@ -30,6 +33,7 @@ for r in roots:
     L.append('  "%s" = @(%s)' % (r, ','.join('"%s"' % k for k in sorted(keep.get(r, ())))))
 L += ['}', '$voices = @(%s)' % ','.join('"%s"' % v for v in voices),
       '$kv = @{}; foreach ($v in $voices) { $kv[$v] = 1 }',
+      '$ko = @{}; foreach ($v in @(%s)) { $ko[$v] = 1 }' % ','.join('"%s"' % o for o in own),
       '$gone = New-Object System.Collections.ArrayList',
       'foreach ($r in $keep.Keys) {',
       '  $d = Join-Path $data ("models\\" + ($r -replace "/", "\\"))',
@@ -47,7 +51,7 @@ L += ['}', '$voices = @(%s)' % ','.join('"%s"' % v for v in voices),
       '    if ($first -like "*bail voice clips*" -and -not $kv.ContainsKey($f.BaseName.ToLower())) { [void]$gone.Add($f.FullName) }',
       '  }',
       '  $own = Join-Path $vd "own"',
-      '  if (Test-Path $own) { [void]$gone.Add($own) }',
+      '  if (Test-Path $own) { foreach ($f in Get-ChildItem -LiteralPath $own -Directory) { if (-not $ko.ContainsKey($f.Name.ToLower())) { [void]$gone.Add($f.FullName) } } }',
       '}',
       'if ($gone.Count -eq 0) { Write-Host "Nothing to clean."; exit 0 }',
       '$gone | ForEach-Object { Write-Host $_ }',

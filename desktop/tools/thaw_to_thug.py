@@ -83,6 +83,38 @@ def tris_of(idx):
     return out
 
 
+def drop_outlines(P, UV, groups, mats, texs):
+    """Jet Set Radio style mods draw a cel outline as an inflated copy of the
+    body (inverted hull) mapped onto one flat dark texel; THUG has no culling
+    trick for it, so it would cover the body. Drop the triangles that sit
+    wholly on one dark flat colour when that colour covers a big share
+    (over 35%; real dark parts such as a suit stay) of the model's triangles."""
+    tot = sum(len(ts) for ts in groups.values())
+    flat = {}
+    for mc, ts in groups.items():
+        mrec = mats.get(mc)
+        tck = struct.unpack_from('<I', mrec, 0x40)[0] if mrec else 0
+        if tck not in texs:
+            continue
+        img = np.asarray(texs[tck][0])[:, :, :3].astype(int)
+        h, w = img.shape[:2]
+        def px(u, v):
+            return tuple(img[int(v % 1 * h) % h, int(u % 1 * w) % w])
+        for t in ts:
+            cs = {px(*UV[v]) for v in t}
+            cs.add(px(*(sum(UV[v] for v in t) / 3)))
+            if len(cs) == 1:
+                c = cs.pop()
+                if sum(c) < 3 * 80:
+                    flat.setdefault((tck, c), []).append((mc, t))
+    drop = set()
+    for k, lst in flat.items():
+        if len(lst) > 0.35 * tot:
+            drop.update((mc, t) for mc, t in lst)
+            print('  dropped outline hull: %d triangles of colour %s' % (len(lst), k[1]))
+    return {mc: [t for t in ts if (mc, t) not in drop] for mc, ts in groups.items()}
+
+
 def convert(data, out, base, sub, name):
     read_skeleton(os.path.join(data, 'skeletons', 'thps5_human.ske.xbx'))	# sanity: THUG data present
     mats, meshes = TF.read_skin(base + '.skin.wpc')
@@ -99,6 +131,7 @@ def convert(data, out, base, sub, name):
         groups.setdefault(m['mat'], []).extend(tuple(i + n0 for i in t) for t in tris_of(m['idx']))
         n0 += len(v)
     P = np.concatenate(P); N = np.concatenate(N); UV = np.concatenate(UV).astype(np.float64)
+    groups = {mc: ts for mc, ts in drop_outlines(P, UV, groups, mats, texs).items() if ts}
     if len(P) > 65535:
         raise ValueError('%s: too many vertices' % name)
 

@@ -25,8 +25,8 @@
 // skaters' profiles (~300 more, each ~15 structs and ~80 fields, also copied
 // into the profile manager; desktop/src/custom_music.cpp).
 #ifdef THUG_DESKTOP
-#define DESKTOP_EXTRA_STRUCTS		24000
-#define DESKTOP_EXTRA_COMPONENTS	120000
+#define DESKTOP_EXTRA_STRUCTS		36000
+#define DESKTOP_EXTRA_COMPONENTS	180000
 #else
 #define DESKTOP_EXTRA_STRUCTS		0
 #define DESKTOP_EXTRA_COMPONENTS	0
