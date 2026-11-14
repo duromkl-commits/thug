@@ -12,7 +12,7 @@ custom_music.cpp's s_gta and skater_roster.py carry matching lines."""
 import os
 import sys
 
-# (THAW model path, game folder, key, display name, female)
+# (THAW model path, game folder, key, display name, female[, scale])
 L = [
     ('newPeds/thps1/thps1_alien', 'thps1', 'rt_thps1_alien', 'THPS1 Alien', 0),
     ('newPeds/thps1/thps1_carrera', 'thps1', 'rt_thps1_carrera', 'THPS1 Private Carrera', 1),
@@ -25,12 +25,10 @@ L = [
     ('newPros/thps1/thps1_glifberg', 'thps1', 'rt_thps1_glifberg', 'THPS1 Rune Glifberg', 0),
     ('newPros/thps1/thps1_hawk_dlx', 'thps1', 'rt_thps1_hawk_dlx', 'THPS1 Tony Hawk A', 0),
     ('newPros/thps1/thps1_hawk_psx', 'thps1', 'rt_thps1_hawk_psx', 'THPS1 Tony Hawk B', 0),
-    ('newPros/thps1/thps1_hawk_n64', 'thps1', 'rt_thps1_hawk_n64', 'THPS1 Tony Hawk C', 0),
     ('newPros/thps1/thps1_lasek', 'thps1', 'rt_thps1_lasek', 'THPS1 Bucky Lasek', 0),
     ('newPros/thps1/thps1_muska', 'thps1', 'rt_thps1_muska', 'THPS1 Chad Muska', 0),
     ('newPros/thps1/thps1_reynolds', 'thps1', 'rt_thps1_reynolds', 'THPS1 Andrew Reynolds', 0),
-    ('newPros/thps1/thps1_rowley', 'thps1', 'rt_thps1_rowley', 'THPS1 Geoff Rowley A', 0),
-    ('newPros/thps1/thps1_rowley_beta', 'thps1', 'rt_thps1_rowley_beta', 'THPS1 Geoff Rowley B', 0),
+    ('newPros/thps1/thps1_rowley', 'thps1', 'rt_thps1_rowley', 'THPS1 Geoff Rowley', 0),
     ('newPros/thps1/thps1_steamer', 'thps1', 'rt_thps1_steamer', 'THPS1 Elissa Steamer', 1),
     ('newPros/thps1/thps1_thomas', 'thps1', 'rt_thps1_thomas', 'THPS1 Jamie Thomas', 0),
 
@@ -41,8 +39,7 @@ L = [
     ('newPeds/thps3/thps3_cab_psx', 'thps3', 'rt_thps3_cab_psx', 'THPS3 Steve Caballero B', 0),
     ('newPeds/thps3/THPS3Hawk', 'thps3', 'rt_thps3_hawk', 'THPS3 Tony Hawk A', 0),
     ('newPros/thps3/psx_thps3_hawk', 'thps3', 'rt_thps3_hawk_psx', 'THPS3 Tony Hawk B', 0),
-    ('newPros/thps3/n64_thps3_hawk', 'thps3', 'rt_thps3_hawk_n64', 'THPS3 Tony Hawk C', 0),
-    ('newPros/thps3/psx_thps3_hawk_beta', 'thps3', 'rt_thps3_hawk_beta', 'THPS3 Tony Hawk D', 0),
+    ('newPros/thps3/psx_thps3_hawk_beta', 'thps3', 'rt_thps3_hawk_beta', 'THPS3 Tony Hawk C', 0),
     ('newPeds/thps3/THPS3Kareem', 'thps3', 'rt_thps3_kareem', 'THPS3 Kareem Campbell A', 0),
     ('newPeds/thps3/thps3_campbell_psx', 'thps3', 'rt_thps3_campbell_psx', 'THPS3 Kareem Campbell B', 0),
     ('newPeds/thps3/THPS3Koston', 'thps3', 'rt_thps3_koston', 'THPS3 Eric Koston A', 0),
@@ -64,15 +61,10 @@ L = [
     ('newPeds/thps3/thps3_steamer_psx', 'thps3', 'rt_thps3_steamer_psx', 'THPS3 Elissa Steamer B', 1),
     ('newPeds/thps3/THPS3Thomas', 'thps3', 'rt_thps3_thomas', 'THPS3 Jamie Thomas A', 0),
     ('newPeds/thps3/thps3_thomas_psx', 'thps3', 'rt_thps3_thomas_psx', 'THPS3 Jamie Thomas B', 0),
-    ('newPeds/thps3/THPS3JunnosukeY', 'thps3', 'rt_thps3_junnosuke', 'THPS3 Junnosuke Y', 0),
-    ('newPeds/thps3/THPS3Saegusa', 'thps3', 'rt_thps3_saegusa', 'THPS3 Saegusa', 0),
-    ('newPeds/thps3/THPS3ShinOkada', 'thps3', 'rt_thps3_shinokada', 'THPS3 Shin Okada', 0),
-    ('newPeds/thps3/THPS3Sukehachi', 'thps3', 'rt_thps3_sukehachi', 'THPS3 Sukehachi', 0),
     ('newPeds/THPS3_LABum', 'thps3', 'rt_thps3_labum', 'THPS3 LA Bum', 0),
     ('newPeds/thps3/si_Pedestrian_A', 'thps3', 'rt_thps3_ped_a', 'THPS3 Pedestrian A', 0),
     ('newPeds/thps3/si_Pedestrian_B', 'thps3', 'rt_thps3_ped_b', 'THPS3 Pedestrian B', 0),
     ('newPeds/thps3/si_Pedestrian_C', 'thps3', 'rt_thps3_ped_c', 'THPS3 Pedestrian C', 0),
-    ('newPeds/thps3/si_Pedestrian_D', 'thps3', 'rt_thps3_ped_d', 'THPS3 Pedestrian D', 0),
     ('newPeds/thps3/thps3_carrera', 'thps3', 'rt_thps3_carrera', 'THPS3 Private Carrera A', 1),
     ('newPeds/thps3/thps3_carrera_psx', 'thps3', 'rt_thps3_carrera_psx', 'THPS3 Private Carrera B', 1),
     ('newPeds/thps3/thps3_officer_dick', 'thps3', 'rt_thps3_officer_dick', 'THPS3 Officer Dick A', 0),
@@ -110,9 +102,9 @@ L = [
     ('newPeds/thps4/thps4_thomas', 'thps4', 'rt_thps4_thomas', 'THPS4 Jamie Thomas', 0),
     ('newPeds/thps4/thps4_vallely', 'thps4', 'rt_thps4_vallely', 'THPS4 Mike Vallely', 0),
     ('newPeds/thps4/thps4_chef', 'thps4', 'rt_thps4_chef', 'THPS4 Chef', 0),
-    ('newPeds/thps4/thps4_clown_a', 'thps4', 'rt_thps4_clown_a', 'THPS4 Clown A', 0),
+    ('newPeds/thps4/thps4_clown_a', 'thps4', 'rt_thps4_clown_a', 'THPS4 Clown A', 0, 0.7),
     ('newPeds/thps4/thps4_clown_a_hd', 'thps4', 'rt_thps4_clown_a_hd', 'THPS4 Clown B', 0),
-    ('newPeds/thps4/thps4_clown_b', 'thps4', 'rt_thps4_clown_b', 'THPS4 Clown C', 0),
+    ('newPeds/thps4/thps4_clown_b', 'thps4', 'rt_thps4_clown_b', 'THPS4 Clown C', 0, 0.7),
     ('newPeds/thps4/thps4_daisy', 'thps4', 'rt_thps4_daisy', 'THPS4 Daisy', 1),
     ('newPeds/thps4/thps4_eddie', 'thps4', 'rt_thps4_eddie', 'THPS4 Eddie', 0),
     ('newPeds/thps4/thps4_jango', 'thps4', 'rt_thps4_jango', 'THPS4 Jango Fett', 0),
@@ -126,6 +118,6 @@ if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import thaw_to_thug
     data, out, models = sys.argv[1:4]
-    for path, game, key, name, fem in L:
+    for path, game, key, name, fem, *_ in L:
         nv, nt, a, b = thaw_to_thug.convert(data, out, os.path.join(models, path), 'rethawed/' + game, key)
         print('%-28s %5d v %5d t  h %.1f' % (key, nv, nt, b[1] - a[1]))
