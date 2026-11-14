@@ -37,6 +37,23 @@ OWN = {
 }
 # Marcus's 2026-11-10 zips (Sora, Riku, the Simpsons): those skaters are gone
 OWN2 = {}	# (Kingdom Hearts and Simpsons skaters removed 2026-11-10, Marcus)
+# Return to Castle Wolfenstein: the game's own pain/death sounds (sound/player/*,
+# sound/Zombie/* pulled out of the pk3s into an RTCW folder listed after the first)
+_SS = [('RTCW/player/infantryss/pain', r''), ('RTCW/player/infantryss/death', r'')]
+_EG = [('RTCW/player/eliteguard/pain', r''), ('RTCW/player/eliteguard/death', r'')]
+_ZO = [('RTCW/Zombie/pain', r''), ('RTCW/Zombie/death', r'')]
+RTCW = {'rtcw_bj2': [('RTCW/player/bj2', r'^(pain|death|fall\d)')],
+        'rtcw_heinrich': [('RTCW/player/heinrich/pain', r''), ('RTCW/player/heinrich/death', r'')],
+        'rtcw_warrior': [('RTCW/player/warrior/death', r'')] + _ZO[:1],
+        'rtcw_dark': [('RTCW/player/warrior/death', r'')] + _ZO[:1],
+        'rtcw_zombie': _ZO, 'rtcw_femzombie': _ZO,
+        'rtcw_protosoldier': [('RTCW/player/supersoldier/death', r'')] + _SS[:1],
+        'rtcw_supersoldier': [('RTCW/player/supersoldier/death', r'')] + _SS[:1]}
+for k in ('eliteguard', 'eva', 'helga', 'inge', 'priestess'):
+    RTCW['rtcw_' + k] = _EG
+for k in ('blackguard', 'deathshead1', 'director', 'drz', 'hans', 'higgs', 'himmler', 'infantryss', 'jack',
+          'mechanic', 'murphy', 'officerss', 'partisan', 'trench', 'venom', 'zemph'):
+    RTCW['rtcw_' + k] = _SS
 MIN_S, MAX_S = 0.15, 1.8
 MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 
@@ -118,7 +135,14 @@ for key, (name, first, age, town, tags) in R.items():
     rng = random.Random('thug-voice:' + key)
     if key in SILENT:
         continue
-    if key in OWN or key in OWN2:
+    if key in RTCW:
+        clips = []
+        for d, rx in RTCW[key]:
+            clips += pool(d, rx, 'own/' + d.lower().replace('/', '_'), MAX_OWN)
+        # the same clips for a whole group: their profile pitch tells them apart
+        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') else pitch.get(key, 0) or rng.randint(96, 104)
+        own_n += 1
+    elif key in OWN or key in OWN2:
         d, rx = OWN[key] if key in OWN else OWN2[key]
         clips = pool(d, rx, ('rdr/' if key in OWN else 'own/') + key, MAX_OWN if key in OWN2 else MAX_S)
         p = 100
