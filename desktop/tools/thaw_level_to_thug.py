@@ -402,6 +402,31 @@ def light_dark_names(geo, prefixes):
 THUG_SOUNDS = os.environ.get('THUG_SOUNDS', '/tmp/claude-0/allpre/NJ/sounds/pcm')
 
 
+# THUG's terrain ids (Gfx/nxflags.h order, which THAW's collision shares) ->
+# the THUG script that loads that terrain's sounds (None: THUG has none)
+TERRAIN_SCRIPTS = ['SetTerrainDefault', 'SetTerrainConcSmooth', 'SetTerrainConcRough', 'SetTerrainMetalSmooth', 'SetTerrainMetalRough', 'SetTerrainMetalCorrugated', 'SetTerrainMetalGrating', 'SetTerrainMetalTin', 'SetTerrainWood', 'SetTerrainWoodMasonite', 'SetTerrainWoodPlywood', None, None, 'SetTerrainWoodPier', 'SetTerrainBrick', 'SetTerrainTile', 'SetTerrainAsphalt', None, 'SetTerrainGravel', 'SetTerrainSidewalk', 'SetTerrainGrass', 'SetTerrainGrassDried', 'SetTerrainDirt', 'SetTerrainDirtPacked', 'SetTerrainWater', 'SetTerrainIce', 'SetTerrainSnow', 'SetTerrainSand', 'SetTerrainPlexiglass', 'SetTerrainFiberglass', None, None, 'SetTerrainChainlink', None, None, None, None, 'SetTerrainWetConc', None, None, None, 'SetTerrainGrindWire', 'SetTerrainGrindConc', 'SetTerrainGrindRoundMetalPole', 'SetTerrainGrindChainLink', 'SetTerrainGrindMetal', 'SetTerrainGrindWoodRailing', 'SetTerrainGrindWoodLog', 'SetTerrainGrindWood', 'SetTerrainGrindPlastic', 'SetTerrainGrindElectricWire', 'SetTerrainGrindCable', 'SetTerrainGrindChain', 'SetTerrainGrindPlasticBarrier', 'SetTerrainGrindNeonLight', 'SetTerrainGrindGlassMonster', 'SetTerrainGrindBAnyOnTree', 'SetTerrainGrindBrassRail', 'SetTerrainGrindCatwalk', 'SetTerrainGrindTankTurret']
+
+
+def terrain_load(col, already):
+    """SetTerrainX calls for every terrain the collision uses that the zone's
+    LoadTerrain doesn't load (Roswell played plywood for the rest)."""
+    version, nobj, tv, nfl, nfs = struct.unpack_from('<5i', col, 0)
+    vb = (80 + nobj * 64 + 15) & ~15
+    fb = (vb + tv * 12 + tv + 3) & ~3
+    used = set()
+    for i in range(nobj):
+        cs, fla, nv, nf, small, fixed, foff = struct.unpack_from('<IHHHBBI', col, 80 + 64 * i)
+        fsz = 8 if small else 10
+        for k in range(nf):
+            used.add(struct.unpack_from('<H', col, fb + foff + k * fsz + 2)[0])
+    out = bytearray()
+    for t in sorted(used):
+        n = TERRAIN_SCRIPTS[t] if t < len(TERRAIN_SCRIPTS) else None
+        if n and crc(n) not in already:
+            out += b'\x16' + struct.pack('<I', crc(n)) + b'\x01'
+    return bytes(out)
+
+
 def level_sounds(qbs):
     """LoadSound lines for the sounds the zone's scripts play.
 
@@ -498,6 +523,10 @@ def convert_level(pak, L, dst):
     qbs = {n: b for t, n, b in files if n.endswith('.qb.wpc')}
     main = next(b for n, b in qbs.items() if n.endswith('/%s.qb.wpc' % zone))
     snd = level_sounds(qbs.values())
+    lt = next((v for t, c, v in Q.QB(main).items if c == crc('LoadTerrain') and isinstance(v, Q.Script)), None)
+    already = set(struct.unpack_from('<I', b, 1)[0] for i, tk, b in Q.tokens(lt.code) if tk == 0x16) if lt else \
+        set(crc(n) for n in DEFAULT_TERRAINS)
+    snd = terrain_load(next(b for t, n, b in files if t == T_COL), already) + snd
     roots = {c: v for t, c, v in Q.QB(main).items if isinstance(v, Q.Struct)}
     q, _ = qb_to_thug(main, renames, {crc('NodeArray'): node_fixer(roots, set(sectors))},
                       extra={crc('LoadTerrain'): snd} if snd else None,

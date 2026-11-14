@@ -1428,7 +1428,49 @@ static const char *s_gen_temps[] = { "two hours", "all week", "since Tuesday", "
 static const char *s_gen_pluriels[] = { "light bulbs", "mailboxes", "pigeons", "stop signs", "phone books", "shoelaces",
 	"grocery bags", "lawn gnomes", "batteries", "napkins", "ducks", "paper towels" };
 
+// ... and THUG's own text (pulled from the game's scripts, 2026-11-14):
+// %g its things, %h its crowds, %k its places, %e its people, %q its
+// shouts, %v its goal orders. %o %s %l draw from these more often than not.
+static const char *s_jeu_choses[] = { "the cones", "the bottles", "the stolen items", "the awning", "the security cameras",
+	"the stickers", "the marble", "the pointy thing", "the keys", "the tanks", "the insurance money", "the drycleaning",
+	"the cash", "the burning taxi", "the best donuts", "the hangover cures", "the tapes", "the camo paint", "the colored wire",
+	"the dropped cash", "the flower boxes", "the big bomb", "the phone kiosks", "the limo", "the flag", "the bells",
+	"the house pieces", "the telephone poles", "the needle", "the leafblower", "the footage", "the icing", "the chopper",
+	"the toilet paper", "the oxygen canister", "the raw eggs", "the pink stuff", "the nuts", "the luggage", "the vending machine",
+	"the Slam City T-shirts", "the band's instruments", "the scrap", "the shish kabob" };
+static const char *s_jeu_foules[] = { "the hotel manager", "the leafblower guy", "the local dealers", "the guards", "the cops",
+	"the locals", "the security guard", "the gardener", "the shoe guys", "the team photographer", "the punks", "the thief",
+	"the workers", "the sponsors", "the bikini girls", "the pros", "the other vendors", "the nut vendors", "the poodles",
+	"the little dogs", "the fuzz", "the recruiter", "the frat guys" };
+static const char *s_jeu_lieux[] = { "the bridge", "the tower", "the pool", "the rooftops", "the river", "the broadcast tower",
+	"the museum", "the underground", "the old neighborhood", "the drawbridge", "the amphitheatre", "the pink hotel",
+	"the beautiful island", "the skyway", "the station", "the frat building", "the alley", "the local skateshop",
+	"the half pipe", "the sewer", "the killer banks", "the Vet", "the harbor", "the coal plant", "Moscow", "Jersey",
+	"the hotel", "the copter", "the front porch" };
+static const char *s_jeu_gens[] = { "Eric", "Muska", "Tony Hawk", "Stacy", "Jed", "Stew", "Todd", "Nadia", "Irina",
+	"Svetlana", "Kalo", "Lariska", "Peralta", "Ollie", "Wallows", "the Recruiter" };
+static const char *s_jeu_cris[] = { "Get up fool!", "Easy there Killer!", "Leap Of Faith!!!", "When Poodles Attack!",
+	"Death by hot lava!", "Gator Bait!", "Who's your daddy?", "Whats that smell?", "I need toilet paper!", "Tastes Like Burning!",
+	"Evil Tree!", "Mauled by little Dogs!", "NO TRAIN FOR YOU!", "Nut Vendors Unite!", "Raw eggs?", "Vitamin Z?",
+	"Junk in da trunk!", "Litter Box Dive!", "Chihuahua Death!", "Grilled to perfection!", "Toasted toes!", "Squid Ink!",
+	"Use the force!", "Stay in school!", "Don't do drugs!", "Learn to drive!", "You big drip!", "Wussin out?!?",
+	"Get me outta here!", "Eeewww gross!", "Grandpas secret cure!", "Even more hair of the dog!", "Burnt to a crisp!",
+	"Sand In Your Shoes!", "Who built that?!", "Who loaned you that board?", "Oops, did I drop that?", "Need more pink stuff!",
+	"Bling Bling!!", "Ball Busted!", "Uh, Operation Deez what?", "Do you even feel pain?!?", "You wrinkled the clothes!",
+	"Where you goin mister?", "Muska's on the move!", "Let's RAGE tonight!", "Go get some nuts!", "Shish kabob?" };
+static const char *s_jeu_ordres[] = { "knock down the flower boxes", "knock down the security cameras", "find the leafblower guy",
+	"get the best donuts", "get the hangover cures", "get the tapes", "follow the cash to the thief", "rescue Eric",
+	"get your gear back from the fuzz", "find the band's instruments", "get girls to the party", "bring Nadia back",
+	"bring Irina back here", "climb the hotel", "hit the vending machine", "collect the scrap", "get Svetlana",
+	"get everyone to the premiere", "get onto the roof", "find more bikini girls", "get out of Russia", "chase them down",
+	"hit all the piles", "stop that bus", "ditch it in the river", "get back to the party", "stay on the rooftops",
+	"get your luggage and your shoes", "find a crowd", "get in line", "get to the copter", "get some air" };
+
 static const char *s_gen_banal[] = {
+	"%e borrowed %g and never gave it back.",
+	"%h ate all of %g again.",
+	"I asked %e to %v and he just left.",
+	"%h won't stop saying %q",
 	"You can't just leave %o there and expect everyone to understand.",
 	"I specifically asked them not to bring %o.",
 	"Nobody has explained what happened to %o.",
@@ -1451,6 +1493,9 @@ static const char *s_gen_banal[] = {
 	"I put %o back. Somebody moved it.",
 };
 static const char *s_gen_parano[] = {
+	"%h work for %p. Look at %g.",
+	"%k has a basement. Ask %e.",
+	"%p hid %g under %k.",
 	"%p has been replacing our %n with slightly different ones.",
 	"%p has been meeting behind %l.",
 	"My neighbor says %s isn't the same person anymore.",
@@ -1469,6 +1514,16 @@ static const char *s_gen_parano[] = {
 	"%p has been listening %t.",
 };
 static const char *s_gen_mixte[] = {
+	"Last thing %e said to me: %q",
+	"%e told me to %v. I'm not doing that.",
+	"%p wants me to %v.",
+	"Why does %e need me to %v?",
+	"I tried to %v once. Never again.",
+	"%h have been meeting at %k.",
+	"%e knows what happened to %g.",
+	"%h keep yelling at %k: %q",
+	"Don't ask %e about %g.",
+	"%p has been watching %h.",
 	"%p apparently has a problem with %o.",
 	"%p has been changing the expiration dates on %o.",
 	"I never said %o was involved.",
@@ -1483,6 +1538,10 @@ static const char *s_gen_mixte[] = {
 	"%o was a warning from %p.",
 };
 static const char *s_gen_anecdote[] = {
+	"I once saw %e at %k with %g.",
+	"%e cried at %k. Not even sad, just cried.",
+	"My cousin had to %v once. He's different now.",
+	"There's a guy at %k who yells %q",
 	"I once saw %s eat %o at %l.",
 	"%l smells different on Tuesdays.",
 	"My uncle had %o like that. He moved away.",
@@ -1506,16 +1565,32 @@ static void gen_phrase( const char *modele, uint32 &h, uint32 rappel, std::strin
 	{
 		if( *q != '%' || !q[1] ) { o += *q; continue; }
 		const char c = *++q;
-		if( c == 'o' )
+		if( c == 'o' || c == 'g' )
 		{
 			if( objet.empty())
-				// the chapter's thing turns up again now and then
-				objet = ( gen_choix( h, 100 ) < 15 ) ? s_gen_choses[rappel % (uint32)GEN_N( s_gen_choses )] : s_gen_choses[gen_choix( h, GEN_N( s_gen_choses ))];
+			{
+				// the chapter's thing turns up again now and then; game things
+				// win most of the time (%g always)
+				const bool jeu = c == 'g' || gen_choix( h, 100 ) < 60;
+				if( gen_choix( h, 100 ) < 15 )
+					objet = jeu ? s_jeu_choses[rappel % (uint32)GEN_N( s_jeu_choses )] : s_gen_choses[rappel % (uint32)GEN_N( s_gen_choses )];
+				else
+					objet = jeu ? s_jeu_choses[gen_choix( h, GEN_N( s_jeu_choses ))] : s_gen_choses[gen_choix( h, GEN_N( s_gen_choses ))];
+			}
 			o += objet;
 		}
-		else if( c == 's' ) o += s_gen_gens[gen_choix( h, GEN_N( s_gen_gens ))];
+		else if( c == 's' )
+		{
+			const int r = gen_choix( h, 100 );
+			o += r < 35 ? s_jeu_gens[gen_choix( h, GEN_N( s_jeu_gens ))] : r < 60 ? s_jeu_foules[gen_choix( h, GEN_N( s_jeu_foules ))] : s_gen_gens[gen_choix( h, GEN_N( s_gen_gens ))];
+		}
 		else if( c == 'p' ) o += s_gen_louches[gen_choix( h, GEN_N( s_gen_louches ))];
-		else if( c == 'l' ) o += s_gen_lieux[gen_choix( h, GEN_N( s_gen_lieux ))];
+		else if( c == 'l' ) o += gen_choix( h, 100 ) < 60 ? s_jeu_lieux[gen_choix( h, GEN_N( s_jeu_lieux ))] : s_gen_lieux[gen_choix( h, GEN_N( s_gen_lieux ))];
+		else if( c == 'k' ) o += s_jeu_lieux[gen_choix( h, GEN_N( s_jeu_lieux ))];
+		else if( c == 'h' ) o += s_jeu_foules[gen_choix( h, GEN_N( s_jeu_foules ))];
+		else if( c == 'e' ) o += s_jeu_gens[gen_choix( h, GEN_N( s_jeu_gens ))];
+		else if( c == 'q' ) o += s_jeu_cris[gen_choix( h, GEN_N( s_jeu_cris ))];
+		else if( c == 'v' ) o += s_jeu_ordres[gen_choix( h, GEN_N( s_jeu_ordres ))];
 		else if( c == 't' ) o += s_gen_temps[gen_choix( h, GEN_N( s_gen_temps ))];
 		else if( c == 'n' ) o += s_gen_pluriels[gen_choix( h, GEN_N( s_gen_pluriels ))];
 		else { o += '%'; o += c; }
