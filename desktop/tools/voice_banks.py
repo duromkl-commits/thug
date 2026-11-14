@@ -66,6 +66,15 @@ KINGPIN['kp_popeye'] = [(_KA + 'male/popeye', r'^argh'), (_KA + 'male', r'^death
 for k, (_n, _f, _a, _t, tags) in R.items():
     if k.startswith('kp_') and k not in KINGPIN:
         KINGPIN[k] = _KF if 'female' in tags.split() else _KM
+# Max Payne: hit/death grunts from x_english.ras (sounds/characters/max and
+# sounds/enemy/*, ADPCM decoded to PCM) in a MaxPayne/<group> folder listed after the first
+_MPV = {'mp_max': 'max', 'mp_youngmax': 'max', 'mp_labjunkie': 'junkie', 'mp_spud': 'junkie',
+        'mp_killersuit': 'killersuit', 'mp_mercenary': 'merc', 'mp_aesir': 'merc'}
+MAXPAYNE = {}
+for k, (_n, _f, _a, _t, tags) in R.items():
+    if k.startswith('mp_'):
+        g = _MPV.get(k) or ('female' if 'female' in tags.split() else 'mobster')
+        MAXPAYNE[k] = [('MaxPayne/' + g, r'(gethit|death)')]
 MIN_S, MAX_S = 0.15, 1.8
 MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 
@@ -147,12 +156,12 @@ for key, (name, first, age, town, tags) in R.items():
     rng = random.Random('thug-voice:' + key)
     if key in SILENT:
         continue
-    if key in RTCW or key in KINGPIN:
+    if key in RTCW or key in KINGPIN or key in MAXPAYNE:
         clips = []
-        for d, rx in (RTCW.get(key) or KINGPIN[key]):
+        for d, rx in (RTCW.get(key) or KINGPIN.get(key) or MAXPAYNE[key]):
             clips += pool(d, rx, 'own/' + d.lower().replace('/', '_'), MAX_OWN)
         # the same clips for a whole group: their profile pitch tells them apart
-        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') or (key in KINGPIN and '/male/' in KINGPIN[key][0][0]) else pitch.get(key, 0) or rng.randint(96, 104)
+        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') or (key in KINGPIN and '/male/' in KINGPIN[key][0][0]) or key in ('mp_max', 'mp_youngmax') else pitch.get(key, 0) or rng.randint(96, 104)
         own_n += 1
     elif key in OWN or key in OWN2:
         d, rx = OWN[key] if key in OWN else OWN2[key]
