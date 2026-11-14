@@ -101,7 +101,6 @@ L = [
     ('newPeds/thps4/thps4_steamer', 'thps4', 'rt_thps4_steamer', 'THPS4 Elissa Steamer', 1),
     ('newPeds/thps4/thps4_thomas', 'thps4', 'rt_thps4_thomas', 'THPS4 Jamie Thomas', 0),
     ('newPeds/thps4/thps4_vallely', 'thps4', 'rt_thps4_vallely', 'THPS4 Mike Vallely', 0),
-    ('newPeds/thps4/thps4_chef', 'thps4', 'rt_thps4_chef', 'THPS4 Chef', 0),
     ('newPeds/thps4/thps4_clown_a', 'thps4', 'rt_thps4_clown_a', 'THPS4 Clown A', 0, 0.7),
     ('newPeds/thps4/thps4_clown_a_hd', 'thps4', 'rt_thps4_clown_a_hd', 'THPS4 Clown B', 0),
     ('newPeds/thps4/thps4_clown_b', 'thps4', 'rt_thps4_clown_b', 'THPS4 Clown C', 0, 0.7),

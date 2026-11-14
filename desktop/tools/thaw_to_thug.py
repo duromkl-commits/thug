@@ -21,16 +21,21 @@ from xps_to_thug import crc, read_skeleton, pack_weights, write_skin, write_tex,
 import xps_to_thug  # noqa: E402
 import thaw_formats as TF  # noqa: E402
 
-# THAW bone (index / 3) -> THUG thps5_human bone. 0..38 are the same bones.
-LEGS = {39: 40, 40: 41, 41: 42, 42: 43, 43: 45, 44: 46, 45: 48, 46: 49}
-
-
-CHEST, PONY1, PONY2 = 4, 34, 35
+# THAW bone (index / 3) -> THUG thps5_human bone. The body, arms and hands
+# (0..14, 16..26, 28..30) are the same bones; the rest differ:
+#   15/27 upper-arm twist (THUG's 15/27 are the unanimated forearm cuff
+#         cloth bones: shoulders "wormed" on them) -> bicep
+#   31 hat, 32 ponytail, 33 brow, 34 jaw
+#   35 breast/shirt jiggle (would be THUG's ponytail 2) -> chest
+#   36..38 shirt-tail cloth at the hips -> pelvis
+#   39..46 legs, renumbered round THUG's trouser cloth bones.
+MAP = {15: 6, 27: 18, 31: 32, 32: 34, 33: 33, 34: 31, 35: 4, 36: 1, 37: 1, 38: 1,
+       39: 40, 40: 41, 41: 42, 42: 43, 43: 45, 44: 46, 45: 48, 46: 49}
 
 
 def thug_index(b):
     b //= 3
-    return LEGS.get(b, b) if b > 38 else b
+    return MAP.get(b, b)
 
 
 def unpack_normal(n):
@@ -90,12 +95,7 @@ def convert(data, out, base, sub, name):
         ws = TF.weights(v['w'])
         for k in range(len(v)):
             W.append(pack_weights(list(ws[k])))
-            bi = [thug_index(int(b)) for b in v['b'][k][:3]]
-            # THAW's jiggle bones for breasts are THUG's ponytail ones (they'd
-            # follow the head): front-of-chest vertices go on the chest.
-            if v['p'][k][1] < 58 and v['p'][k][2] > 1 and not {29, 30} & set(bi):
-                bi = [CHEST if b in (PONY1, PONY2) else b for b in bi]
-            BI.append(bi + [0])
+            BI.append([thug_index(int(b)) for b in v['b'][k][:3]] + [0])
         groups.setdefault(m['mat'], []).extend(tuple(i + n0 for i in t) for t in tris_of(m['idx']))
         n0 += len(v)
     P = np.concatenate(P); N = np.concatenate(N); UV = np.concatenate(UV).astype(np.float64)
