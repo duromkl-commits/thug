@@ -3117,6 +3117,15 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	// anims (Photographer_goal_wait) but their levels only load the video
 	// guy's: they T-posed. The video set brings the photo set along.
 	patch_debut( qb, j, m, "animload_Ped_Video", "animload_Ped_Photo LoadFunction = <LoadFunction>\n" );
+	// ...but NY has no photo anims in any .pre (only SD/HI do), so Manhattan's
+	// filmers still T-posed: a ped told to stand with photo anims it hasn't
+	// got uses the video guy's set (Video_goal_wait) when it has that.
+	patch_debut( qb, j, m, "Ped_InitAI",
+		"if GotParam standing_anims\n"
+		"if NOT AnimExists Ped_Photo_CheckCamera\n"
+		"if AnimExists Ped_Video_CheckCamera\n"
+		"standing_anims = Video_goal_wait\n"
+		"endif\nendif\nendif\n" );
 	// Demented (Marcus): no Set Restart / Goto Cust Restart in the pause options,
 	// and coming back from Watch Cutscenes doesn't freeze the game
 	patch_debut( qb, j, m, "create_options_menu", "if DesktopDemented\nNoCustomRestarts = 1\nendif\n" );
