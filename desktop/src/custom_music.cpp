@@ -2316,7 +2316,7 @@ static const PersoGTA s_gta[] = {
 	{ "slick", "Slick", 0 },
 	{ "walter", "Walter", 0 },
 	// ReTHAWed (THAW PC mod) models, rethawed_skaters.py
-	{ "rt_thps1_alien", "Alien", 0, "rethawed/thps1" },
+	{ "rt_thps1_alien", "Alien", 0, "rethawed/thps1", 0.7f },
 	{ "rt_thps1_carrera", "Private Carrera", 1, "rethawed/thps1" },
 	{ "rt_thps1_joel", "Joel Jewett", 0, "rethawed/thps1" },
 	{ "rt_thps1_officer", "Officer Dick", 0, "rethawed/thps1" },

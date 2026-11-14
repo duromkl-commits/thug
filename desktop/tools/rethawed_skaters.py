@@ -14,7 +14,7 @@ import sys
 
 # (THAW model path, game folder, key, display name, female[, scale])
 L = [
-    ('newPeds/thps1/thps1_alien', 'thps1', 'rt_thps1_alien', 'THPS1 Alien', 0),
+    ('newPeds/thps1/thps1_alien', 'thps1', 'rt_thps1_alien', 'THPS1 Alien', 0, 0.7),
     ('newPeds/thps1/thps1_carrera', 'thps1', 'rt_thps1_carrera', 'THPS1 Private Carrera', 1),
     ('newPeds/thps1/thps1_joel', 'thps1', 'rt_thps1_joel', 'Joel Jewett', 0),
     ('newPeds/thps1/thps1_officer', 'thps1', 'rt_thps1_officer', 'THPS1 Officer Dick', 0),
