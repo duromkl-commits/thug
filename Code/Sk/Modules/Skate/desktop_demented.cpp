@@ -91,7 +91,9 @@ enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_M
        MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Countdown", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
                                            "Chaos", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
-static bool s_arme[NB_MODS] = { false, false, true, false, false, false, false, false, false, false, false, false, false, false };
+// Randomizers page back (Marcus 2026-11-14): Chaos, Sound Salad, Word Salad and
+// Obscure are toggles again, all on by default
+static bool s_arme[NB_MODS] = { false, false, true, false, false, true, false, true, false, true, true, true, true, true, false, true, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
 // thing keeps its random replacement until the next chapter.
@@ -466,16 +468,15 @@ static bool chaos_on( void ) { return s_run.actif && s_run.skater && !s_run.fini
 
 static bool rando_on( int m ) { return s_run.actif && !s_run.fini && s_run.mods[m]; }
 
-// Marcus merged some: Word Salad brings Obscure, Sound Salad brings Random
-// Voices, Random World brings Random Colours and Random Models; Perma Bail
-// and Fragile never both
+// Marcus merged some: Sound Salad brings Random Voices, Random World brings
+// Random Colours and Random Models; Perma Bail and Fragile never both.
+// Obscure is its own toggle again (2026-11-14)
 static bool mod_cache( int i )	// folded into another, not listed
 {
-	return i == MOD_CHAOS || i == MOD_OBSCURE || i == MOD_R_VOIX || i == MOD_R_COULEURS || i == MOD_R_DONNEURS;
+	return i == MOD_CHAOS || i == MOD_R_VOIX || i == MOD_R_COULEURS || i == MOD_R_DONNEURS;
 }
 static void lier_mods( bool *m, int change )
 {
-	m[MOD_OBSCURE] = m[MOD_R_MOTS];
 	m[MOD_R_VOIX] = m[MOD_R_SONS];
 	m[MOD_R_COULEURS] = m[MOD_R_DONNEURS] = m[MOD_CHAOS] = m[MOD_R_MONDE];	// Marcus: Random World + Chaos = "Chaos"
 	if( m[MOD_PERMA] && m[MOD_FRAGILE] ) { if( change == MOD_FRAGILE ) m[MOD_PERMA] = false; else m[MOD_FRAGILE] = false; }
@@ -2047,10 +2048,9 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	s_run.actif = true;
 	for( int i = 0; i < NB_MODS; ++i ) s_run.mods[i] = s_arme[i];
 	s_run.mods[MOD_LIVES] = true;	// not a modifier (Marcus): every run has lives
-	// Marcus 2026-11-10: every randomizer is part of Demented (no menu for them),
-	// Countdown too; SURPRISE ME! removed
+	// Countdown is always on (Marcus 2026-11-10); the randomizers are toggles
+	// again (2026-11-14); SURPRISE ME! removed
 	s_run.mods[MOD_TIME] = true;
-	s_run.mods[MOD_R_MONDE] = s_run.mods[MOD_R_SONS] = s_run.mods[MOD_R_MOTS] = true;
 	s_run.mods[MOD_SURPRISE] = false;
 	lier_mods( s_run.mods, -1 );
 	s_run.pro_n = 0; s_run.pro_retry = 0.0f;
@@ -2293,7 +2293,7 @@ bool ScriptDesktopDementedStatRows( Script::CStruct *pParams, Script::CScript *p
 	L::ligne( NULL, NULL );
 	int n = 0;
 	for( int i = 0; i < NB_MODS; ++i )
-		if( s_run.mods[i] && i != MOD_LIVES && i != MOD_SURPRISE && i != MOD_TIME && i < MOD_R_MONDE && !mod_cache( i ))
+		if( s_run.mods[i] && i != MOD_LIVES && i != MOD_SURPRISE && i != MOD_TIME && !mod_cache( i ))
 		{
 			L::ligne( n ? " " : " MODIFIERS:", s_mod_noms[i] );
 			++n;
