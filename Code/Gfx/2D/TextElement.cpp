@@ -903,12 +903,47 @@ void CTextBlockElement::SetText(const char **ppTextLines, int numLines)
 {
 #ifdef THUG_DESKTOP
 	// Demented's Obscure: whole tutorial lines rewritten before wrapping
-	static char s_obscur[CTextElement::vMAX_TEXT_LENGTH];
-	const char *p_obscur_ligne;
-	if( numLines == 1 && ppTextLines[0] && desktop_obscure_block( ppTextLines[0], s_obscur, CTextElement::vMAX_TEXT_LENGTH - 1 ))
+	// (dialogue comes as several strings: "...barriers.\n  " then "(Tap \mm
+	// to get on or off the board)"; a string rewritten to nothing is
+	// dropped, with the line break that led to it)
+	static char s_obscur[8][CTextElement::vMAX_TEXT_LENGTH];
+	static const char *s_obscur_lignes[8];
+	if( numLines >= 1 && numLines <= 8 )
 	{
-		p_obscur_ligne = s_obscur;
-		ppTextLines = &p_obscur_ligne;
+		bool change = false;
+		int n = 0;
+		for( int i = 0; i < numLines; ++i )
+		{
+			const char *l = ppTextLines[i];
+			if( l && desktop_obscure_block( l, s_obscur[i], CTextElement::vMAX_TEXT_LENGTH - 1 ))
+			{
+				change = true;
+				l = s_obscur[i];
+				const char *q = l;
+				while( *q == ' ' ) ++q;
+				if( !*q )
+				{
+					// gone: the previous string loses its trailing "\n  "
+					if( n > 0 )
+					{
+						char *pr = s_obscur[i - 1];
+						if( s_obscur_lignes[n - 1] != pr ) { strncpy( pr, s_obscur_lignes[n - 1], CTextElement::vMAX_TEXT_LENGTH - 1 ); pr[CTextElement::vMAX_TEXT_LENGTH - 1] = 0; }
+						int e = (int)strlen( pr );
+						while( e > 0 && pr[e - 1] == ' ' ) --e;
+						if( e >= 2 && pr[e - 2] == '\\' && pr[e - 1] == 'n' ) e -= 2;
+						pr[e] = 0;
+						s_obscur_lignes[n - 1] = pr;
+					}
+					continue;
+				}
+			}
+			s_obscur_lignes[n++] = l;
+		}
+		if( change )
+		{
+			ppTextLines = s_obscur_lignes;
+			numLines = n;
+		}
 	}
 #endif
 	Dbg_MsgAssert(m_object_flags & vFORCED_DIMS, ("no dimensions have been set"));
