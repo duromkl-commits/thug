@@ -2768,7 +2768,7 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			tous.push_back( pj );
 			char t[256];
 			char forme[160] = "";
-			if( p.taille > 0 && p.taille <= 0.5f )	// tiny (Pipo Monkeys): board kept full size (Marcus)
+			if( p.taille > 0 && p.taille < 0.999f )	// shrunk skaters (Pipo Monkeys, kids): board kept full size (Marcus)
 				snprintf( forme, sizeof( forme ), " body_shape = { scale = %.2f Bone_Board_Root = (%.2f,%.2f,%.2f) nonlocal_board }",
 				          p.taille, 1.0f / p.taille, 1.0f / p.taille, 1.0f / p.taille );
 			else if( p.taille > 0 ) snprintf( forme, sizeof( forme ), " body_shape = { scale = %.2f }", p.taille );
