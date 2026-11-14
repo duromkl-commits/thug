@@ -21,6 +21,8 @@ is THUG's engine two games on, so most things map across directly:
    THAW models) are made inert. Gap scripts carry over as they are.
    Node names THAW's prefix scripts need (Warehouse's flickering start room)
    are rebuilt and written as checksum-name entries.
+ - sounds the scripts play are LoadSound-ed at the end of the zone's
+   LoadTerrain, from THUG's own copies (NJ.pre).
 Personal use with your own copy of the game data.
 """
 import os
@@ -272,8 +274,9 @@ def _looks_struct(v):
     return isinstance(v, Q.Struct)
 
 
-def qb_to_thug(data, renames=None, node_fix=None, keep=None):
+def qb_to_thug(data, renames=None, node_fix=None, keep=None, extra=None):
     q = Q.QB(data)
+    extra = extra or {}
     renames = renames or {}
     w = W()
     for t, c, v in q.items:
@@ -283,7 +286,11 @@ def qb_to_thug(data, renames=None, node_fix=None, keep=None):
         w.nl()
         if isinstance(v, Q.Script):
             w.o.append(0x23); w.name(c)
-            w.o += fix_code(v.code)
+            code = fix_code(v.code)
+            if c in extra:
+                assert code.endswith(b'\x24'), 'script %08x does not end in endscript' % c
+                code = code[:-1] + extra[c] + b'\x24'
+            w.o += code
             continue
         if node_fix and t == 0x0c and c in node_fix:
             v = node_fix[c](v)
@@ -369,6 +376,43 @@ def light_dark_names(geo, prefixes):
     return names
 
 
+# ---------------------------------------------------------------- sounds
+
+# THUG's sound files, as the level .pre (NJ.pre) holds them: <dir>/sounds/pcm.
+THUG_SOUNDS = os.environ.get('THUG_SOUNDS', '/tmp/claude-0/allpre/NJ/sounds/pcm')
+
+
+def level_sounds(qbs):
+    """LoadSound lines for the sounds the zone's scripts play.
+
+    THAW loads a zone's sounds itself; THUG levels LoadSound them from their
+    own scripts. Only sounds the .pre the level loads (NJ.pre) has can play."""
+    have = {}
+    for root, _, fs in os.walk(THUG_SOUNDS):
+        for f in fs:
+            if f.lower().endswith('.pcm'):
+                rel = os.path.relpath(os.path.join(root, f[:-4]), THUG_SOUNDS).replace('/', '\\')
+                have[crc(f[:-4])] = rel
+    played = set()
+    for b in qbs:
+        for t, c, v in Q.QB(b).items:
+            if not isinstance(v, Q.Script):
+                continue
+            toks = list(Q.tokens(v.code))
+            for k in range(len(toks) - 1):
+                (_, a, ab), (_, e, eb) = toks[k:k + 2]
+                if a == 0x16 and e == 0x16 and struct.unpack_from('<I', ab, 1)[0] in (crc('PlaySound'), crc('Obj_PlaySound')):
+                    played.add(struct.unpack_from('<I', eb, 1)[0])
+    out = bytearray()
+    for c in sorted(played):
+        if c in have:
+            p = have[c].encode() + b'\x00'
+            out += b'\x16' + struct.pack('<I', crc('LoadSound')) + b'\x1b' + struct.pack('<I', len(p)) + p + b'\x01'
+        else:
+            print('sound %08x: not in THUG\'s sounds, left silent' % c)
+    return bytes(out)
+
+
 INERT = crc('th4_unused')
 
 
@@ -400,7 +444,9 @@ def convert_level(pak, L, dst):
     renames = {crc(zone + '_NodeArray'): crc('NodeArray')}
     qbs = {n: b for t, n, b in files if n.endswith('.qb.wpc')}
     main = next(b for n, b in qbs.items() if n.endswith('/%s.qb.wpc' % zone))
-    q, _ = qb_to_thug(main, renames, {crc('NodeArray'): fix_nodes})
+    snd = level_sounds(qbs.values())
+    q, _ = qb_to_thug(main, renames, {crc('NodeArray'): fix_nodes},
+                      extra={crc('LoadTerrain'): snd} if snd else None)
     scn_raw = next(b for t, n, b in files if t == T_SCN)
     names = light_dark_names(sector_geometry(scn_raw), prefix_strings(qbs.values()))
     if names:
