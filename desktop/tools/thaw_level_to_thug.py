@@ -290,7 +290,7 @@ def _looks_struct(v):
     return isinstance(v, Q.Struct)
 
 
-def qb_to_thug(data, renames=None, node_fix=None, keep=None, extra=None):
+def qb_to_thug(data, renames=None, node_fix=None, keep=None, extra=None, add=None):
     q = Q.QB(data)
     extra = extra or {}
     renames = renames or {}
@@ -315,6 +315,9 @@ def qb_to_thug(data, renames=None, node_fix=None, keep=None, extra=None):
             w.struct_(v)
         else:
             w.value(v)
+    for c, code in (add or {}).items():
+        if not any(i == c for t, i, v in q.items):
+            w.nl(); w.o.append(0x23); w.name(c); w.o += code
     w.nl()
     w.o.append(0)
     return bytes(w.o), q
@@ -430,6 +433,16 @@ def level_sounds(qbs):
     return bytes(out)
 
 
+# Zones without a LoadTerrain script (Burnside) get Warehouse's terrain set.
+DEFAULT_TERRAINS = ['SetTerrainDefault', 'SetTerrainConcSmooth', 'SetTerrainMetalSmooth', 'SetTerrainWood',
+                    'SetTerrainWoodMasonite', 'SetTerrainWoodPlywood', 'SetTerrainBrick', 'SetTerrainDirt',
+                    'SetTerrainWater', 'SetTerrainChainlink']
+
+
+def default_load_terrain():
+    return b''.join(b'\x01\x16' + struct.pack('<I', crc(n)) for n in DEFAULT_TERRAINS) + b'\x01'
+
+
 INERT = crc('th4_unused')
 
 
@@ -445,15 +458,20 @@ def node_fixer(root_structs, sectors=()):
     (ncomp_LevelGeometry_1 = { Class = LevelGeometry CreatedAtStart ... })
     that nodes name as a bare flag; they are expanded in place. Objects that
     need THAW models (game objects, peds, cars, particles) are made inert, as are LevelObjects whose sector is missing."""
+    def expand(fields, depth):
+        # Compressed fields can themselves name another root struct.
+        e = []
+        for k, v in fields:
+            if k == 0 and isinstance(v, int) and v in root_structs and depth < 8:
+                e += expand(root_structs[v], depth + 1)
+            else:
+                e.append((k, v))
+        return e
+
     def fix(nodes):
         out = []
         for n in nodes:
-            e = []
-            for k, v in n:
-                if k == 0 and isinstance(v, int) and v in root_structs:
-                    e += list(root_structs[v])
-                else:
-                    e.append((k, v))
+            e = expand(n, 0)
             cls = dict((k, v) for k, v in e if k).get(crc('Class'))
             nm = dict((k, v) for k, v in e if k).get(crc('Name'))
             if cls in INERT_CLASSES or (cls == crc('LevelObject') and nm not in sectors):
@@ -482,7 +500,8 @@ def convert_level(pak, L, dst):
     snd = level_sounds(qbs.values())
     roots = {c: v for t, c, v in Q.QB(main).items if isinstance(v, Q.Struct)}
     q, _ = qb_to_thug(main, renames, {crc('NodeArray'): node_fixer(roots, set(sectors))},
-                      extra={crc('LoadTerrain'): snd} if snd else None)
+                      extra={crc('LoadTerrain'): snd} if snd else None,
+                      add={crc('LoadTerrain'): default_load_terrain() + (snd or b'') + b'\x24'})
     scn_raw = next(b for t, n, b in files if t == T_SCN)
     names = light_dark_names(sector_geometry(scn_raw), prefix_strings(qbs.values()))
     if names:
