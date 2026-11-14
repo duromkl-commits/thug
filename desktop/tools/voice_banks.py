@@ -54,6 +54,18 @@ for k in ('eliteguard', 'eva', 'helga', 'inge', 'priestess'):
 for k in ('blackguard', 'deathshead1', 'director', 'drz', 'hans', 'higgs', 'himmler', 'infantryss', 'jack',
           'mechanic', 'murphy', 'officerss', 'partisan', 'trench', 'venom', 'zemph'):
     RTCW['rtcw_' + k] = _SS
+# Kingpin: the game's own pain/death sounds (sound/actors/*, staged under a
+# Kingpin/main folder listed after the first); bosses have their own sets
+_KA = 'Kingpin/main/sound/actors/'
+_KM = [(_KA + 'male', r'^(pain|death)')]
+_KF = [(_KA + 'female', r'^(pain|death)')]
+KINGPIN = {'kp_' + k: [(_KA + 'male/' + d, r'^(pain|death)')] for k, d in
+           (('kingpin', 'kingpin'), ('nikkiblanco', 'nicki'), ('moker', 'moker'), ('heilman', 'heilman'),
+            ('jesus', 'jesus'), ('tyrone', 'tyrone'))}
+KINGPIN['kp_popeye'] = [(_KA + 'male/popeye', r'^argh'), (_KA + 'male', r'^death')]
+for k, (_n, _f, _a, _t, tags) in R.items():
+    if k.startswith('kp_') and k not in KINGPIN:
+        KINGPIN[k] = _KF if 'female' in tags.split() else _KM
 MIN_S, MAX_S = 0.15, 1.8
 MAX_OWN = 3.0	# a character's own lines: Skinner's only one runs 2.8 s
 
@@ -135,12 +147,12 @@ for key, (name, first, age, town, tags) in R.items():
     rng = random.Random('thug-voice:' + key)
     if key in SILENT:
         continue
-    if key in RTCW:
+    if key in RTCW or key in KINGPIN:
         clips = []
-        for d, rx in RTCW[key]:
+        for d, rx in (RTCW.get(key) or KINGPIN[key]):
             clips += pool(d, rx, 'own/' + d.lower().replace('/', '_'), MAX_OWN)
         # the same clips for a whole group: their profile pitch tells them apart
-        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') else pitch.get(key, 0) or rng.randint(96, 104)
+        p = 100 if key in ('rtcw_bj2', 'rtcw_heinrich') or (key in KINGPIN and '/male/' in KINGPIN[key][0][0]) else pitch.get(key, 0) or rng.randint(96, 104)
         own_n += 1
     elif key in OWN or key in OWN2:
         d, rx = OWN[key] if key in OWN else OWN2[key]
