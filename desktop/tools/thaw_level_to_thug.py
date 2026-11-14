@@ -221,6 +221,10 @@ def convert_col(d, drop=()):
 
 # ---------------------------------------------------------------- qb
 
+# THAW script functions THUG doesn't have, and THUG's equivalent.
+THAW_ONLY = {crc('SpawnScriptNow'): crc('SpawnScript'), crc('SpawnScriptLater'): crc('SpawnScript')}
+
+
 def fix_code(code):
     """THAW script bytes -> THUG: short if/else -> THUG's if/else."""
     out = bytearray()
@@ -231,6 +235,8 @@ def fix_code(code):
             out.append(0x26)
         elif t == 0x49:
             raise ValueError('THAW short jump in a script')
+        elif t == 0x16 and struct.unpack_from('<I', b, 1)[0] in THAW_ONLY:
+            out += b'\x16' + struct.pack('<I', THAW_ONLY[struct.unpack_from('<I', b, 1)[0]])
         else:
             out += b
     return bytes(out)
@@ -455,7 +461,9 @@ def convert_level(pak, L, dst):
                               for c, nm in sorted(names.items())) + b'\x00'
     open(os.path.join(o, L + '.qb'), 'wb').write(q)
     sc = next((b for n, b in qbs.items() if n.endswith('/%s_scripts.qb.wpc' % zone)), None)
-    s, _ = qb_to_thug(sc) if sc else (b'\x01\x00', None)
+    # The zone's setup script (Warehouse's light flicker) runs as the level's
+    # setup_script, which the game's level struct names <L>_setup.
+    s, _ = qb_to_thug(sc, {crc(zone + '_setup'): crc(L + '_setup')}) if sc else (b'\x01\x00', None)
     open(os.path.join(o, L + '_scripts.qb'), 'wb').write(s)
     print('%s: %d sectors, %d bytes scene, %d bytes collision -> %s' % (L, len(sectors), len(scn), len(col), o))
 

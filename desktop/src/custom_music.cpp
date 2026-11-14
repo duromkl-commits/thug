@@ -2982,6 +2982,8 @@ static std::string struct_niveau( const NiveauTH4 &n )
 		snprintf( ciel, sizeof( ciel ), "sky = \"%s_Sky\"\n", n.dossier );
 		snprintf( depart, sizeof( depart ), "startup_script = %s\n", n.startup );
 	}
+	else	// ReTHAWed zone: its own <zone>_setup, renamed <L>_setup by the converter
+		snprintf( depart, sizeof( depart ), "setup_script = %s_setup\n", n.dossier );
 	snprintf( t, sizeof( t ),
 		"Level_TH4_%s = {\n"
 		"structure_name = Level_TH4_%s\n"
