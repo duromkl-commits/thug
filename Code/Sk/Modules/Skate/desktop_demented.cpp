@@ -91,9 +91,9 @@ enum { MOD_PERMA, MOD_ZERO, MOD_LIVES, MOD_TIME, MOD_FRAGILE, MOD_OBSCURE, MOD_M
        MOD_R_MONDE, MOD_R_COULEURS, MOD_R_VOIX, MOD_R_SONS, MOD_R_MOTS, MOD_R_NOMS, MOD_R_DONNEURS, MOD_R_ANIMS, NB_MODS };	// R_NOMS (now part of Word Salad) and R_ANIMS (removed) stay off
 static const char *s_mod_noms[NB_MODS] = { "Perma Bail", "Zero", "Lives", "Countdown", "Fragile", "Obscure", "Mirror", "Chaos", "Surprise",
                                            "Chaos", "Random Colours", "Random Voices", "Sound Salad", "Word Salad", "Random Names", "Random Models", "Random Animations" };
-// Randomizers page back (Marcus 2026-11-14): Chaos, Sound Salad, Word Salad and
-// Obscure are toggles again, all on by default
-static bool s_arme[NB_MODS] = { false, false, true, false, false, true, false, true, false, true, true, true, true, true, false, true, false };
+// Randomizers page back (Marcus 2026-11-14): Chaos, Sound Salad and Word Salad
+// are toggles, off by default; Obscure is always on, not a toggle
+static bool s_arme[NB_MODS] = { false, false, true, false, false, true, false, false, false, false, false, false, false, false, false, false, false };
 
 // Randomizers (Marcus's GTA SA randomizer list): one seed per chapter, so a
 // thing keeps its random replacement until the next chapter.
@@ -2051,6 +2051,7 @@ bool ScriptDesktopDementedStart( Script::CStruct *pParams, Script::CScript *pScr
 	// Countdown is always on (Marcus 2026-11-10); the randomizers are toggles
 	// again (2026-11-14); SURPRISE ME! removed
 	s_run.mods[MOD_TIME] = true;
+	s_run.mods[MOD_OBSCURE] = true;
 	s_run.mods[MOD_SURPRISE] = false;
 	lier_mods( s_run.mods, -1 );
 	s_run.pro_n = 0; s_run.pro_retry = 0.0f;

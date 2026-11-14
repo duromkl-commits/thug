@@ -1273,8 +1273,6 @@ static const char *s_demented_scripts =
 	"desktop_tog_color id = desktop_mod_12\n"
 	"make_main_menu_item { text = <text13> id = desktop_mod_13 pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 13 focus = 2 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
 	"desktop_tog_color id = desktop_mod_13\n"
-	"make_main_menu_item { text = <text5> id = desktop_mod_5 pad_choose_script = desktop_demented_flip_rando pad_choose_params = { i = 5 focus = 3 } focus_script = desktop_tog_focus unfocus_script = desktop_tog_unfocus }\n"
-	"desktop_tog_color id = desktop_mod_5\n"
 	"make_main_menu_item { text = \"Done\" pad_choose_script = career_options_menu_exit pad_choose_params = { new_menu_script = desktop_demented_menu focus = 1 } }\n"
 	"FireEvent Type = focus target = current_menu_anchor\n"
 	"if NOT ( <focus> = 0 )\n"
@@ -2932,6 +2930,8 @@ static void patch_dm_goals( const unsigned char *qb, const std::vector<Jeton> &j
 	// Impress Muska 150,000 - 1,250,000
 	static const int muska[] = { 10000, 30000, 150000 };
 	for( int i = 0; i < 3; ++i ) patch_dm( qb, j, m, "NJ_AddGoal_ImpressMuska", "score", T_ENTIER, muska[i], "key = 3 lo = 150000 hi = 1250000 step = 5000" );
+	// ...and the message when you ride up to him
+	patch_dm( qb, j, m, "NJ_ProScore_EnterArea", "text", T_CHAINE, 0, "key = 3 lo = 150000 hi = 1250000 step = 5000 fmt = \"Score %s in front of Chad\"" );
 	// Flyers for the Muska demo: 8 to all 18 in the level
 	patch_dm( qb, j, m, "NJ_AddGoal_MuskaDemoFlyers", "number", T_ENTIER, 8, "key = 4 lo = 8 hi = 18" );
 	// Demo the new playground setup 100,000 - 1,000,000
