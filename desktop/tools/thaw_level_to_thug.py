@@ -102,7 +102,13 @@ def material(m, has_alpha):
     two_sided = bool(flags0 & 0x100) or blend != 0
     acut = 64 if (has_alpha.get(tex) and blend == 0) else 1
     o = struct.pack('<4I', mc, name, 1, acut)
-    o += struct.pack('<BfBBiBf', 0, 0.0, 0, 1 if two_sided else 0, 0, 0, 0.0)
+    # THAW's blended layers (signs, stickers, light pools) sit flat on the
+    # surface under them; its draw order (0x2c) sorts them, and a z-bias
+    # keeps them in front, as THUG's own decals have.
+    order, = struct.unpack_from('<f', m, 0x2c)
+    deco = blend != 0
+    o += struct.pack('<BfBBiBf', 1 if deco else 0, order if deco else 0.0, 0, 1 if two_sided else 0,
+                     1 if deco else 0, 0, 0.0)
     rgb = [max(0.0, min(1.0, c / 2)) for c in col[:3]] if passes else [0.5, 0.5, 0.5]
     reg = (blend & 0xffffff) | ((fixed & 0xff) << 32)
     o += struct.pack('<IIB3fQII2fI', tex, pflags, 1 if rgb != [0.5] * 3 else 0, *rgb, reg, 0, 0,
