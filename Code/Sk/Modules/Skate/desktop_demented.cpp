@@ -1397,8 +1397,199 @@ static bool mot_trick( const char *d, int l )
 	return false;
 }
 
+// Word Salad, second layer (Marcus's "Hybrid Chaos Text" notes, 2026-11-14):
+// now and then a whole line becomes a made-up sentence instead of shuffled
+// words: mundane complaints, paranoid theories, the two mixed, odd
+// anecdotes, rarely two sentences. Weights from thug.ini salad_mix
+// (default 80 shuffled, 7, 5, 4, 3, 1). Picked from the line and the
+// chapter's seed, so a redrawn line says the same thing. A sentence must
+// fit in the line it replaces (lines are wrapped before this runs); short
+// lines, numbers, button icons and trick names keep the plain shuffle.
+extern "C" void desktop_salad_mix( int out[6] );	// desktop_runtime.cpp
+
+// %s someone ordinary, %p someone or something suspicious, %o a thing,
+// %l a place, %t a stretch of time, %n plural things, %c the chapter's
+// recurring thing (the callback)
+static const char *s_gen_gens[] = { "my landlord", "the bus driver", "my cousin", "the lady next door", "the night manager",
+	"my dentist", "the guy at the deli", "the cashier", "my uncle", "the mailman", "the plumber", "my sister", "the crossing guard",
+	"the ice cream man", "my roommate", "the substitute teacher", "the guy with the van", "the pharmacist", "your mom", "Gary" };
+static const char *s_gen_louches[] = { "the government", "the pigeons", "Bigfoot", "the city council", "the guys in the gray van",
+	"the satellites", "the weather people", "the Mothman", "the phone company", "the senator", "the raccoons", "the men in suits",
+	"the lake monster", "the mayor", "the pentagon", "the squirrels", "the aliens", "the census people", "the bank", "the moon" };
+static const char *s_gen_choses[] = { "the shopping cart", "the oranges", "the second refrigerator", "the toaster", "my yogurt",
+	"the parking situation", "the microwave", "the garden hose", "a bag of ice", "the good scissors", "the lawn chairs", "the coupons",
+	"the receipt", "the tupperware", "the ceiling fan", "the spare key", "the casserole", "the vending machine", "the left shoe",
+	"the extension cord", "the fish tank", "the leaf blower", "the bread", "the thermostat", "the blender", "a rotisserie chicken" };
+static const char *s_gen_lieux[] = { "the supermarket", "the car wash", "the laundromat", "the bowling alley", "the post office",
+	"the DMV", "the gas station", "the dentist", "the parking lot", "the library", "the bus stop", "the mall", "the water tower",
+	"the pet store", "the hardware store", "the storage unit" };
+static const char *s_gen_temps[] = { "two hours", "all week", "since Tuesday", "forty minutes", "three days", "since March",
+	"all morning", "eleven years" };
+static const char *s_gen_pluriels[] = { "light bulbs", "mailboxes", "pigeons", "stop signs", "phone books", "shoelaces",
+	"grocery bags", "lawn gnomes", "batteries", "napkins", "ducks", "paper towels" };
+
+static const char *s_gen_banal[] = {
+	"You can't just leave %o there and expect everyone to understand.",
+	"I specifically asked them not to bring %o.",
+	"Nobody has explained what happened to %o.",
+	"%s still owes me for %o.",
+	"I waited %t for %o.",
+	"Who keeps moving %o?",
+	"%s said %o was fine. It was not fine.",
+	"That's three times this week with %o.",
+	"I'm not mad about %o. I'm disappointed.",
+	"We had one rule about %o.",
+	"Don't let %s near %o.",
+	"%s brought %o to %l again.",
+	"Why is %o warm?",
+	"I paid for %o. Twice.",
+	"Somebody ate %o and I know who.",
+	"They closed %l. Where am I supposed to go?",
+	"%o is not a gift.",
+	"I've been on hold %t.",
+	"Ask %s what happened at %l.",
+	"I put %o back. Somebody moved it.",
+};
+static const char *s_gen_parano[] = {
+	"%p has been replacing our %n with slightly different ones.",
+	"%p has been meeting behind %l.",
+	"My neighbor says %s isn't the same person anymore.",
+	"%p knows about %l.",
+	"Ask yourself why %p needs that many %n.",
+	"There were lights over %l again.",
+	"%p was here before %l was.",
+	"They don't want you to know %p can swim.",
+	"%p has been counting the %n.",
+	"I saw %p at %l. Nobody believes me.",
+	"%p doesn't sleep. It waits.",
+	"Follow the %n. That's all I'm saying.",
+	"%l has a basement. Why does it need a basement?",
+	"%p bought every %o in the state.",
+	"That's not fog. That's %p.",
+	"%p has been listening %t.",
+};
+static const char *s_gen_mixte[] = {
+	"%p apparently has a problem with %o.",
+	"%p has been changing the expiration dates on %o.",
+	"I never said %o was involved.",
+	"You think this is about %o? It's never been about %o.",
+	"%p took %o and left a note.",
+	"%s swears %p was in line at %l.",
+	"%p wants %o back.",
+	"Funny how %o shows up right after %p.",
+	"%s works for %p. Look at %o.",
+	"Don't tell %p about %o.",
+	"%p has been sitting in %l with %o.",
+	"%o was a warning from %p.",
+};
+static const char *s_gen_anecdote[] = {
+	"I once saw %s eat %o at %l.",
+	"%l smells different on Tuesdays.",
+	"My uncle had %o like that. He moved away.",
+	"%s cried at %l. Not even sad, just cried.",
+	"I lived above %l for a year. Never again.",
+	"Every time I go to %l, %s is there.",
+	"I had a dream about %o. It was right.",
+	"%s taught me to drive at %l.",
+	"I've had %o %t and it's still in the box.",
+	"There's a guy at %l who sells %n.",
+};
+
+static int gen_choix( uint32 &h, int n ) { h = melanger( h + 0x9E3779B9u ); return (int)( h % (uint32)n ); }
+#define GEN_N( a ) ((int)( sizeof( a ) / sizeof( a[0] )))
+
+static void gen_phrase( const char *modele, uint32 &h, uint32 rappel, std::string &o )
+{
+	const size_t debut = o.size();
+	std::string objet;	// one thing per sentence ("never been about %o" twice)
+	for( const char *q = modele; *q; ++q )
+	{
+		if( *q != '%' || !q[1] ) { o += *q; continue; }
+		const char c = *++q;
+		if( c == 'o' )
+		{
+			if( objet.empty())
+				// the chapter's thing turns up again now and then
+				objet = ( gen_choix( h, 100 ) < 15 ) ? s_gen_choses[rappel % (uint32)GEN_N( s_gen_choses )] : s_gen_choses[gen_choix( h, GEN_N( s_gen_choses ))];
+			o += objet;
+		}
+		else if( c == 's' ) o += s_gen_gens[gen_choix( h, GEN_N( s_gen_gens ))];
+		else if( c == 'p' ) o += s_gen_louches[gen_choix( h, GEN_N( s_gen_louches ))];
+		else if( c == 'l' ) o += s_gen_lieux[gen_choix( h, GEN_N( s_gen_lieux ))];
+		else if( c == 't' ) o += s_gen_temps[gen_choix( h, GEN_N( s_gen_temps ))];
+		else if( c == 'n' ) o += s_gen_pluriels[gen_choix( h, GEN_N( s_gen_pluriels ))];
+		else { o += '%'; o += c; }
+	}
+	if( o.size() > debut && o[debut] >= 'a' && o[debut] <= 'z' ) o[debut] = (char)( o[debut] - 'a' + 'A' );
+}
+
+static const char *gen_modele( int cat, uint32 &h )
+{
+	switch( cat )
+	{
+	case 1: return s_gen_banal[gen_choix( h, GEN_N( s_gen_banal ))];
+	case 2: return s_gen_parano[gen_choix( h, GEN_N( s_gen_parano ))];
+	case 3: return s_gen_mixte[gen_choix( h, GEN_N( s_gen_mixte ))];
+	default: return s_gen_anecdote[gen_choix( h, GEN_N( s_gen_anecdote ))];
+	}
+}
+
+static bool mot_trick( const char *d, int l );
+
+// 1 when the line in 't' was swapped for a made-up sentence
+static int gen_ligne( char *t, int cap, uint32 graine )
+{
+	int l = 0, mots = 0;
+	for( const char *p = t; *p; ++p, ++l )
+	{
+		if( *p == '\\' || ( *p >= '0' && *p <= '9' ) || *p == '\n' ) return 0;	// icons, colours, scores, timers
+		if((( *p >= 'A' && *p <= 'Z' ) || ( *p >= 'a' && *p <= 'z' )) && ( p == t || p[-1] == ' ' ))
+		{
+			const char *d = p;
+			while(( *d >= 'A' && *d <= 'Z' ) || ( *d >= 'a' && *d <= 'z' )) ++d;
+			if( d - p >= 5 && mot_trick( p, (int)( d - p ))) return 0;	// goals asking for a trick keep its name
+			++mots;
+		}
+	}
+	if( l < 24 || mots < 4 ) return 0;
+	int mix[6];
+	desktop_salad_mix( mix );
+	int total = 0;
+	for( int i = 0; i < 6; ++i ) total += mix[i];
+	if( total <= mix[0] ) return 0;
+	uint32 h = graine ^ 0x7f4a7c15u;
+	for( const char *p = t; *p; ++p ) h = ( h ^ (uint8)*p ) * 16777619u;
+	h = melanger( h );
+	int r = (int)( h % (uint32)total ), cat = 0;
+	while( cat < 5 && r >= mix[cat] ) r -= mix[cat++];
+	if( cat == 0 ) return 0;
+	const uint32 rappel = melanger( graine ^ 0x2c1b3c6du );
+	std::string o;
+	for( int essai = 0; essai < 16; ++essai )
+	{
+		o.clear();
+		if( cat == 5 )
+		{
+			// two sentences from two different kinds
+			const int a = 1 + gen_choix( h, 4 );
+			int b = 1 + gen_choix( h, 3 );
+			if( b >= a ) ++b;
+			gen_phrase( gen_modele( a, h ), h, rappel, o );
+			o += ' ';
+			gen_phrase( gen_modele( b, h ), h, rappel, o );
+		}
+		else gen_phrase( gen_modele( cat, h ), h, rappel, o );
+		if( (int)o.size() <= l && (int)o.size() < cap ) break;
+		o.clear();
+	}
+	if( o.empty()) return 0;
+	memcpy( t, o.c_str(), o.size() + 1 );
+	return 1;
+}
+
 static int babil( char *t, int cap, uint32 graine )
 {
+	if( gen_ligne( t, cap, graine )) return 1;
 	std::string o;
 	int mot = 0, change = 0;
 	for( const char *p = t; *p; )
@@ -1531,6 +1722,76 @@ static void sans_icones( const char *in, std::string &o )
 		while( !o.empty() && o[o.size() - 1] == ' ' && ( *apres == ' ' || *apres == 0 || *apres == '.' || *apres == ',' || *apres == '!' || *apres == '\\' )) o.erase( o.size() - 1 );
 		p = apres;
 	}
+}
+
+// Obscure: Marcus's rewrites of tutorial lines, applied to the whole text
+// before it is split into lines and wrapped (NJ chapter 1 for now). "\n" in
+// a pattern matches the game's two-character line break or a real one.
+struct ObscurLigne { const char *de, *vers; };
+static const ObscurLigne s_obscur_lignes[] = {
+	// Help Eric hint box: buttons and the camera line go
+	{ "\\b3 to Jump\\n\\bf to grab onto stuff\\n\\b7 to pull yourself up\\n\\mo to Re-Center Camera", "Jump\\nGrab onto stuff\\nPull yourself up" },
+	{ "The Next Part should be on the house across the alley - jump(\\b3) to it and grab(\\bf) the gutter",
+	  "The next part should be on the house across the alley - jump to it and grab the gutter" },
+	// Eric's board hint, dropped with the line break or space before it
+	{ "\\n(Tap \\mm to get on or off the board)", "" },
+	{ " (Tap \\mm to get on or off the board)", "" },
+	{ "(Tap \\mm to get on or off the board)", "" },
+	{ "\\n(Tap \\mm to get\\non or off the board)", "" },
+	{ "(Tap \\mm to get\\non or off the board)", "" },
+};
+
+// pattern 'pat' at s[i]? its "\n" also matches a real newline; 'l' = length matched
+static bool obscur_egal( const std::string &s, size_t i, const char *pat, size_t &l )
+{
+	size_t j = i;
+	for( const char *q = pat; *q; )
+	{
+		if( q[0] == '\\' && q[1] == 'n' )
+		{
+			if( j + 1 < s.size() + 1 && s.compare( j, 2, "\\n" ) == 0 ) j += 2;
+			else if( j < s.size() && s[j] == '\n' ) j += 1;
+			else return false;
+			q += 2;
+			continue;
+		}
+		if( j >= s.size() || s[j] != *q ) return false;
+		++j; ++q;
+	}
+	l = j - i;
+	return true;
+}
+
+static bool obscur_lignes( std::string &s )
+{
+	bool change = false;
+	for( int k = 0; k < (int)( sizeof( s_obscur_lignes ) / sizeof( s_obscur_lignes[0] )); ++k )
+	{
+		const char c0 = s_obscur_lignes[k].de[0];
+		for( size_t i = 0; i < s.size(); ++i )
+		{
+			if( s[i] != c0 && !( c0 == '\\' && s[i] == '\n' )) continue;
+			size_t l;
+			if( !obscur_egal( s, i, s_obscur_lignes[k].de, l )) continue;
+			s.replace( i, l, s_obscur_lignes[k].vers );
+			i += strlen( s_obscur_lignes[k].vers );
+			change = true;
+			--i;
+		}
+	}
+	return change;
+}
+
+// TextElement.cpp: a text block's text, before it is split into lines
+extern "C" int desktop_chaos_menu( void );
+extern "C" int desktop_obscure_block( const char *in, char *out, int n )
+{
+	if( !in || n < 2 || !rando_on( MOD_OBSCURE ) || desktop_chaos_menu()) return 0;
+	std::string s( in );
+	if( !obscur_lignes( s )) return 0;
+	strncpy( out, s.c_str(), n - 1 );
+	out[n - 1] = 0;
+	return 1;
 }
 
 // Chaos: people's names swapped for each other (the same swap all run), and

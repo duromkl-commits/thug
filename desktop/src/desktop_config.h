@@ -21,6 +21,7 @@ struct DesktopConfig
 	float bloom_strength;		// 0..1
 	float bloom_threshold;		// 0..1, brightness where glow starts
 	int  fog;			// distance haze in the sky's colour
+	int salad_mix[6];	// Demented Word Salad: % of lines salad / mundane / paranoid / mixed / anecdote / multi-sentence
 	float object_distance;	// multiplier on how far peds/moving objects stay visible and active
 	float fog_strength;		// 0..1, haze at the far end
 	float fog_distance;		// inches to half of fog_strength

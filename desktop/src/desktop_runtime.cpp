@@ -58,6 +58,9 @@ static const char *s_default_ini =
 	"; distance in inches where it reaches half of that (THUG levels: 8000 = about 200 m)\n"
 	"; how far away peds, cars and other moving objects still show up and move: 1 = PS2/Xbox, 4 = four times as far\n"
 	"object_distance=4\n"
+	"; Demented Word Salad: how often a line is shuffled words vs a made-up sentence, as weights:\n"
+	"; shuffled, mundane, paranoid, mixed, odd anecdote, two sentences\n"
+	"salad_mix=80,7,5,4,3,1\n"
 	"fog=1\n"
 	"fog_strength=0.25\n"
 	"fog_distance=8000\n"
@@ -162,6 +165,17 @@ static void parse( FILE *f )
 		else if( !strcmp( k, "bloom_threshold" )) s_cfg.bloom_threshold = (float)atof( v );
 		else if( !strcmp( k, "fog" ))           s_cfg.fog = iv;
 		else if( !strcmp( k, "object_distance" )) s_cfg.object_distance = (float)atof( v );
+		else if( !strcmp( k, "salad_mix" ))
+		{
+			int m[6] = { 0 }, n = 0;
+			for( const char *q = v; *q && n < 6; ++n )
+			{
+				m[n] = atoi( q );
+				while( *q && *q != ',' ) ++q;
+				if( *q == ',' ) ++q;
+			}
+			if( n == 6 ) for( int i = 0; i < 6; ++i ) s_cfg.salad_mix[i] = m[i] < 0 ? 0 : m[i];
+		}
 		else if( !strcmp( k, "fog_strength" ))  s_cfg.fog_strength = (float)atof( v );
 		else if( !strcmp( k, "fog_distance" ))  s_cfg.fog_distance = (float)atof( v );
 		else if( !strcmp( k, "dof" ))           s_cfg.dof = iv;
@@ -208,6 +222,7 @@ const DesktopConfig &desktop_config( void )
 	s_cfg.bloom_threshold = 0.8f;
 	s_cfg.fog = 1;
 	s_cfg.object_distance = 4.0f;
+	{ static const int mix[6] = { 80, 7, 5, 4, 3, 1 }; for( int i = 0; i < 6; ++i ) s_cfg.salad_mix[i] = mix[i]; }
 	s_cfg.fog_strength = 0.25f;
 	s_cfg.fog_distance = 8000.0f;
 	s_cfg.dof = 1;
@@ -318,6 +333,11 @@ extern "C" float desktop_object_distance( void )
 {
 	const float v = desktop_config().object_distance;
 	return v < 1.0f ? 1.0f : v > 20.0f ? 20.0f : v;
+}
+
+extern "C" void desktop_salad_mix( int out[6] )
+{
+	for( int i = 0; i < 6; ++i ) out[i] = desktop_config().salad_mix[i];
 }
 
 extern "C" int desktop_max_fps( void )

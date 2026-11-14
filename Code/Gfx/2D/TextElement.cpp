@@ -895,8 +895,22 @@ void CTextBlockElement::SetFont(uint32 font_checksum)
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_obscure_block( const char *in, char *out, int n );	// desktop_demented.cpp
+#endif
+
 void CTextBlockElement::SetText(const char **ppTextLines, int numLines)
 {
+#ifdef THUG_DESKTOP
+	// Demented's Obscure: whole tutorial lines rewritten before wrapping
+	static char s_obscur[CTextElement::vMAX_TEXT_LENGTH];
+	const char *p_obscur_ligne;
+	if( numLines == 1 && ppTextLines[0] && desktop_obscure_block( ppTextLines[0], s_obscur, CTextElement::vMAX_TEXT_LENGTH - 1 ))
+	{
+		p_obscur_ligne = s_obscur;
+		ppTextLines = &p_obscur_ligne;
+	}
+#endif
 	Dbg_MsgAssert(m_object_flags & vFORCED_DIMS, ("no dimensions have been set"));
 	Dbg_MsgAssert(numLines < 256, ("large number of lines, probably not good"));
 
