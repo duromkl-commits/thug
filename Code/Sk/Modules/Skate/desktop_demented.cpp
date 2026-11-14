@@ -2296,6 +2296,10 @@ static bool donne_skater( bool en_jeu )
 		if( s_ev_corps ) Script::RunScript( "refresh_skater_model_for_cheats" );
 	}
 	note_depart();
+	// goal texts name the new skater's tricks (\t1 = the trick in the slot)
+	if( Game::CGoalManager *gm = Game::GetGoalManager())
+		for( int i = 0; i < gm->GetNumGoals(); ++i )
+			if( Game::CGoal *g = gm->GetGoalByIndex( i )) g->ReplaceTrickText();
 	VLOG( "DSK", "demented: dealt %s (%d to pick from), %d starter tricks%s", s_run.nom, (int)v.size(), (int)s_run.depart_cles.size(), en_jeu ? ", after a lost life" : "" );
 	return true;
 }

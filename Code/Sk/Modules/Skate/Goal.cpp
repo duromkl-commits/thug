@@ -664,6 +664,9 @@ bool CGoal::Activate()
 	{
 #ifdef THUG_DESKTOP
 		desktop_scale_goal( mp_params, desktop_unscaled_goal( mp_params ) || IsMinigame() || IsCompetition() || IsNetGoal() );
+		// the trick names in the text follow the skater playing now (a new
+		// Demented deal changes the trick in a slot; it kept the old name)
+		ReplaceTrickText();
 #endif
 		Mem::Manager::sHandle().PushContext(Mem::Manager::sHandle().BottomUpHeap());
 		// Warning! Make sure there are no 'return's between the above pushcontext and the 
