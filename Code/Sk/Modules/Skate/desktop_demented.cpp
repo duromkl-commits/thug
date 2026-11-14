@@ -2170,7 +2170,14 @@ bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
 		pParams->GetChecksum( crc( "def" ), &v, Script::NO_ASSERT );
 		if( dm ) v = cles->GetChecksum( (int)( g % cles->GetSize()));
 		o->RemoveComponent( nom );
-		o->AddChecksum( nom, v );
+		if( pParams->ContainsFlag( crc( "tableau" )))	// key_combos = [ X ]
+		{
+			Script::CArray a;
+			a.SetSizeAndType( 1, ESYMBOLTYPE_NAME );
+			a.SetChecksum( 0, v );
+			o->AddArray( nom, &a );
+		}
+		else o->AddChecksum( nom, v );
 		return true;
 	}
 	const char *fmt = NULL;

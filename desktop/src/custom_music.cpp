@@ -2875,7 +2875,10 @@ static void patch_dm( const unsigned char *qb, const std::vector<Jeton> &j, std:
 					if( b < 2 || qb[j[b - 1].pos] != T_EGAL || !est_nom( qb, j[b - 2], c )) continue;
 				}
 				char arg[32]; snprintf( arg, sizeof( arg ), "desktop_dm_%d", s_num++ ); ++num;
-				std::string q = std::string( "DesktopDmGoal name = " ) + arg + " " + appel + " def = ";
+				// <arg> isn't allowed as an array element (the game's array reader
+				// spins on it: froze New Jersey's load), so [ X ] goes as a whole
+				const bool seul = b >= 1 && b + 1 < j.size() && qb[j[b - 1].pos] == T_TAB && qb[j[b + 1].pos] == T_FTAB;
+				std::string q = std::string( "DesktopDmGoal name = " ) + arg + " " + appel + ( seul ? " tableau" : "" ) + " def = ";
 				if( type == T_ENTIER ) { char v[16]; snprintf( v, sizeof( v ), "%d", (int)lit32( qb + j[b].pos + 1 )); q += v; }
 				else if( type == T_NOM ) { char v[16]; snprintf( v, sizeof( v ), "#%08x", lit32( qb + j[b].pos + 1 )); q += v; }
 				else q += std::string( "\"" ) + (const char *)( qb + j[b].pos + 5 ) + "\"";
@@ -2883,7 +2886,8 @@ static void patch_dm( const unsigned char *qb, const std::vector<Jeton> &j, std:
 				Ecrit w; compile_q( w, q.c_str());
 				m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
 				Ecrit r; r.octet( T_ARG ); r.nom( arg );
-				m.push_back( Modif{ j[b].pos, j[b].taille, r.o } );
+				if( seul ) m.push_back( Modif{ j[b - 1].pos, j[b + 1].pos + j[b + 1].taille - j[b - 1].pos, r.o } );
+				else m.push_back( Modif{ j[b].pos, j[b].taille, r.o } );
 			}
 			VLOG( "MUS", "%s: %d goal values randomizable", nom, num );
 			return;
