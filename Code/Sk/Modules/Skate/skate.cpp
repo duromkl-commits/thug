@@ -55,6 +55,9 @@
 
 #include <gfx/gfxman.h>
 #include <gfx/nx.h>
+#ifdef THUG_DESKTOP
+#include <gfx/NxLoadScreen.h>
+#endif
 #include <gfx/nxmiscfx.h>
 #include <gfx/nxparticlemgr.h>
 
@@ -192,6 +195,10 @@ static Script::CStruct *spStatData=NULL;
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+void DesktopGlueUpdate( Skate &mdl );	// desktop_extras_glue.cpp
+#endif
+
 void		Skate::s_logic_code ( const Tsk::Task< Skate >& task )
 {
 	GameNet::Manager* gamenet_man = GameNet::Manager::Instance();
@@ -201,6 +208,9 @@ void		Skate::s_logic_code ( const Tsk::Task< Skate >& task )
 	Skate&	mdl = task.GetData();
 
 	mdl.DoUpdate();
+#ifdef THUG_DESKTOP
+	DesktopGlueUpdate( mdl );
+#endif
 
 	if( gamenet_man->OnServer() && ( mdl.GetNumSkaters() > 0 ))
 	{
@@ -302,7 +312,12 @@ void		Skate::v_start_cb ( void )
     #ifdef __PLAT_VITA__
 	VLOG( "SKATE", ">> startup_loading_screen" );
 #endif
-	Script::RunScript("startup_loading_screen");
+#ifdef THUG_DESKTOP
+	if (Config::CD() && !Config::Bootstrap())
+		Nx::CLoadScreen::sDesktopBoot();
+	else
+#endif
+		Script::RunScript("startup_loading_screen");
 #ifdef __PLAT_VITA__
 	VLOG( "SKATE", "<< startup_loading_screen ok" );
 #endif

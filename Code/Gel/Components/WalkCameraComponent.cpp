@@ -9,8 +9,15 @@
 
 // Replace the entire contents of this file with the new file.
 #include <gel/components/gunslingerwalkcameracomponent.cpp>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_world( void );
+#endif
 
 #else
+
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_world( void );
+#endif
 
 #include <gel/components/walkcameracomponent.h>
 #include <core/math/slerp.h>
@@ -26,6 +33,9 @@
 #include <gel/scripting/script.h>
 #include <gel/scripting/struct.h>
 #include <gfx/debuggfx.h>
+#ifdef THUG_DESKTOP
+namespace Obj { class CCompositeObject; }
+#endif
 
 namespace Obj
 {
@@ -149,6 +159,9 @@ void CWalkCameraComponent::Update()
 	
 	// get input
 	float horiz_control = GetInputComponentFromObject(GetObject())->GetControlPad().m_scaled_rightX;
+#ifdef THUG_DESKTOP
+	if (desktop_mirror_world()) horiz_control = -horiz_control;	// Demented Mirror
+#endif
 
 	// restore camera position from last frame, previous to refocusing and collision detection
 	GetObject()->GetMatrix() = m_last_actual_matrix;
@@ -362,6 +375,15 @@ void CWalkCameraComponent::Update()
 	GetObject()->GetMatrix()[Z][W] = 0.0f;
 	GetObject()->GetMatrix()[W].Set(0.0f, 0.0f, 0.0f, 1.0f);
 	
+#ifdef THUG_DESKTOP
+	if( mp_target_walk_component )
+	{
+		DesktopCameraWeight( mp_camera_component ? mp_camera_component->GetCamera() : NULL, mp_target->GetVel(), true,
+							 mp_target_walk_component->GetState() == CWalkComponent::WALKING_GROUND,
+							 false, instantly, camera_pos, GetObject()->GetMatrix());
+	}
+#endif
+
 	// Now do collision detection.
 	ApplyCameraCollisionDetection(
 		camera_pos,

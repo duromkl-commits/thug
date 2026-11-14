@@ -32,6 +32,12 @@ CTextElement::CTextElement() :
 	m_font_checksum = 0;
 	mp_font = NULL;
 	mp_text = NULL;
+#ifdef THUG_DESKTOP
+	mp_desktop_orig = NULL;
+	m_desktop_orig_taille = 0;
+	m_desktop_gen = 0;
+	m_desktop_jeu = -1;
+#endif
 	mp_blur_effect = NULL;
 	m_use_shadow = false;
 	create_text_instances(1);
@@ -57,6 +63,10 @@ CTextElement::~CTextElement()
 	destroy_text_instances();
 	if (mp_text)
 		delete mp_text;
+#ifdef THUG_DESKTOP
+	if (mp_desktop_orig)
+		delete [] mp_desktop_orig;
+#endif
 }
 
 
@@ -167,8 +177,40 @@ void CTextElement::SetFont(uint32 font_checksum)
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_chaos_text( const char *in, char *out, int n );	// desktop_demented.cpp
+extern "C" int desktop_chaos_menu( void );	// desktop_demented.cpp: a menu is up
+extern "C" void desktop_chaos_jeu( int jeu );	// the next desktop_chaos_text is for text made in play
+extern "C" int desktop_chaos_gen( void );	// changes each time Chaos reshuffles on-screen text
+#endif
+
 void CTextElement::SetText(const char *pText)
 {
+#ifdef THUG_DESKTOP
+	// Demented's Chaos modifier: swapped names, traded letters.
+	// The text as given is kept, so a reshuffle can redo it from scratch.
+	if( pText != mp_desktop_orig )
+	{
+		const int l = (int)strlen( pText ) + 1;
+		if( l > m_desktop_orig_taille )
+		{
+			if( mp_desktop_orig ) delete [] mp_desktop_orig;
+			Mem::Manager::sHandle().PushContext(Mem::Manager::sHandle().FrontEndHeap());
+			mp_desktop_orig = new char[l];
+			Mem::Manager::sHandle().PopContext();
+			m_desktop_orig_taille = l;
+		}
+		memcpy( mp_desktop_orig, pText, l );
+	}
+	m_desktop_gen = desktop_chaos_gen();
+	static char s_chaos[vMAX_TEXT_LENGTH];
+	// text that was on screen before a menu opened (goal text, dialogue)
+	// stays scrambled under the pause menu (Marcus)
+	if( m_desktop_jeu < 0 ) m_desktop_jeu = desktop_chaos_menu() ? 0 : 1;
+	desktop_chaos_jeu( m_desktop_jeu );
+	if( desktop_chaos_text( pText, s_chaos, vMAX_TEXT_LENGTH - 1 ))
+		pText = s_chaos;
+#endif
 	int new_length = strlen(pText) + 1;
 	Dbg_MsgAssert(new_length < vMAX_TEXT_LENGTH, ("string too long %d", new_length));
 
@@ -412,6 +454,11 @@ void CTextElement::update()
 #else
 
 	if (!mp_text) return;
+#ifdef THUG_DESKTOP
+	// Chaos reshuffled the screen's text: redo this one from what it was given
+	if( mp_desktop_orig && m_desktop_gen != desktop_chaos_gen())
+		SetText( mp_desktop_orig );
+#endif
 	
 	bool offscreen = false;
 	// HACK
@@ -848,8 +895,57 @@ void CTextBlockElement::SetFont(uint32 font_checksum)
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_obscure_block( const char *in, char *out, int n );	// desktop_demented.cpp
+#endif
+
 void CTextBlockElement::SetText(const char **ppTextLines, int numLines)
 {
+#ifdef THUG_DESKTOP
+	// Demented's Obscure: whole tutorial lines rewritten before wrapping
+	// (dialogue comes as several strings: "...barriers.\n  " then "(Tap \mm
+	// to get on or off the board)"; a string rewritten to nothing is
+	// dropped, with the line break that led to it)
+	static char s_obscur[8][CTextElement::vMAX_TEXT_LENGTH];
+	static const char *s_obscur_lignes[8];
+	if( numLines >= 1 && numLines <= 8 )
+	{
+		bool change = false;
+		int n = 0;
+		for( int i = 0; i < numLines; ++i )
+		{
+			const char *l = ppTextLines[i];
+			if( l && desktop_obscure_block( l, s_obscur[i], CTextElement::vMAX_TEXT_LENGTH - 1 ))
+			{
+				change = true;
+				l = s_obscur[i];
+				const char *q = l;
+				while( *q == ' ' ) ++q;
+				if( !*q )
+				{
+					// gone: the previous string loses its trailing "\n  "
+					if( n > 0 )
+					{
+						char *pr = s_obscur[i - 1];
+						if( s_obscur_lignes[n - 1] != pr ) { strncpy( pr, s_obscur_lignes[n - 1], CTextElement::vMAX_TEXT_LENGTH - 1 ); pr[CTextElement::vMAX_TEXT_LENGTH - 1] = 0; }
+						int e = (int)strlen( pr );
+						while( e > 0 && pr[e - 1] == ' ' ) --e;
+						if( e >= 2 && pr[e - 2] == '\\' && pr[e - 1] == 'n' ) e -= 2;
+						pr[e] = 0;
+						s_obscur_lignes[n - 1] = pr;
+					}
+					continue;
+				}
+			}
+			s_obscur_lignes[n++] = l;
+		}
+		if( change )
+		{
+			ppTextLines = s_obscur_lignes;
+			numLines = n;
+		}
+	}
+#endif
 	Dbg_MsgAssert(m_object_flags & vFORCED_DIMS, ("no dimensions have been set"));
 	Dbg_MsgAssert(numLines < 256, ("large number of lines, probably not good"));
 

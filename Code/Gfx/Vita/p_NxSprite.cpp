@@ -44,6 +44,11 @@
 #define ENGINE_2D_H			480.0f
 #define ENGINE_2D_Y_MARGIN	16.0f
 
+#ifdef THUG_DESKTOP
+#include <core/crc.h>
+extern "C" unsigned int desktop_rando_hud( void );
+extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b );
+#endif
 #define SCREEN_W	960.0f
 #define SCREEN_H	544.0f
 
@@ -89,7 +94,7 @@ namespace Nx
 {
 
 CVitaSprite::CVitaSprite( CWindow2D *p_window )
-	: CSprite( p_window )
+	: CSprite( p_window ), m_seq( 0 ), m_seq_pri( 0.0f ), m_seq_hidden( true )
 {
 	NxVita::SpriteRegister( this );
 }
@@ -97,6 +102,30 @@ CVitaSprite::CVitaSprite( CWindow2D *p_window )
 CVitaSprite::~CVitaSprite()
 {
 	NxVita::SpriteUnregister( this );
+}
+
+// L'ordre d'inscription XBox : sSprite nait cache, priorite 0, et rejoint la
+// liste quand il devient visible ou change de priorite en etant visible.
+static unsigned s_seq_next = 0;
+
+void CVitaSprite::plat_update_hidden()
+{
+	if( m_hidden != m_seq_hidden )
+	{
+		m_seq_hidden = m_hidden;
+		if( !m_hidden )
+			m_seq = ++s_seq_next;
+	}
+}
+
+void CVitaSprite::plat_update_priority()
+{
+	if( m_priority != m_seq_pri )
+	{
+		m_seq_pri = m_priority;
+		if( !m_seq_hidden )
+			m_seq = ++s_seq_next;
+	}
 }
 
 } // namespace Nx
@@ -154,7 +183,13 @@ void RenderSprites2D( float bas, float haut )
 	{
 		Nx::CVitaSprite *p = sp_sprites[i];
 		int j = i - 1;
-		while(( j >= 0 ) && ( sp_sprites[j]->GetPri() > p->GetPri()))
+		// A priorite egale, la liste XBox (NX/sprite.cpp:177) insere un
+		// sprite DEVANT ses egaux : le dernier inscrit est dessine en premier,
+		// donc dessous. Le coche des cases (cree avant la case, meme
+		// z_priority) passait sinon sous la case.
+		while(( j >= 0 ) && (( sp_sprites[j]->GetPri() > p->GetPri())
+		                     || (( sp_sprites[j]->GetPri() == p->GetPri())
+		                         && ( sp_sprites[j]->Seq() < p->Seq()))))
 		{
 			sp_sprites[j + 1] = sp_sprites[j];
 			--j;
@@ -264,6 +299,28 @@ void RenderSprites2D( float bas, float haut )
 		if( cg > 1.0f ) cg = 1.0f;
 		if( cb > 1.0f ) cb = 1.0f;
 		if( ca > 1.0f ) ca = 1.0f;
+#ifdef THUG_DESKTOP
+		// Demented Random Colours on the in-game HUD (not while a menu is up):
+		// every panel piece takes the SAME random hue, so connected pieces
+		// match (Marcus); the balance meter and arrow get their own; the
+		// special bar stays as it is (it flickered); fades and anything near
+		// full screen too. Hues are fixed per chapter, never per colour, so
+		// an animated colour doesn't jump around.
+		if( desktop_rando_hud() && !(( x1 - x0 ) >= 0.8f * SCREEN_W && ( y1 - y0 ) >= 0.8f * SCREEN_H ))
+		{
+			static uint32 s_meter = 0, s_fleche = 0, s_barre = 0, s_special = 0;
+			if( !s_meter )
+			{
+				s_meter = Crc::GenerateCRCFromString( "balancemeter" ); s_fleche = Crc::GenerateCRCFromString( "balancearrow_glow" );
+				s_barre = Crc::GenerateCRCFromString( "specialbar" ); s_special = Crc::GenerateCRCFromString( "special" );
+			}
+			const uint32 t = p_tex ? p_tex->GetChecksum() : 0;
+			if( t == s_meter || t == s_fleche )
+				desktop_rando_teinte( 0x3c6ef372u, &cr, &cg, &cb );
+			else if( t != s_barre && t != s_special )
+				desktop_rando_teinte( 0xbb67ae85u, &cr, &cg, &cb );
+		}
+#endif
 
 		if( !p_tex )
 		{

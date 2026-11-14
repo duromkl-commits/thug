@@ -27,6 +27,12 @@
 #include <sk/components/skatercorephysicscomponent.h>
 #include <sk/components/skaterbalancetrickcomponent.h>
 #include <sk/components/skaterstatecomponent.h>
+#ifdef THUG_DESKTOP
+#include <math.h>
+#include <sys/timer.h>
+namespace Obj { class CCompositeObject; }
+extern "C" float desktop_chaos_seisme( void );	// desktop_demented.cpp
+#endif
 
 
 namespace Obj
@@ -848,6 +854,30 @@ void CSkaterCameraComponent::Update( void )
 	{
 		addShake( cam_pos, frame_matrix );
 	}
+
+	const bool desktop_fp = false;
+#ifdef THUG_DESKTOP
+	if( mpSkater->IsLocalClient() && ( mMode < SKATERCAM_FIRST_REPLAY_MODE ))
+	{
+		DesktopCameraWeight( p_cam_comp->GetCamera(), mpSkater->GetVel(), false, false,
+							 mpSkaterStateComponent && mpSkaterStateComponent->GetFlag( IS_BAILING ),
+							 instantly, cam_pos, frame_matrix );
+		// Demented Chaos EARTHQUAKE!!!: the camera shakes, easing in and out
+		const float q = desktop_chaos_seisme();
+		if( q > 0.0f )
+		{
+			static float s_t = 0.0f;
+			s_t += Tmr::FrameLength();
+			const float dx = q * 20.0f * ( 0.6f * sinf( s_t * 37.0f ) + 0.4f * sinf( s_t * 23.0f + 1.3f ));
+			const float dy = q * 15.0f * ( 0.6f * sinf( s_t * 41.0f + 0.7f ) + 0.4f * sinf( s_t * 29.0f ));
+			const float r = q * 0.07f * sinf( s_t * 17.0f );
+			Mth::Vector vx = frame_matrix[X], vy = frame_matrix[Y];
+			cam_pos += vx * dx + vy * dy;
+			frame_matrix[X] = vx * cosf( r ) + vy * sinf( r );
+			frame_matrix[Y] = vy * cosf( r ) - vx * sinf( r );
+		}
+	}
+#endif
 		
 	// Now do collision detection.
 	
@@ -864,7 +894,7 @@ void CSkaterCameraComponent::Update( void )
 		no_camera_collision = false;
 	}
 	
-	if (no_camera_collision)
+	if (no_camera_collision || desktop_fp)
 	{
 		// no camera collision if doing a lip trick on a moving object
 		//printf ("Lip trick on moving object\n");

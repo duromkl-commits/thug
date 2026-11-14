@@ -70,6 +70,9 @@
 #include <gfx/NxModel.h>
 #include <gfx/NxTexMan.h>
 #include <gfx/NxLoadScreen.h>
+#ifdef THUG_DESKTOP
+#include <gfx/2D/ScreenElemMan.h>
+#endif
 #include <gfx/NxLightMan.h>
 #include <gfx/NxViewMan.h>
 #include <gfx/NxMiscFX.h>
@@ -162,6 +165,11 @@
 #endif
 
 #include <sk/language.h>
+#ifdef THUG_DESKTOP
+#include "custom_music.h"
+#ifdef THUG_DESKTOP
+#endif
+#endif
 
 bool DumpFunctionTimesTrigger=false;
 
@@ -478,6 +486,15 @@ static	void	s_second_controller_check_code( const Tsk::Task< int > &task )
 			Script::RunScript( "enable_system_link_option" );
 		}
 		s_last_link_test = Tmr::GetTime();
+	}
+#endif
+#ifdef THUG_DESKTOP
+	// No network play on desktop: drop the Xbox main menu's System Link item
+	// (its enable/disable scripts already check that it exists).
+	{
+		Front::CScreenElementManager* p_man = Front::CScreenElementManager::Instance();
+		if( p_man && p_man->GetElement( CRCD( 0x0fd408e1, "mm_multi_play" )))
+			p_man->DestroyElement( CRCD( 0x0fd408e1, "mm_multi_play" ));
 	}
 #endif
 }
@@ -3083,6 +3100,11 @@ bool ScriptTrackEnabled(Script::CStruct *pParams, Script::CScript *pScript)
 	
 	Dbg_MsgAssert( track_num>=0 && track_num < Pcm::GetNumTracks(Pcm::TRACKLIST_PERM),( "\n%s\nBad track number of %d sent to TrackEnabled, num tracks = %d", pScript->GetScriptInfo(), track_num, Pcm::GetNumTracks(Pcm::TRACKLIST_PERM) ));
 	
+#ifdef THUG_DESKTOP
+	// Up to 512 tracks on the desktop: the two 64-bit words below only cover
+	// 128 (and shifting by 64 or more reads some other track's bit).
+	return !Pcm::GetTrackForbiddenStatus(track_num, Pcm::TRACKLIST_PERM);
+#endif
 	uint64 list1,list2;
     Pcm::GetPlaylist(&list1, &list2);
     
@@ -3561,6 +3583,56 @@ bool ScriptPlayStream( Script::CStruct *pParams, Script::CScript *pScript )
 			volR = volume;
 		}
 		pParams->GetFloat( CHECKSUM_PITCH, &pitch );
+#ifdef THUG_DESKTOP
+		// An extra skater's bail vocals at its own pitch; with a voice bank
+		// (data/voices/<skater>.txt) one of its own WAV clips replaces THUG's
+		// create-a-skater bail stream.
+		if ( pScript && pScript->mpObject && pScript->mpObject->GetType() == SKATE_TYPE_SKATER )
+		{
+			const uint32 nom = ((Obj::CSkater *)pScript->mpObject.Convert())->m_skaterNameChecksum;
+			const int p = custom_skater_voice_pitch( nom );
+			if ( p > 0 && !pParams->ContainsComponentNamed( CHECKSUM_PITCH ))
+				pitch = (float)p;
+			static uint32 s_bails[36];
+			if ( !s_bails[0] )
+			{
+				static const char *genres = "mf";
+				static const char *coups[3] = { "knee", "ankle", "kick" };
+				int k = 0;
+				for ( int g = 0; g < 2; ++g )
+					for ( int c = 0; c < 3; ++c )
+						for ( int n = 1; n <= 6; ++n )
+						{
+							char b[32];
+							sprintf( b, "custom%c_%s%02d", genres[g], coups[c], n );
+							s_bails[k++] = Crc::GenerateCRCFromString( b );
+						}
+			}
+			bool bail = false;
+			for ( int k = 0; k < 36 && !bail; ++k )
+				bail = ( s_bails[k] == streamNameChecksum );
+			char clip[256];
+			const bool a_clip = bail && p > 0 && custom_skater_voice_clip( nom, clip, sizeof( clip ));
+			static int n_log;
+			if ( bail && n_log < 40 )
+			{
+				++n_log;
+				VLOG( "PCM", "bail stream for skater %08x: pitch %d, %s", nom, p, a_clip ? clip : "no clip (stock voice)" );
+			}
+			if ( a_clip )
+			{
+				// one vocal per bail: the bail itself asks for one
+				// (trickcomponent.cpp), and its anim event may ask again
+				static Tmr::Time s_derniere = 0;
+				const Tmr::Time maintenant = Tmr::GetTime();
+				if ( s_derniere && maintenant - s_derniere < 1500 )
+					return true;
+				s_derniere = maintenant;
+				streamNameChecksum = Crc::GenerateCRCFromString( clip );
+				desktop_voice_wav( streamNameChecksum, clip );
+			}
+		}
+#endif
 		pParams->GetInteger( 0x9d5923d8, &priority ); // priority
 		pParams->GetChecksum( 0x40c698af, &id ); // id
 		pParams->GetInteger( CRCD(0xf5c3922b,"lipsync") , &lipsync );
@@ -5224,6 +5296,7 @@ bool ScriptUnloadAllLevelGeometry(Script::CStruct *pParams, Script::CScript *pSc
 
 bool ScriptLoadScene(Script::CStruct *pParams, Script::CScript *pScript)
 {
+	VLOG( "LVL", "LoadScene" );
 	bool is_dictionary = pParams->ContainsFlag(CRCD(0x3d559e7d,"is_dictionary"));  		// piece dictionary, like the park editor
 	bool is_sky = pParams->ContainsFlag(CRCD(0xb5bd28d8,"is_sky"));						// a sky dome
 	bool is_net = pParams->ContainsFlag(CRCD(0x417149c8,"is_net"));						// the _net version
@@ -5722,8 +5795,7 @@ bool ScriptKillFromNodeIndex( int nodeIndex, Script::CScript *pScript )
 				// We only want to get sectors from the main scene, as that is what the node array applies to															
 				Nx::CScene * p_main_scene = Nx::CEngine::sGetMainScene();
 				Nx::CSector *p_sector = p_main_scene->GetSector(checksumName);
-				Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",checksumName,Script::FindChecksumName(checksumName)));
-				p_sector->SetActive(false);
+				if (p_sector) p_sector->SetActive(false);
 				//Bsp::SetWorldSectorFlag(  checksumName, mSD_KILLED );
 
 				// If this node is an occluder, let the occlusion code know that this occluder is no longer enabled.
@@ -5765,6 +5837,16 @@ bool DoNodeActionFromNodeNum( int nodeNum, int action, Script::CScript *pScript,
 {
     GameNet::Manager * gamenet_man =  GameNet::Manager::Instance();
 	Mdl::Skate * skate_mod =  Mdl::Skate::Instance();
+
+#ifdef THUG_DESKTOP
+	// A name with no node (FindNamedNode gives -1): THPS4 goals name objects
+	// the converter left out. The original read past the node array.
+	{
+		Script::CArray *p_nodes = Script::GetArray( CRCD(0xc472ecc5,"NodeArray"), Script::NO_ASSERT );
+		if( !p_nodes || nodeNum < 0 || nodeNum >= (int)p_nodes->GetSize())
+			return false;
+	}
+#endif
 
 // In net games, check if the node is flagged to be absent
 // and just ignore the command it fo	
@@ -5905,8 +5987,25 @@ bool DoNodeAction( Script::CStruct *pParams, Script::CScript *pScript, int actio
 		uint16 numNodes = 0;
 	  //  const uint16 *pMatchingNodes = SkateScript::GetPrefixedNodes( pPrefix, &numNodes );
 		const uint16 *pMatchingNodes = SkateScript::GetPrefixedNodes( prefixChecksum, &numNodes );
+#ifdef THUG_DESKTOP
+		// diagnostic for invisible goal pickups (Speak Hawaiian letters)
+		if( action == NODE_ACTION_CREATE || action == NODE_ACTION_KILL )
+			VLOG( "LVL", "%s prefix %s (%08x): %d nodes (%s)", action == NODE_ACTION_CREATE ? "Create" : "Kill",
+				Script::FindChecksumName( prefixChecksum ), prefixChecksum, numNodes, pScript ? Script::FindChecksumName( pScript->mScriptChecksum ) : "?" );
+#endif
 		for ( i = 0; i < numNodes; i++ )
 		{
+#ifdef THUG_DESKTOP
+			if( action == NODE_ACTION_CREATE )
+			{
+				const bool ok = DoNodeActionFromNodeNum( pMatchingNodes[ i ], action, pScript, pParams );
+				uint32 nm = 0;
+				Script::CStruct *pn = SkateScript::GetNode( pMatchingNodes[ i ] );
+				if( pn ) pn->GetChecksum( CRCD(0xa1dc81f9,"Name"), &nm );
+				VLOG( "LVL", "  create node %d %s -> %d", pMatchingNodes[ i ], Script::FindChecksumName( nm ), ok );
+				continue;
+			}
+#endif
 			if ( DoNodeActionFromNodeNum( pMatchingNodes[ i ], action, pScript, pParams ) )
 			{
 				if ( action == NODE_ACTION_CHECK_IF_ALIVE )
@@ -6173,6 +6272,7 @@ void	CleanupBeforeParseNodeArray()
 // @script | ParseNodeArray | Parses the loaded node array 
 bool ScriptParseNodeArray( Script::CStruct *pParams, Script::CScript *pScript )
 {
+	VLOG( "LVL", "ParseNodeArray: start" );
 	Mem::PushMemProfile("ParseNodeArray");
 
 	CleanupBeforeParseNodeArray();	
@@ -6188,6 +6288,7 @@ bool ScriptParseNodeArray( Script::CStruct *pParams, Script::CScript *pScript )
 	Obj::CRailManager *p_rail_man = skate_mod->GetRailManager();
 	Dbg_MsgAssert(p_rail_man,("Missing rail manager"));					 
 	p_rail_man->AddRailsFromNodeArray(pNodeArray );					 									  
+	VLOG( "LVL", "ParseNodeArray: rails added, %d nodes", (int)pNodeArray->GetSize() );
 	Mem::PopMemProfile();
 	
 	// Nav nodes are added separately.
@@ -6435,11 +6536,15 @@ bool ScriptParseNodeArray( Script::CStruct *pParams, Script::CScript *pScript )
 		}				
 	}	
 	
+	VLOG( "LVL", "ParseNodeArray: nodes created" );
 	Dbg_MsgAssert(!fail, ("ParseNodeArray FAILED, see above for reasons labled FAILED BECAUSE \n"));
 	
 	Obj::Proxim_AddedAll();
+	VLOG( "LVL", "ParseNodeArray: proxim done" );
 	p_rail_man->AddedAll();
+	VLOG( "LVL", "ParseNodeArray: rails done" );
 	Mdl::Skate::Instance()->GetGapChecklist()->FindGaps();
+	VLOG( "LVL", "ParseNodeArray: gaps found" );
 
 	/*
 	// STUPID HACK
@@ -6545,6 +6650,7 @@ static char LastNodeArrayLoaded[128];
 // @uparm "string" | File name to load
 bool ScriptLoadNodeArray(Script::CStruct *pParams, Script::CScript *pScript)
 {
+	VLOG( "LVL", "LoadNodeArray: start" );
 	Mem::PushMemProfile("LoadNodeArray");
 	
 	// Remove any spawned scripts that might have been left over from the previous level.
@@ -6961,7 +7067,7 @@ bool ScriptSetUVWibbleParams(Script::CStruct *pParams, Script::CScript *pScript)
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	// Extract all the parameters
     float u_velocity;
@@ -7004,7 +7110,7 @@ bool ScriptEnableExplicitUVWibble(Script::CStruct *pParams, Script::CScript *pSc
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	p_sector->UseExplicitUVWibble(true);
 
@@ -7024,7 +7130,7 @@ bool ScriptDisableExplicitUVWibble(Script::CStruct *pParams, Script::CScript *pS
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	p_sector->UseExplicitUVWibble(false);
 
@@ -7046,7 +7152,7 @@ bool ScriptSetUVWibbleOffsets(Script::CStruct *pParams, Script::CScript *pScript
 
 	// Find sector
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(checksum);
-	Dbg_MsgAssert(p_sector, ("Can't find sector %x in world", checksum));
+	if (!p_sector) return true;	// desktop: missing sector in a converted level
 
 	// Extract all the parameters
     float u_offset;
@@ -8789,8 +8895,7 @@ bool ScriptSetVisibilityFromNodeIndex( int nodeIndex, bool invisible, int viewpo
 				// We only want to get sectors from the main scene, as that is what the node array applies to															
 				Nx::CScene * p_main_scene = Nx::CEngine::sGetMainScene();
 				Nx::CSector *p_sector = p_main_scene->GetSector(checksumName);
-				Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",checksumName,Script::FindChecksumName(checksumName)));
-
+				if (!p_sector) break;
 				uint32 orig_flag = p_sector->GetVisibility();
 				uint32 flag = 0x1; 
 				if (viewport_number == 1)
@@ -8873,8 +8978,7 @@ bool ScriptCheckExistenceFromNodeIndex( int nodeIndex )
 				// We only want to get sectors from the main scene, as that is what the node array applies to															
 				Nx::CScene * p_main_scene = Nx::CEngine::sGetMainScene();
 				Nx::CSector *p_sector = p_main_scene->GetSector(checksumName);
-				Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",checksumName,Script::FindChecksumName(checksumName)));
-				return (p_sector->IsActive());
+				return (p_sector && p_sector->IsActive());
 				//return ( Bsp::WorldSectorIsAlive( checksumName ) );
 			}
 			break;
@@ -10508,13 +10612,48 @@ bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript )
 // @uparmopt time | the amount of time to display loading bar (default is 0, meaning no loading bar)
 // @flag Freeze | just freeze current screen
 // @flag Blank | clear screen to black
+#ifdef THUG_DESKTOP
+bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *)
+{
+	static bool checked = false;
+	if (checked)
+		return false;
+	checked = true;
+	return true;
+}
+
+// @script | DesktopControlOpt | desktop: controls option i (0 No Air Shuffles, 1 No Flips/Rolls) is on; with toggle, flips it first
+extern "C" int desktop_control_opt( int i );
+extern "C" int desktop_control_opt_toggle( int i );
+bool ScriptDesktopControlOpt(Script::CStruct *pParams, Script::CScript *)
+{
+	int i = 0;
+	pParams->GetInteger(CRCD(0x1993c98e,"i"), &i, Script::NO_ASSERT);
+	if (pParams->ContainsFlag(Script::GenerateCRC("toggle")))
+		return desktop_control_opt_toggle(i) != 0;
+	return desktop_control_opt(i) != 0;
+}
+#endif
+
 bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript )
 {
 	
 	const char	*pScreen = "images\\xxxxx";	
 	pParams->GetText(NONAME,&pScreen);
 	
-	Nx::CLoadScreen::sDisplay( (char*) pScreen, pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze")),pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank")));
+	const bool freeze = pParams->ContainsFlag(CRCD(0xb96e0be5,"Freeze"));
+	const bool blank = pParams->ContainsFlag(CRCD(0xc3d43b9a,"blank"));
+#ifdef THUG_DESKTOP
+	if (!freeze && !blank && !Config::Bootstrap())
+	{
+		const bool level_change = pScript && pScript->RefersToScript(Script::GenerateCRC("load_level"));
+		const bool frontend = level_change && Mdl::Skate::Instance()->m_requested_level ==
+			Script::GenerateCRC("load_skateshop");
+		Nx::CLoadScreen::sDesktopDisplay(pScreen, level_change, frontend);
+		return true;
+	}
+#endif
+	Nx::CLoadScreen::sDisplay(pScreen, freeze, blank);
 
 	float duration;
 	if (pParams->GetFloat(NONAME,&duration))
@@ -12918,6 +13057,13 @@ bool ScriptRotateVector( Script::CStruct* pParams, Script::CScript* pScript )
 // @script | IsPS2 | Returns true if the current hardware is PS2 (proview/devkit/regular).
 bool ScriptIsPS2( Script::CStruct* pParams, Script::CScript* pScript )
 {
+#ifdef THUG_DESKTOP
+	// PS2-only feature the desktop build plays with: R2 during a grind drops
+	// you off the rail (the Grind script only adds its GrindRelease trick when
+	// IsPS2 is true). Everywhere else (memory card, menus...) stays non-PS2.
+	if( pScript && pScript->mScriptChecksum == Script::GenerateCRC( "Grind" ))
+		return true;
+#endif
 	// lwss add
 #ifdef __PLAT_WN32__
 	return false;

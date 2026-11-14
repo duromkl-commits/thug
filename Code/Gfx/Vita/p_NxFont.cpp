@@ -14,6 +14,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 
 #include "vita_log.h"
@@ -317,14 +318,22 @@ bool CVitaFont::plat_load( const char *filename )
 		File::Close( p_file );
 		return false;
 	}
+	// Except ButtonsPs2: the Xbox discs carry it unused, with its palette
+	// still in PS2 order (R, G, B, A). Read as BGRA it swapped red and blue:
+	// blue circle, yellow triangle and X.
+	const char *p_base = strrchr( filename, '/' );
+	if( !p_base ) p_base = strrchr( filename, '\\' );
+	p_base = p_base ? p_base + 1 : filename;
+	const bool rgba_ps2 = !strncasecmp( p_base, "buttonsps2", 10 );
+	const int ir = rgba_ps2 ? 0 : 2, ib = rgba_ps2 ? 2 : 0;
 	for( int i = 0; i < tw * th; ++i )
 	{
 		const unsigned char *p_c = clut + p_idx[i] * 4;
 		unsigned int a = p_c[3];
 		a = ( a >= 0x80 ) ? 0xFF : ( a * 2 );
-		p_rgba[i * 4 + 0] = p_c[2];		// R
+		p_rgba[i * 4 + 0] = p_c[ir];		// R
 		p_rgba[i * 4 + 1] = p_c[1];		// G
-		p_rgba[i * 4 + 2] = p_c[0];		// B
+		p_rgba[i * 4 + 2] = p_c[ib];		// B
 		p_rgba[i * 4 + 3] = (unsigned char)a;
 	}
 	free( p_idx );
@@ -542,6 +551,11 @@ static void lot_glyphe( float x0, float y0, float x1, float y1,
 }
 
 // Couleur courante du texte : echelle PS2 (128 = 1,0), comme m_rgba.
+#ifdef THUG_DESKTOP
+extern "C" unsigned int desktop_rando_couleurs( void );
+extern "C" void desktop_rando_teinte( unsigned int cle, float *r, float *g, float *b );
+#endif
+static unsigned int s_cle_texte = 0;
 static void couleur_texte( const Image::RGBA &c, float kc )
 {
 	float cr = (float)c.r / kc, cg = (float)c.g / kc;
@@ -550,6 +564,11 @@ static void couleur_texte( const Image::RGBA &c, float kc )
 	if( cg > 1.0f ) cg = 1.0f;
 	if( cb > 1.0f ) cb = 1.0f;
 	if( ca > 1.0f ) ca = 1.0f;
+#ifdef THUG_DESKTOP
+	// Demented Random Colours: every text colour gets another hue
+	if( desktop_rando_couleurs())
+		desktop_rando_teinte( s_cle_texte, &cr, &cg, &cb );	// per text: an animated colour keeps its hue
+#endif
 	if(( cr == s_lot_rgba[0] ) && ( cg == s_lot_rgba[1] ) && ( cb == s_lot_rgba[2] ) && ( ca == s_lot_rgba[3] ))
 		return;
 	lot_vider();
@@ -634,6 +653,12 @@ void RenderText2D( float pri )
 
 		lot_texture( p_font->GetTexture());
 
+		// Random Colours key: the font and the draw priority, never the text
+		// object (the trick panel remakes its texts every frame in a manual,
+		// so a per-object key made the hue flash)
+		unsigned int cle_base;
+		{ float fp = p->GetPri(); unsigned int ip; memcpy( &ip, &fp, sizeof( ip )); cle_base = ( ip ^ (unsigned int)(size_t)p_font ) * 2654435761u; }
+		s_cle_texte = cle_base;
 		Image::RGBA c = p->Color();
 		const float kc = g_vita_mx2 ? 255.0f : 128.0f;	// mx2 (#52)
 		couleur_texte( c, kc );
@@ -660,9 +685,15 @@ void RenderText2D( float pri )
 				{
 					const int d = Nx::dehex( q[1] );
 					if(( d <= 0 ) || ( d > 16 ) || p->ColorOverride())
+					{
+						s_cle_texte = cle_base;
 						couleur_texte( c, kc );
+					}
 					else
+					{
+						s_cle_texte = cle_base ^ (unsigned int)d * 0x9e3779b9u;
 						couleur_texte( p_font->GetRGBATableEntry( d - 1 ), kc );
+					}
 				}
 				g = p_font->ParseTag( &q, &p_gfont );
 				if( !g ) continue;

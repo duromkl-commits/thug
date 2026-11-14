@@ -2335,7 +2335,15 @@ bool	CCollStaticTri::CollisionWithRectangle(const Mth::Rectangle& testRect, cons
 	// loop over the relavent faces of the sector
 	for (uint fidx = 0; fidx < num_faces; fidx++, p_face_indexes++)
 	{
+#ifdef THUG_DESKTOP
+		// The face's own flags: fidx is only the position in the list of
+		// faces found, so this read some other face's flags (non-collidable
+		// walls let the car through, invisible faces stopped it). Line
+		// collisions use the real index (sCollisionCheck, GetFaceFlags(index)).
+		uint32 face_flags = GetFaceFlags(*p_face_indexes);
+#else
 		uint32 face_flags = GetFaceFlags(fidx);
+#endif
 		if ((face_flags & p_coll_data->ignore_1) || (~face_flags & p_coll_data->ignore_0)) continue;
 
 #if defined(FIXED_POINT_VERTICES) || defined(__PLAT_NGC__)

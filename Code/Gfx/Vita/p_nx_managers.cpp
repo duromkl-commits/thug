@@ -24,6 +24,12 @@
 #include "p_NxFont.h"
 
 #include <vitaGL.h>
+#ifdef THUG_DESKTOP
+#include <SDL.h>
+#include <cstring>
+extern "C" void desktop_pump_events();
+extern "C" int desktop_play_movie(const char *name, float volume);
+#endif
 
 #include "p_NxLight.h"
 #include "p_shader_decor.h"
@@ -162,6 +168,42 @@ void	CFog::s_plat_fog_update(void)
 // moteur appelle s_plat_display une fois, puis charge plusieurs secondes sans
 // jamais repasser par ici.
 static Nx::CVitaTexture *sp_load_screen = NULL;
+#ifdef THUG_DESKTOP
+static Uint32 s_boot_started;
+static Uint32 s_bar_started;
+static Uint32 s_bar_duration;
+static bool s_boot_loading;
+
+static Uint32 loading_duration(int minimum_seconds, int maximum_seconds)
+{
+	static Uint32 state = static_cast<Uint32>(SDL_GetPerformanceCounter());
+	state = state * 1664525u + 1013904223u;
+	const Uint32 range = (maximum_seconds - minimum_seconds) * 1000 + 1;
+	return minimum_seconds * 1000 + state % range;
+}
+
+static void wait_with_events(Uint32 start, Uint32 duration)
+{
+	while (SDL_GetTicks() - start < duration)
+	{
+		desktop_pump_events();
+		SDL_Delay(10);
+	}
+}
+
+static void draw_bar_quad(float x, float y, float width, float height,
+						  const Image::RGBA &left, const Image::RGBA &right)
+{
+	const float vertices[] = { x, y, x + width, y, x + width, y + height, x, y + height };
+	const unsigned char colors[] = {
+		left.r, left.g, left.b, 255, right.r, right.g, right.b, 255,
+		right.r, right.g, right.b, 255, left.r, left.g, left.b, 255
+	};
+	glVertexPointer(2, GL_FLOAT, 0, vertices);
+	glColorPointer(4, GL_UNSIGNED_BYTE, 0, colors);
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+}
+#endif
 
 
 // Dessine la texture courante en plein ecran. Separee de la presentation pour
@@ -210,6 +252,10 @@ static void dessine_ecran_chargement( void )
 	glDrawArrays( GL_TRIANGLE_FAN, 0, 4 );
 
 	glDisableClientState( GL_TEXTURE_COORD_ARRAY );
+#ifdef THUG_DESKTOP
+	if (s_bar_duration)
+		CLoadScreen::sDesktopDrawBar();
+#endif
 	glDisableClientState( GL_VERTEX_ARRAY );
 
 	// Etat restitue : poser un etat GL sans le rendre se paie chez le voisin,
@@ -248,6 +294,9 @@ void	CLoadScreen::s_plat_display(const char *filename, bool just_freeze, bool bl
 
 	if( blank || !filename )
 	{
+#ifdef THUG_DESKTOP
+		s_plat_hide();
+#endif
 		glClearColor( 0.0f, 0.0f, 0.0f, 1.0f );
 		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 		vglSwapBuffers( GL_FALSE );
@@ -294,8 +343,114 @@ void	CLoadScreen::s_plat_display(const char *filename, bool just_freeze, bool bl
 
 void	CLoadScreen::s_plat_start_loading_bar(float seconds)
 {
+#ifdef THUG_DESKTOP
+	if (!sp_load_screen)
+		return;
+
+	s_bar_duration = static_cast<Uint32>(seconds * 1000.0f + 0.5f);
+	s_bar_started = SDL_GetTicks();
+#else
 	VITA_STUB();
+#endif
 }
+
+#ifdef THUG_DESKTOP
+static void wait_for_loading_bar()
+{
+	if (!s_bar_duration)
+		return;
+
+	for (;;)
+	{
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		const bool complete = SDL_GetTicks() - s_bar_started >= s_bar_duration;
+		dessine_ecran_chargement();
+		vglSwapBuffers(GL_FALSE);
+		if (complete)
+			break;
+		SDL_Delay(16);
+	}
+}
+
+void CLoadScreen::sDesktopDrawBar()
+{
+	const Uint32 elapsed = SDL_GetTicks() - s_bar_started;
+	const float progress = elapsed >= s_bar_duration ? 1.0f :
+		static_cast<float>(elapsed) / s_bar_duration;
+	const float x = s_bar_x / 640.0f;
+	const float y = s_bar_y / 448.0f;
+	const float width = s_bar_width / 640.0f;
+	const float height = s_bar_height / 448.0f;
+	const float border_x = s_bar_border_width / 640.0f;
+	const float border_y = s_bar_border_height / 448.0f;
+	glDisable(GL_TEXTURE_2D);
+	glEnableClientState(GL_COLOR_ARRAY);
+	draw_bar_quad(x - border_x, y - border_y, width + 2 * border_x,
+				  height + 2 * border_y, s_bar_border_color, s_bar_border_color);
+	const Image::RGBA end(
+		static_cast<unsigned char>(s_bar_start_color.r + progress * (s_bar_end_color.r - s_bar_start_color.r)),
+		static_cast<unsigned char>(s_bar_start_color.g + progress * (s_bar_end_color.g - s_bar_start_color.g)),
+		static_cast<unsigned char>(s_bar_start_color.b + progress * (s_bar_end_color.b - s_bar_start_color.b)),
+		255);
+	draw_bar_quad(x, y, width * progress, height, s_bar_start_color, end);
+	glDisableClientState(GL_COLOR_ARRAY);
+	glEnable(GL_TEXTURE_2D);
+}
+
+void CLoadScreen::sDesktopBeginBoot()
+{
+	s_boot_started = SDL_GetTicks();
+}
+
+void CLoadScreen::sDesktopBoot()
+{
+	wait_with_events(s_boot_started, 5000);
+	sDisplay("loadscrn", false, false);
+	wait_with_events(SDL_GetTicks(), 6000);
+	sHide();
+
+	const char *movies[] = { "ATVI", "NSlogo", "intro" };
+	for (unsigned i = 0; i < sizeof(movies) / sizeof(movies[0]); ++i)
+	{
+		if (i > 0)
+		{
+			sDisplay(NULL, false, true);
+			wait_with_events(SDL_GetTicks(), 500);
+		}
+		desktop_play_movie(movies[i], 1.0f);
+	}
+
+	sDisplay(NULL, false, true);
+	wait_with_events(SDL_GetTicks(), loading_duration(3, 4));
+	sDisplay("loadscrn_generic", false, false);
+	sStartLoadingBar(loading_duration(3, 10) / 1000.0f);
+	wait_for_loading_bar();
+	s_boot_loading = true;
+}
+
+void CLoadScreen::sDesktopDisplay(const char *filename, bool level_change, bool returning_to_menu)
+{
+	const bool main_menu = std::strcmp(filename, "loadscrn_mainmenu") == 0;
+	// The first frontend level shares the generic boot screen and its bar.
+	const bool boot_frontend = s_boot_loading && level_change &&
+		(main_menu || std::strcmp(filename, "loadscrn_generic") == 0);
+	s_boot_loading = false;
+	if (boot_frontend)
+		return;
+	// Back to the main menu is a level load like any other (Marcus: it was
+	// near instant): same 8-17 s bar.
+	const bool level = returning_to_menu || ( level_change && !main_menu );
+	if (!level)
+	{
+		sDisplay(NULL, false, true);
+		wait_with_events(SDL_GetTicks(), 1000);
+	}
+	sDisplay(filename, false, false);
+	sStartLoadingBar((level ? loading_duration(8, 17) : loading_duration(3, 10)) / 1000.0f);
+	wait_for_loading_bar();
+}
+#endif
 
 void	CLoadScreen::s_plat_hide()
 {
@@ -315,10 +470,15 @@ void	CLoadScreen::s_plat_clear()
 {
 	VITA_STUB();
 
+#ifdef THUG_DESKTOP
+	s_bar_duration = 0;
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#else
 	// Premier vrai rendu du portage : effacer le framebuffer.
 	// Bleu nuit plutôt que noir, pour distinguer « le moteur efface » de
 	// « rien ne se passe » — un écran noir est ambigu.
 	glClearColor( 0.0f, 0.0f, 0.25f, 1.0f );
+#endif
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 }
 

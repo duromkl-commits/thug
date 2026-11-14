@@ -24,7 +24,8 @@
 namespace NxVita { extern int g_vita_gp_reutil[2]; }
 namespace Nx { class CVitaGeom; }
 namespace NxVita { extern bool g_vita_sprite_dump; }
-namespace NxVita { extern bool g_vita_uvw; }	// "uvw" (#43), p_world_render.cpp
+namespace NxVita { extern bool g_vita_uvw; }
+namespace NxVita { extern bool g_desktop_portrait_cam; }	// p_world_render.cpp	// "uvw" (#43), p_world_render.cpp
 namespace NxVita { void EnregistrerInstance( Nx::CVitaGeom * ); void OublierInstance( Nx::CVitaGeom * ); }
 #include "p_world_render.h"		// sommets de rendu des secteurs (#5)
 #include "p_NxTexture.h"
@@ -69,9 +70,14 @@ bool g_vita_trace_reset_inactifs = false;
 struct SMorceauReporte
 {
 	const SGpuMesh *p_piece;
+	unsigned int    tex;		// its texture when deferred (a goal star's may be swapped back since)
 	float           mv[16];
 	float           rgba[4];
 	bool            a_rgba;
+#ifdef THUG_DESKTOP
+	GLuint          cbo;		// lit colours of this instance (0 = p->cbo)
+	bool            lit;		// cbo is at half scale: draw with RGB_SCALE 2
+#endif
 };
 
 #define MAX_REPORTES 256
@@ -425,7 +431,11 @@ CVitaMesh::~CVitaMesh()
 			if( !deja )
 				glDeleteBuffers( 1, &mp_pieces[i].vbo_normales );
 		}
+#ifdef THUG_DESKTOP
+		if( mp_pieces[i].vbo && !mp_pieces[i].vbo_partage )
+#else
 		if( mp_pieces[i].vbo )		// 0 pour une passe 1 (#55)
+#endif
 			glDeleteBuffers( 1, &mp_pieces[i].vbo );
 		if( mp_pieces[i].uvbo )
 			glDeleteBuffers( 1, &mp_pieces[i].uvbo );
@@ -517,8 +527,15 @@ static bool passe_decal( const NxVita::SVitaMesh *p_src, int k, SPasseDecal *d )
 
 static bool passe_k_dessinable( const NxVita::SVitaMesh *p_src, int k, CTexDict *p_tex_dict )
 {
+#ifdef THUG_DESKTOP
+	// Rigid models too (vehicles: their decals, drawn with the base's
+	// vertices, see vbo_partage).
+	if( !p_tex_dict )
+		return false;
+#else
 	if( !p_tex_dict || !p_src->p_weights || !p_src->p_bones )
 		return false;
+#endif
 	if( p_src->num_passes < (unsigned int)( k + 1 ))
 		return false;
 	SPasseDecal d;
@@ -529,8 +546,15 @@ static bool passe_k_dessinable( const NxVita::SVitaMesh *p_src, int k, CTexDict 
 		return false;
 	// Passe 2 : seulement par-dessus une passe 1 BLEND dessinee, le cas du
 	// CAS (tatouages, logos, calques) -- pas de saut de passe a interpreter.
+#ifdef THUG_DESKTOP
+	// ...or over a passe 1 reflection (environment map): the car bodies are
+	// paint, chrome reflection, then the decal (veh_custom, police cars).
+	if(( k == 2 ) && !passe_k_dessinable( p_src, 1, p_tex_dict ) && !( p_src->mat_flags2 & ( 1 << 3 )))
+		return false;
+#else
 	if(( k == 2 ) && !passe_k_dessinable( p_src, 1, p_tex_dict ))
 		return false;
+#endif
 	if( !p_src->p_indices || ( p_src->num_indices <= 0 ))
 		return false;
 	CTexture *p_tex = p_tex_dict->GetTexture( d.tex );
@@ -789,6 +813,10 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 		// blanc opaque -- le meme defaut deja corrige pour le decor-monde.
 		p_dst->cbo   = 0;
 		p_dst->blend = p_src->blend_mode;
+#ifdef THUG_DESKTOP
+		p_dst->alpha_cutoff = p_src->alpha_cutoff;
+		p_dst->vbo_partage  = 0;
+#endif
 		p_dst->color_locked = ( p_src->mat_flags0 & 0x80 ) ? 1 : 0;
 		p_dst->no_bfc       = p_src->no_bfc;
 		// UV wibble de la passe 0 (#77), bit 0 du masque du chargeur.
@@ -1004,6 +1032,16 @@ void CVitaMesh::build_pieces( NxVita::SVitaSceneGeom *p_geom, CTexDict *p_tex_di
 			// passe 1 n'a pas a suivre la couleur CAS du vetement.
 			p_dst->mat_checksum = 0;
 			p_dst->decal        = 1;
+#ifdef THUG_DESKTOP
+			// Rigid models (vehicles: Phat Rimz car decals, cop car) draw their
+			// passe 1 on the rigid path with the base's vertices.
+			p_dst->alpha_cutoff = 0;
+			if( !p_base->p_bones && p_base->vbo )
+			{
+				p_dst->vbo = p_base->vbo;
+				p_dst->vbo_partage = 1;
+			}
+#endif
 			p_dst->decal_au     = dk.au;
 			p_dst->decal_av     = dk.av;
 			// #77 : ni UV wibble ni passe ADD heritees de la base (tampons
@@ -2347,6 +2385,13 @@ cpu:
 // l'etat de melange du morceau, et on dessine.
 // Morceaux translucides SKINNES reportes (#46) : rejoues apres le decor avec
 // leurs propres matrices d'os, comme ils l'auraient ete pendant game_logic.
+// Building portraits: glasses, hair cards and the like must be in the
+// depth, it's what tells the skater from the backdrop.
+#ifdef THUG_DESKTOP
+static inline bool desktop_profondeur_portrait( void ) { return ::NxVita::g_desktop_portrait_cam; }
+#else
+static inline bool desktop_profondeur_portrait( void ) { return false; }
+#endif
 static void dessiner_peau_reportee( void )
 {
 	if( s_num_peau_reportees <= 0 )
@@ -2572,7 +2617,10 @@ static void rejouer_poses( void )
 	// nom, cumules sur 5 s. Dit QUI clignote, rejeu actif ou non.
 	if( !pause )
 	{
-		static const char *s_nom[32];
+		// Copies, not pointers: a geom's name dies with its model, and a
+		// model freed within the 5 s left a dangling pointer for snprintf
+		// (crash on the desktop build, front end, 2026-10-09).
+		static char s_nom[32][48];
 		static int s_trous[32];
 		static int s_nn = 0;
 		static SceUInt64 s_tt = 0;
@@ -2582,13 +2630,15 @@ static void rejouer_poses( void )
 			if( !nm )
 				continue;
 			int k = 0;
-			while(( k < s_nn ) && ( s_nom[k] != nm ))
+			while(( k < s_nn ) && strncmp( s_nom[k], nm, sizeof( s_nom[k] ) - 1 ))
 				++k;
 			if( k == s_nn )
 			{
 				if( s_nn == 32 )
 					continue;
-				s_nom[s_nn] = nm; s_trous[s_nn] = 0; ++s_nn;
+				strncpy( s_nom[s_nn], nm, sizeof( s_nom[s_nn] ) - 1 );
+				s_nom[s_nn][sizeof( s_nom[s_nn] ) - 1] = 0;
+				s_trous[s_nn] = 0; ++s_nn;
 			}
 			++s_trous[k];
 		}
@@ -2674,7 +2724,7 @@ void VitaDessinerModelesReportes( void )
 	if( mro )
 	{
 		glEnable( GL_BLEND );
-		glDepthMask( GL_FALSE );
+		glDepthMask( desktop_profondeur_portrait() ? GL_TRUE : GL_FALSE );
 	}
 
 	for( int i = 0; i < s_num_reportes; ++i )
@@ -2709,12 +2759,17 @@ void VitaDessinerModelesReportes( void )
 		// masquer, et ne doit pas ecrire la profondeur -- c'est tout l'interet
 		// de l'avoir reporte. Il se compose simplement par-dessus.
 		if( !mro )
-			glDepthMask( GL_FALSE );
+			glDepthMask( desktop_profondeur_portrait() ? GL_TRUE : GL_FALSE );
 
-		if( p->cbo )
+#ifdef THUG_DESKTOP
+		const GLuint cbo_r = r->cbo ? r->cbo : p->cbo;
+#else
+		const GLuint cbo_r = p->cbo;
+#endif
+		if( cbo_r )
 		{
 			glEnableClientState( GL_COLOR_ARRAY );
-			glBindBuffer( GL_ARRAY_BUFFER, p->cbo );
+			glBindBuffer( GL_ARRAY_BUFFER, cbo_r );
 			glColorPointer( 4, GL_UNSIGNED_BYTE, 0, NULL );
 		}
 		else
@@ -2724,10 +2779,10 @@ void VitaDessinerModelesReportes( void )
 		glVertexPointer( 3, GL_FLOAT, 0, NULL );
 
 		float coul[4];
-		if( p->texture && p->uvbo )
+		if( r->tex && p->uvbo )
 		{
 			glEnable( GL_TEXTURE_2D );
-			glBindTexture( GL_TEXTURE_2D, p->texture );
+			glBindTexture( GL_TEXTURE_2D, r->tex );
 			glEnableClientState( GL_TEXTURE_COORD_ARRAY );
 			glBindBuffer( GL_ARRAY_BUFFER, p->uvbo );
 			glTexCoordPointer( 2, GL_FLOAT, 0, NULL );
@@ -2755,8 +2810,31 @@ void VitaDessinerModelesReportes( void )
 		// Halos de la rampe et des phares (#77) : UV wibble.
 		const bool uvw_pose = p->texture && p->uvbo
 		                      && uvw_modele_poser( p->uvw0, p->uvw_par0 );
+#ifdef THUG_DESKTOP
+		const bool echelle = r->lit && r->tex && p->uvbo;
+		if( echelle )
+		{
+			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC1_RGB, GL_PRIMARY_COLOR );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_TEXTURE );
+			glTexEnvi( GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_PRIMARY_COLOR );
+			const GLfloat deux = 2.0f;
+			glTexEnvfv( GL_TEXTURE_ENV, GL_RGB_SCALE, &deux );
+		}
+#endif
 		glDrawElements( GL_TRIANGLE_STRIP, p->num_indices,
 		                GL_UNSIGNED_SHORT, NULL );
+#ifdef THUG_DESKTOP
+		if( echelle )
+		{
+			const GLfloat un = 1.0f;
+			glTexEnvfv( GL_TEXTURE_ENV, GL_RGB_SCALE, &un );
+			glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+		}
+#endif
 		if( uvw_pose )
 			uvw_modele_lever();
 	}
@@ -2859,6 +2937,11 @@ static void lumieres_rigides( CVitaModelLights *p_lights, float lum[21] )
 // Televerse seulement si les lumieres ont bouge depuis le dernier calcul.
 static SceUInt64 g_pic_max = 0; static int g_pic_idx = -1;
 static SceUInt64 g_pic_calc = 0, g_pic_tele = 0; static int g_pic_n = 0, g_pic_v = 0;	// pics de dessin (#69)
+#ifdef THUG_DESKTOP
+#define RELIGHT_BUDGET 100000
+#else
+#define RELIGHT_BUDGET 60
+#endif
 static int s_budget_image = 0;	// pieces reeclairees dans l'image (#67)
 void VitaBudgetEclairageImage( void ) { s_budget_image = 0; }
 
@@ -2916,7 +2999,11 @@ static void eclairer_piece( SGpuMesh *p, const float lum[21], bool texture,
 		// Budget par image (#67) : au-dela de 60 pieces deja reeclairees dans
 		// l'image, une piece DEJA eclairee garde ses couleurs (une image de
 		// retard au plus) -- Manhattan, 30 voitures qui tournent : 240 ms/s.
+#ifdef THUG_DESKTOP
+		if( s_budget_image >= 100000 )	// desktop: relight every moving piece every frame
+#else
 		if( s_budget_image >= 60 )
+#endif
 			return;
 	}
 	++s_budget_image;
@@ -3036,7 +3123,7 @@ void CVitaMesh::Draw( const float *p_rgba,
 				if( e > ecart )
 					ecart = e;
 			}
-			if(( ecart <= 0.02f ) || ( recent && ( ecart <= 0.15f )) || ( s_budget_image >= 60 ))
+			if(( ecart <= 0.02f ) || ( recent && ( ecart <= 0.15f )) || ( s_budget_image >= RELIGHT_BUDGET ))
 				s_lum_decision = 0;
 			// Diagnostic #78 : quel terme de l'eclairage fait reeclairer ?
 			// 0-2 ambiante, 3-8 lumiere 0 (dir, couleur), 9-14 lumiere 1,
@@ -3116,8 +3203,13 @@ void CVitaMesh::Draw( const float *p_rgba,
 			pic_tp = n;
 		}
 		const SGpuMesh *p = &mp_pieces[i];
+#ifdef THUG_DESKTOP
+		if( p->decal && !p->vbo_partage )	// skinned passe 1: its own path
+			continue;
+#else
 		if( p->decal )		// passe 1 (#55) : pas de vbo, chemin skinne seulement
 			continue;
+#endif
 
 		// Blend du materiau : les panneaux d'interface (voiles, degrades)
 		// en dependent -- opaques, ils sortent en rectangles blancs.
@@ -3198,7 +3290,7 @@ void CVitaMesh::Draw( const float *p_rgba,
 		}
 		rig_p = rig_p && ( p->nbo_rig != 0 );
 		// #78 : couleurs eclairees de CETTE instance, pas du maillage partage.
-		SLumInstance *li = ( lit_p && !rig_p && sp_lum_inst && ( i < s_lum_inst_n ))
+		SLumInstance *li = ( lit_p && sp_lum_inst && ( i < s_lum_inst_n ))
 		                 ? &sp_lum_inst[i] : NULL;
 		if( lit_p && !rig_p )
 			eclairer_piece( &mp_pieces[i], lum, tex_p, li );
@@ -3326,15 +3418,51 @@ void CVitaMesh::Draw( const float *p_rgba,
 		// ici. La matrice modelview courante porte deja la vue, la pose du
 		// modele et l'os -- on la capture telle quelle, rien a recalculer.
 		const bool reporter = ( g_vita_differer_modeles && ( p->blend != 0 )
-		                        && ( s_num_reportes < MAX_REPORTES ));
+		                        && ( s_num_reportes < MAX_REPORTES )
+#ifdef THUG_DESKTOP
+		                        && !p->decal
+#endif
+		                        );
+#ifdef THUG_DESKTOP
+		// rigid passe 1: coplanar with its base, drawn right after it
+		if( p->decal )
+		{
+			if( p->texture ) poser_passe1( p );
+			glEnable( GL_POLYGON_OFFSET_FILL );
+			glPolygonOffset( -1.0f, -2.0f );
+			if( p->blend ) glDepthMask( GL_FALSE );
+		}
+		// opaque cut-out (rims, grilles): Xbox alpha test at the cutoff
+		const bool coupe = !p->blend && p->alpha_cutoff;
+		if( coupe )
+		{
+			glEnable( GL_ALPHA_TEST );
+			glAlphaFunc( GL_GEQUAL, p->alpha_cutoff / 255.0f );
+		}
+#endif
 		if( reporter )
 		{
 			SMorceauReporte *r = &s_reportes[s_num_reportes++];
 			r->p_piece = p;
+			r->tex = p->texture;
 			glGetFloatv( GL_MODELVIEW_MATRIX, r->mv );
 			r->a_rgba = ( p_rgba != NULL );
 			if( p_rgba )
 				for( int k = 0; k < 4; ++k ) r->rgba[k] = p_rgba[k];
+#ifdef THUG_DESKTOP
+			// Translucent pieces of lit models (car rims, aa16ecb5 on the
+			// Muska SUV) were drawn with their raw baked colours, which are
+			// near black on the shaded side (0x06): black wheel discs. Xbox
+			// lights them like the opaque pieces (instance.cpp).
+			r->cbo = 0; r->lit = false;
+			if( lit_p && tex_p )
+			{
+				if( rig_p )
+					eclairer_piece( &mp_pieces[i], lum, tex_p, li );
+				r->cbo = ( li && li->cbo ) ? li->cbo : p->cbo_rig;
+				r->lit = ( r->cbo != 0 );
+			}
+#endif
 		}
 		else if( rig_p )
 		{
@@ -3358,7 +3486,11 @@ void CVitaMesh::Draw( const float *p_rgba,
 				rig_actif = true;
 			}
 			NxVita::ShaderRigideEclairePiece( mvp, p->vbo, p->nbo_rig, p->cbo, p->uvbo, tex_p,
+#ifdef THUG_DESKTOP
+			                                  p->blend ? 0.35f : p->alpha_cutoff ? ( p->alpha_cutoff - 1 ) / 255.0f : -1.0f,
+#else
 			                                  p->blend ? 0.35f : -1.0f,
+#endif
 			                                  ( p->blend >= 1 ) && ( p->blend <= 4 ));
 			glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, p->ibo );
 			++g_vita_n_draws;
@@ -3450,6 +3582,16 @@ void CVitaMesh::Draw( const float *p_rgba,
 		if( os_pose )
 			glPopMatrix();
 
+#ifdef THUG_DESKTOP
+		if( coupe )
+			glDisable( GL_ALPHA_TEST );
+		if( p->decal )
+		{
+			glDisable( GL_POLYGON_OFFSET_FILL );
+			glDepthFunc( GL_LESS );
+			glDepthMask( GL_TRUE );
+		}
+#endif
 		if( p->blend )
 		{
 			glDisable( GL_ALPHA_TEST );
@@ -3654,6 +3796,87 @@ bool CVitaGeom::plat_set_material_color( uint32 mat_name_checksum, int pass, Ima
 	return change;
 }
 
+#ifdef THUG_DESKTOP
+// Element3d's goal star: its vertex colours replace glColor and its texture
+// is pure red, so the colour comes from a recoloured copy of the texture
+// (p_NxTexture.cpp DesktopTextureEtoile). Applied at the geom's next render,
+// when its pieces surely exist; f = NULL puts the star's own texture back.
+unsigned int DesktopTextureEtoile( unsigned int gl, const float *f );	// p_NxTexture.cpp
+struct SDesktopTeinteGeom { const CVitaGeom *g; float f[3]; };
+static SDesktopTeinteGeom s_desktop_teintes[64];
+static int s_desktop_nteintes = 0;
+
+// The goal star's mesh is shared (one asset for every star), so a colour is
+// per geom: its pieces get the recoloured texture just for its own draw.
+void CVitaGeom::DesktopTeinte( const float *f )
+{
+	for( int i = 0; i < s_desktop_nteintes; ++i )
+		if( s_desktop_teintes[i].g == this )
+		{
+			if( f ) { s_desktop_teintes[i].f[0] = f[0]; s_desktop_teintes[i].f[1] = f[1]; s_desktop_teintes[i].f[2] = f[2]; }
+			else s_desktop_teintes[i] = s_desktop_teintes[--s_desktop_nteintes];
+			return;
+		}
+	if( !f || s_desktop_nteintes >= 64 ) return;
+	SDesktopTeinteGeom e; e.g = this; e.f[0] = f[0]; e.f[1] = f[1]; e.f[2] = f[2];
+	s_desktop_teintes[s_desktop_nteintes++] = e;
+}
+
+void CVitaGeom::desktop_teinte_oublier()
+{
+	DesktopTeinte( NULL );
+}
+
+// pose = true: swap in the copies (old textures into p_garde); false: put back
+bool CVitaGeom::desktop_teinte_poser( bool pose, unsigned int *p_garde, int n_garde )
+{
+	if( !s_desktop_nteintes || !mp_mesh ) return false;
+	const int n = mp_mesh->NumPieces() < n_garde ? mp_mesh->NumPieces() : n_garde;
+	if( !pose )
+	{
+		for( int k = 0; k < n; ++k )
+			const_cast< SGpuMesh * >( &mp_mesh->Pieces()[k] )->texture = p_garde[k];
+		return true;
+	}
+	for( int i = 0; i < s_desktop_nteintes; ++i )
+	{
+		if( s_desktop_teintes[i].g != this )
+			continue;
+		for( int k = 0; k < n; ++k )
+		{
+			SGpuMesh *p = const_cast< SGpuMesh * >( &mp_mesh->Pieces()[k] );
+			p_garde[k] = p->texture;
+			if( p->texture )
+				p->texture = DesktopTextureEtoile( p->texture, s_desktop_teintes[i].f );
+		}
+		static int n_log;
+		if( n_log < 6 )
+		{
+			++n_log;
+			VLOG( "DSK", "star tint: geom %p, %d pieces, tex %u -> %u (%.2f %.2f %.2f)", (void *)this, n,
+			      n > 0 ? p_garde[0] : 0u, n > 0 ? (unsigned)mp_mesh->Pieces()[0].texture : 0u,
+			      s_desktop_teintes[i].f[0], s_desktop_teintes[i].f[1], s_desktop_teintes[i].f[2] );
+		}
+		return true;
+	}
+	return false;
+}
+
+void DesktopTeinterModele( Nx::CModel *p_model, unsigned char r, unsigned char g, unsigned char b )
+{
+	if( !p_model )
+		return;
+	float f[3] = { r / 128.0f > 1.0f ? 1.0f : r / 128.0f, g / 128.0f > 1.0f ? 1.0f : g / 128.0f, b / 128.0f > 1.0f ? 1.0f : b / 128.0f };
+	const bool orig = ( r == 0 ) && ( g == 0 ) && ( b == 0 );	// 0,0,0 = the star's own red
+	for( int i = 0; i < p_model->GetNumGeoms(); ++i )
+	{
+		CVitaGeom *p_geom = static_cast< CVitaGeom * >( p_model->GetGeomByIndex( i ));
+		if( p_geom )
+			p_geom->DesktopTeinte( orig ? NULL : f );
+	}
+}
+#endif
+
 // Issue #16. [SOURCE] XBox/p_NxGeom.cpp:1131 : meme recherche du materiau par
 // nom (materiaux scindes a la conversion : bits 0-2 = passe isolee, bits 3-6 =
 // passes retenues), puis la matrice ne garde que m00, m01 (rotation x echelle)
@@ -3797,6 +4020,9 @@ CVitaGeom::~CVitaGeom()
 {
 	if( m_vita_clone )
 		NxVita::OublierInstance( this );
+#ifdef THUG_DESKTOP
+	desktop_teinte_oublier();
+#endif
 	NxVita::OmbreOublierGeom( this );	// sa pose ne doit plus aller a la carte d'ombre
 	VitaOublierPose();
 	liberer_lum();
@@ -4559,12 +4785,19 @@ bool CVitaGeom::plat_render( Mth::Matrix *pRootMatrix,
 		}
 		sp_lum_inst  = g_vita_lum_instance ? mp_vita_lum : NULL;
 		s_lum_inst_n = m_vita_lum_n;
+#ifdef THUG_DESKTOP
+		unsigned int garde_tex[16];
+		const bool teinte = desktop_teinte_poser( true, garde_tex, 16 );
+#endif
 		if( skin )
 			mp_mesh->DrawSkinned( ppBoneMatrices, numBones, m_vita_rgba,
 			                      (CVitaModelLights *)mp_vita_lights );
 		else
 			mp_mesh->Draw( m_vita_rgba, ppBoneMatrices, numBones,
 			               (CVitaModelLights *)mp_vita_lights );
+#ifdef THUG_DESKTOP
+		if( teinte ) desktop_teinte_poser( false, garde_tex, 16 );
+#endif
 		sp_lum_inst  = NULL;
 		s_lum_inst_n = 0;
 		s_lum_decision = -1;

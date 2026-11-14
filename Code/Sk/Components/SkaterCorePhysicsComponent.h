@@ -319,6 +319,10 @@ protected:
 	bool							mNoSpin;						// Gets set and reset by NoSpin and CanSpin.
 																	// Disables left-right pad control of the spin.
 	bool							m_bail;							// Set by BailOn, reset by BailOff and tested using BailIsOn
+#ifdef THUG_DESKTOP
+	bool							m_desk_on_rail;		// rail last frame (stalls: R2 held as we got on)
+	bool							m_desk_stall;		// a THUG2-style grind stall: still on the rail
+#endif
 	
 	bool							m_front_truck_sparks;			// True if sparks come from the front trucks; false if from the rear
 

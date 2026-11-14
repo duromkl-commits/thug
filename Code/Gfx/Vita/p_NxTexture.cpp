@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <vector>
 
 // Pool circulaire de vitaGL (vgl.c:132), exporte par la bibliotheque mais
 // absent du header public. Voir envoi_dxt_prepare plus bas.
@@ -35,6 +36,7 @@ extern "C" uint8_t *vgl_reserve_data_pool( uint32_t size );
 
 #include "vita_log.h"
 #include "p_NxTexture.h"
+#include <gfx/NxTexMan.h>
 
 namespace NxVita
 {
@@ -58,7 +60,11 @@ bool g_vita_dxt_align = true;
 // majorite du decor, n'ont pas leur chaine (le chemin compresse de vitaGL
 // plante, voir PORTING_NOTES). Lu AU CHARGEMENT : « mip 1 » a chaud n'a
 // d'effet que sur un niveau charge avec mip > 0.
+#ifdef THUG_DESKTOP
+int g_vita_mip = 2;	// desktop: trilinear, like the PS2/Xbox (the Vita had none)
+#else
 int g_vita_mip = 0;
+#endif
 static GLuint *sp_tex_mip   = NULL;
 static int     s_nb_tex_mip = 0, s_cap_tex_mip = 0;
 
@@ -512,6 +518,111 @@ int LoadVitaTextureMemory( const void *p_data,
 }
 
 
+#ifdef THUG_DESKTOP
+// --- the goal star's recoloured copies --------------------------------------
+//
+// The star's textures are pure red DXT1 and its vertex colours override any
+// model colour, so a tint can only come from the texture itself. Level 0 is
+// kept at load; a copy gets each block's endpoints as brightness x colour.
+struct SEtoileTex { uint32 ck; uint32 w, h; std::vector<unsigned char> d; GLuint gl; };
+static std::vector<SEtoileTex> s_etoile_tex;
+struct SEtoileCopie { GLuint orig, copie; uint32 cle; };
+static std::vector<SEtoileCopie> s_etoile_copies;
+
+static void etoile_garde( uint32 ck, uint32 w, uint32 h, const unsigned char *p, uint32 n )
+{
+	for( size_t i = 0; i < s_etoile_tex.size(); ++i )
+		if( s_etoile_tex[i].ck == ck ) { s_etoile_tex[i].d.assign( p, p + n ); s_etoile_tex[i].w = w; s_etoile_tex[i].h = h; s_etoile_tex[i].gl = 0; return; }
+	SEtoileTex t; t.ck = ck; t.w = w; t.h = h; t.d.assign( p, p + n ); t.gl = 0;
+	s_etoile_tex.push_back( t );
+}
+
+static void etoile_gl( uint32 ck, GLuint gl )
+{
+	for( size_t i = 0; i < s_etoile_tex.size(); ++i )
+		if( s_etoile_tex[i].ck == ck && !s_etoile_tex[i].gl ) s_etoile_tex[i].gl = gl;
+}
+
+// each endpoint: its brightest channel, times f, back to 565, keeping the
+// block's mode (c0 > c1 four colours, else three + transparent)
+static void dxt1_teinte( unsigned char *p, uint32 taille, const float f[3] )
+{
+	for( uint32 o = 0; o + 8 <= taille; o += 8 )
+	{
+		unsigned short c[2];
+		const unsigned short c0 = (unsigned short)( p[o] | ( p[o + 1] << 8 )), c1 = (unsigned short)( p[o + 2] | ( p[o + 3] << 8 ));
+		const bool quatre = c0 > c1;
+		for( int k = 0; k < 2; ++k )
+		{
+			const unsigned short v = k ? c1 : c0;
+			float l = ( v >> 11 ) / 31.0f;
+			const float g = (( v >> 5 ) & 63 ) / 63.0f, b = ( v & 31 ) / 31.0f;
+			if( g > l ) l = g;
+			if( b > l ) l = b;
+			int r5 = (int)( l * f[0] * 31.0f + 0.5f ), g6 = (int)( l * f[1] * 63.0f + 0.5f ), b5 = (int)( l * f[2] * 31.0f + 0.5f );
+			if( r5 > 31 ) r5 = 31;
+			if( g6 > 63 ) g6 = 63;
+			if( b5 > 31 ) b5 = 31;
+			c[k] = (unsigned short)(( r5 << 11 ) | ( g6 << 5 ) | b5 );
+		}
+		unsigned int idx = p[o + 4] | ( p[o + 5] << 8 ) | ( p[o + 6] << 16 ) | ((unsigned int)p[o + 7] << 24 );
+		if( quatre && c[0] == c[1] ) idx = 0;	// would turn into three colours
+		else if( quatre != ( c[0] > c[1] ))
+		{
+			const unsigned short x = c[0]; c[0] = c[1]; c[1] = x;
+			unsigned int n = 0;
+			for( int i = 0; i < 16; ++i )
+			{
+				unsigned int j = ( idx >> ( 2 * i )) & 3;
+				if( quatre ) j ^= 1;			// 0<->1, 2<->3
+				else if( j < 2 ) j ^= 1;		// 0<->1, middle and transparent stay
+				n |= j << ( 2 * i );
+			}
+			idx = n;
+		}
+		p[o] = c[0] & 255; p[o + 1] = c[0] >> 8; p[o + 2] = c[1] & 255; p[o + 3] = c[1] >> 8;
+		p[o + 4] = idx & 255; p[o + 5] = ( idx >> 8 ) & 255; p[o + 6] = ( idx >> 16 ) & 255; p[o + 7] = idx >> 24;
+	}
+}
+
+// gl: a texture bound to a piece (the star's own, one of its copies, or any
+// other). f = NULL: the star's own texture back. Anything else comes back
+// unchanged.
+unsigned int DesktopTextureEtoile( unsigned int gl, const float *f )
+{
+	GLuint orig = gl;
+	for( size_t i = 0; i < s_etoile_copies.size(); ++i )
+		if( s_etoile_copies[i].copie == gl ) { orig = s_etoile_copies[i].orig; break; }
+	const SEtoileTex *t = NULL;
+	for( size_t i = 0; i < s_etoile_tex.size(); ++i )
+		if( s_etoile_tex[i].gl && s_etoile_tex[i].gl == orig ) t = &s_etoile_tex[i];
+	if( !t ) return gl;
+	if( !f ) return orig;
+	const uint32 cle = ((uint32)( f[0] * 255.0f ) << 16 ) | ((uint32)( f[1] * 255.0f ) << 8 ) | (uint32)( f[2] * 255.0f );
+	for( size_t i = 0; i < s_etoile_copies.size(); ++i )
+		if( s_etoile_copies[i].orig == orig && s_etoile_copies[i].cle == cle ) return s_etoile_copies[i].copie;
+	std::vector<unsigned char> d = t->d;
+	dxt1_teinte( &d[0], (uint32)d.size(), f );
+	GLuint c = 0;
+	glGenTextures( 1, &c );
+	glBindTexture( GL_TEXTURE_2D, c );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	envoi_dxt_prepare();
+	glCompressedTexImage2D( GL_TEXTURE_2D, 0, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT, (GLsizei)t->w, (GLsizei)t->h, 0, (GLsizei)d.size(), &d[0] );
+	noter_alpha_min( c, alpha_min_dxt1( &d[0], (unsigned int)d.size()));
+	SEtoileCopie e; e.orig = orig; e.copie = c; e.cle = cle;
+	s_etoile_copies.push_back( e );
+	if( s_etoile_copies.size() > 64 )
+	{
+		glDeleteTextures( 1, &s_etoile_copies[0].copie );	// oldest (a colour from chapters ago)
+		s_etoile_copies.erase( s_etoile_copies.begin());
+	}
+	VLOG( "TEX", "goal star copy %u -> %u (%.2f %.2f %.2f)", (unsigned)orig, (unsigned)c, f[0], f[1], f[2] );
+	return c;
+}
+#endif
+
 static int load_texture_stream( SReader *p_rd, const char *p_label,
                                 Lst::HashTable< Nx::CTexture > *p_table )
 {
@@ -580,6 +691,13 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 				break;
 			}
 			rd( p_src, (int)data_size, 1, p_rd );
+#ifdef THUG_DESKTOP
+			// The goal givers' star (models/arrow): level 0 of its DXT1
+			// textures kept, for recoloured copies (DesktopTextureEtoile).
+			if(( level == 0 ) && ( dxt == 1 ) && ((( checksum == 0x8454d094 ) && ( base_width == 64 ) && ( base_height == 128 ))
+			                 || (( checksum == 0xdfea5d0c ) && ( base_width == 32 ) && ( base_height == 32 ))))
+				etoile_garde( checksum, base_width, base_height, p_src, data_size );
+#endif
 
 			// Niveaux suivants d'une texture DXT (hors DXT5, decodee) : envoyes
 			// tels quels, dans le meme format que le niveau 0. Les blocs DXT
@@ -597,7 +715,12 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			// [DESACTIVE] gpu_alloc_compressed_texture plante sur ces envois
 			// (copie de taille negative, voir PORTING_NOTES) : a refaire en
 			// construisant la chaine nous-memes.
-			if( false && ( level > 0 ) && gl_tex && ( dxt > 0 ) && ( dxt != 5 ) && pot
+#ifdef THUG_DESKTOP
+			const bool envoi_mips_dxt = true;	// real GL takes the file's own DXT1 levels
+#else
+			const bool envoi_mips_dxt = false;
+#endif
+			if( envoi_mips_dxt && ( level > 0 ) && gl_tex && ( dxt > 0 ) && ( dxt != 5 ) && pot
 			   && ( data_size == taille_dxt1 )
 			   && ( NxVita::g_vita_mip > 0 ) && ( mip_w >= 4 ) && ( mip_h >= 4 )
 			   && ( mips_envoyes == (int)level - 1 ))
@@ -733,6 +856,9 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			break;
 		}
 
+#ifdef THUG_DESKTOP
+		etoile_gl( checksum, gl_tex );
+#endif
 		// Chaine de mips : celle du fichier (DXT), ou regeneree par vitaGL.
 		if( gl_tex && ( levels > 1 ) && ( NxVita::g_vita_mip > 0 ))
 		{
@@ -746,6 +872,24 @@ static int load_texture_stream( SReader *p_rd, const char *p_label,
 			if( chaine )
 			{
 				glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, NxVita::filtre_min());
+#ifdef THUG_DESKTOP
+				// DXT chain from the file may stop above 1x1: cap it so GL
+				// doesn't treat the texture as incomplete. Plus 16x anisotropic.
+				if( mips_envoyes > 0 )
+					glTexParameteri( GL_TEXTURE_2D, 0x813D /* GL_TEXTURE_MAX_LEVEL */, mips_envoyes );
+				{
+					static float s_aniso = -1.0f;
+					if( s_aniso < 0.0f )
+					{
+						s_aniso = 0.0f;
+						glGetFloatv( 0x84FF /* GL_MAX_TEXTURE_MAX_ANISOTROPY */, &s_aniso );
+						while( glGetError() != GL_NO_ERROR ) {}
+						if( s_aniso > 16.0f ) s_aniso = 16.0f;
+					}
+					if( s_aniso > 1.0f )
+						glTexParameterf( GL_TEXTURE_2D, 0x84FE /* GL_TEXTURE_MAX_ANISOTROPY */, s_aniso );
+				}
+#endif
 				NxVita::retenir_tex_mip( gl_tex );
 			}
 		}
@@ -1055,3 +1199,45 @@ void NxVita::CompteTextures( int *p_tex, unsigned int *p_texels, int *p_dicts )
 	*p_texels = Nx::s_texels_vivants;
 	*p_dicts  = Nx::s_dicts_vivants;
 }
+
+#ifdef THUG_DESKTOP
+// Portraits (desktop_portraits.cpp): an RGBA image made at run time, put in
+// the sprite dictionary under <checksum> so a SpriteElement can name it.
+// <w> x <h> is the size the menus see (the headshot icons are 64 x 64); the
+// pixels can be finer (<pw> x <ph>). Called again for the same checksum, it
+// refreshes the pixels in place, so elements already showing it update too.
+bool DesktopSpriteFromRGBA( uint32 checksum, const unsigned char *rgba, int pw, int ph, int w, int h )
+{
+	Nx::CTexDict *p_dict = Nx::CTexDictManager::sp_sprite_tex_dict;
+	if( !p_dict || !rgba || pw <= 0 || ph <= 0 )
+		return false;
+	Nx::CVitaTexture *p_tex = (Nx::CVitaTexture *)p_dict->GetTexture( checksum );
+	GLuint gl_tex = p_tex ? p_tex->GetGLTexture() : 0;
+	if( !gl_tex )
+		glGenTextures( 1, &gl_tex );
+	glBindTexture( GL_TEXTURE_2D, gl_tex );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
+	glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
+	// Sprites sample this backend's textures bottom row first: rows go in
+	// reversed (the first build showed every portrait upside down).
+	std::vector<unsigned char> inv( (size_t)pw * ph * 4 );
+	for( int y = 0; y < ph; ++y )
+		memcpy( &inv[(size_t)y * pw * 4], rgba + (size_t)( ph - 1 - y ) * pw * 4, (size_t)pw * 4 );
+	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, pw, ph, 0, GL_RGBA, GL_UNSIGNED_BYTE, &inv[0] );
+	glBindTexture( GL_TEXTURE_2D, 0 );
+	if( p_tex )
+	{
+		// Also over a game picture (ss_cas): its size becomes ours.
+		p_tex->SetGLTextureKeepChecksum( gl_tex, (uint16)w, (uint16)h, false );
+		p_tex->SetUtile( 0, 0 );
+		return true;
+	}
+	p_tex = new Nx::CVitaTexture;
+	p_tex->SetGLTexture( gl_tex, (uint16)w, (uint16)h, false, checksum );
+	p_tex->SetPerm( true );
+	p_dict->GetTexLookup()->PutItem( checksum, p_tex );
+	return true;
+}
+#endif

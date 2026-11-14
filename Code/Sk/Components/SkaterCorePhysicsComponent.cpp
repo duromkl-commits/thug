@@ -5,6 +5,10 @@
 //* CREATION DATE:  3/21/3
 //****************************************************************************
 
+#ifdef THUG_DESKTOP
+#include "vita_log.h"
+extern "C" float desktop_demented_gravity( void );	// desktop_demented.cpp
+#endif
 #include <sk/objects/rail.h>
 #include <sk/objects/skatercareer.h>
 #include <sk/objects/gap.h>
@@ -45,6 +49,33 @@
 #include <sk/gamenet/gamenet.h>
 
 #include <core/math/slerp.h>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );	// desktop_demented.cpp: Mirror / Chaos
+// Demented's Mirror (and Chaos's reversed steering): left and right swapped
+// for steering only, so trick directions stay what the screen says.
+struct DesktopSteerFlip
+{
+	CSkaterPad &p; bool on;
+	bool epaules;	// the shoulder spin buttons too (air spins, skitch side steps)
+	DesktopSteerFlip( CSkaterPad &pad, bool e = false ) : p( pad ), on( desktop_mirror_steer() != 0 ), epaules( e ) { if( on ) swap(); }
+	~DesktopSteerFlip() { if( on ) swap(); }
+	static void ech( CSkaterButton &a, CSkaterButton &b )
+	{
+		char t[sizeof( CSkaterButton )];
+		memcpy( t, (void *)&a, sizeof( t )); memcpy( (void *)&a, (void *)&b, sizeof( t )); memcpy( (void *)&b, t, sizeof( t ));
+	}
+	void swap( void )
+	{
+		ech( p.m_left, p.m_right );
+		if( epaules ) { ech( p.m_L1, p.m_R1 ); ech( p.m_L2, p.m_R2 ); }
+	}
+};
+#define DESKTOP_STEER_FLIP( pad ) DesktopSteerFlip desktop_steer_flip_( pad )
+#define DESKTOP_SPIN_FLIP( pad ) DesktopSteerFlip desktop_steer_flip_( pad, true )
+#else
+#define DESKTOP_STEER_FLIP( pad )
+#define DESKTOP_SPIN_FLIP( pad )
+#endif
 
 #define	FLAGEXCEPTION(X) GetObject()->SelfEvent(X)
 							
@@ -83,6 +114,9 @@ CSkaterCorePhysicsComponent::CSkaterCorePhysicsComponent() : CBaseComponent()
 	SetType( CRC_SKATERCOREPHYSICS );
 	
 	mp_input_component = NULL;
+#ifdef THUG_DESKTOP
+	m_desk_on_rail = m_desk_stall = false;
+#endif
 	mp_trigger_component = NULL;
 	mp_sound_component = NULL;
 	mp_trick_component = NULL;
@@ -224,6 +258,15 @@ void CSkaterCorePhysicsComponent::Update()
 			break;
 			
 		case RAIL:
+#ifdef THUG_DESKTOP
+			// THUG2 grind stalls (Marcus): R2 held as you Triangle onto a rail
+			// = a still grind, no balance, until you ollie off
+			if (!m_desk_on_rail)
+			{
+				m_desk_stall = (mp_input_component->GetInputMask() & Inp::Data::mA_R2) != 0;
+				m_desk_on_rail = true;
+			}
+#endif
 			do_rail_physics();
 			break;
 			
@@ -232,6 +275,9 @@ void CSkaterCorePhysicsComponent::Update()
 			break;
 	}
 	
+#ifdef THUG_DESKTOP
+	if (GetState() != RAIL) m_desk_on_rail = m_desk_stall = false;
+#endif
 	handle_post_transfer_limit_overrides();
 	
 	// NOTE: moved this call from after CSkaterRotateComponent::Update to before it
@@ -2210,6 +2256,7 @@ void CSkaterCorePhysicsComponent::check_for_wall_push ( const Mth::Vector& start
 
 void CSkaterCorePhysicsComponent::move_to_skitch_point (   )						
 {
+	DESKTOP_SPIN_FLIP( mp_input_component->GetControlPad());
 	
 	CControlPad& control_pad = mp_input_component->GetControlPad();
 	
@@ -3018,6 +3065,7 @@ void CSkaterCorePhysicsComponent::maybe_break_vert (   )
                     
 bool CSkaterCorePhysicsComponent::maybe_spine_transfer (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	// Break spin button is pressed, so try to break the spine
 			
 	// The line to check along is the skater's forward directinal vector, rotated onto the XZ plane
@@ -3885,6 +3933,9 @@ float CSkaterCorePhysicsComponent::get_air_gravity (   )
 		gravity *= GetPhysicsFloat(CRCD(0xec128f0, "moon_gravity"));
 		g_CheatsEnabled = true;
 	}
+#ifdef THUG_DESKTOP
+	gravity *= desktop_demented_gravity();	// Demented's Chaos: heavy gravity
+#endif
 	 
 	return gravity;
 } 
@@ -3912,6 +3963,7 @@ float CSkaterCorePhysicsComponent::calculate_time_to_reach_height ( float target
 
 void CSkaterCorePhysicsComponent::handle_ground_rotation (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	CControlPad& control_pad = mp_input_component->GetControlPad();	
 
 	float rot = 0.0f; 
@@ -4601,6 +4653,7 @@ float CSkaterCorePhysicsComponent::rotate_away_from_wall ( const Mth::Vector& no
 
 void CSkaterCorePhysicsComponent::check_leaning_into_wall (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	// If we are leaning left or right, then do a collision check in that direction, and proportional to the amount of the lean.
 	// If there is a collision, then push the skater away from the wall.
 	
@@ -5371,6 +5424,7 @@ void CSkaterCorePhysicsComponent::do_in_air_physics (   )
 
 void CSkaterCorePhysicsComponent::handle_air_rotation (   )
 {
+	DESKTOP_SPIN_FLIP( mp_input_component->GetControlPad());
 	CControlPad& control_pad = mp_input_component->GetControlPad();		 
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -6923,6 +6977,9 @@ void CSkaterCorePhysicsComponent::got_rail ( const Mth::Vector& rail_pos, const 
 		
 		// Into the lip state
 		SetState(LIP);
+#ifdef THUG_DESKTOP
+		VLOG("TRK", "LIP t=%u", (unsigned)Tmr::GetTime());
+#endif
 		
 		// Snap the position
 		GetPos() = rail_pos;
@@ -7422,6 +7479,15 @@ void CSkaterCorePhysicsComponent::do_rail_physics (   )
 		gravity.ProjectToNormal(dir);
 		GetVel() += gravity * m_frame_length;
 		DUMP_VELOCITY;
+#ifdef THUG_DESKTOP
+		if (m_desk_stall)
+		{
+			// stalled: barely creeping (keeps the direction the rail code works
+			// from); the balance meter runs as in any grind
+			const float sens = Mth::DotProduct(dir, GetVel()) < 0.0f ? -1.0f : 1.0f;
+			GetVel() = dir * (0.01f * sens);
+		}
+#endif
 		
 		// sign is which way we are going along the rail
 		float sign = Mth::Sgn(Mth::DotProduct(dir, GetVel()));
@@ -7740,6 +7806,7 @@ void CSkaterCorePhysicsComponent::do_rail_physics (   )
 
 void CSkaterCorePhysicsComponent::ollie_off_rail_rotate (   )
 {
+	DESKTOP_STEER_FLIP( mp_input_component->GetControlPad());
 	float rot;
 	if (mp_input_component->GetControlPad().m_left.GetPressed())
 	{
@@ -7751,6 +7818,18 @@ void CSkaterCorePhysicsComponent::ollie_off_rail_rotate (   )
 	}
 	else return;
 
+#ifdef THUG_DESKTOP
+	// Give a directed stall exit enough horizontal motion to steer.
+	if (GetState() == RAIL && m_desk_stall)
+	{
+		Mth::Vector along(GetVel()[X], 0.0f, GetVel()[Z]);
+		if (along.LengthSqr() > 0.0f)
+		{
+			along.Normalize();
+			GetVel() += along * GetPhysicsFloat(CRCD(0x457bb395, "Rail_Speed_Boost"));
+		}
+	}
+#endif
 	GetVel().RotateY(rot);		 
 	GetMatrix().RotateYLocal(rot);				
 	m_lerping_display_matrix.RotateYLocal(rot);				
@@ -8182,6 +8261,13 @@ void CSkaterCorePhysicsComponent::do_jump ( Script::CStruct *pParams )
 	
 	// If any speed param is specified, then use that instead. Need by Zac for when small skater is doing scripted jumps in the front end.
 	pParams->GetFloat(CRCD(0xf0d90109, "speed"), &jump_speed);
+#ifdef THUG_DESKTOP
+	// Air shuffle (desktop): the pop scales with the ollie stat, 290 at 0 up to 440 at 10
+	if (pParams->ContainsFlag(CRCD(0x128deca9, "desktop_air_shuffle")))
+	{
+		jump_speed = 290.0f + 15.0f * GetSkater()->GetStat(Obj::CSkater::STATS_OLLIE);
+	}
+#endif
 
 	SetFlagFalse(TENSE);
 

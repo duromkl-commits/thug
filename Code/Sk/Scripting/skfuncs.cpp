@@ -76,6 +76,9 @@
 
 #include <sys/file/filesys.h>
 #include <sys/file/pre.h>
+#ifdef THUG_DESKTOP
+#include "vita_log.h"
+#endif
 
 /*****************************************************************************
 **								DBG Information								**
@@ -3540,6 +3543,88 @@ bool ScriptPlayerFaceIsValid(Script::CStruct *pParams, Script::CScript *pScript)
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+// Story "Change Player Model" (desktop): the picked skater plays with the
+// created skater's stats and progress (lent, see PlayerProfileManager.cpp).
+static bool desktop_switch_skater( uint32 profileName )
+{
+	Obj::CPlayerProfileManager*	pPlayerProfileManager=Mdl::Skate::Instance()->GetPlayerProfileManager();
+	Obj::CSkaterProfile* pSkaterProfile = Mdl::Skate::Instance()->GetCurrentProfile();
+	if ( !profileName || pSkaterProfile->GetSkaterNameChecksum() == profileName )
+		return false;
+	pPlayerProfileManager->DesktopLend( profileName );
+	pPlayerProfileManager->ApplyTemplateToCurrentProfile( profileName );
+	Obj::CSkater* pSkater = Mdl::Skate::Instance()->GetSkater( 0 );
+	if ( pSkater )
+		pSkater->UpdateStats( Mdl::Skate::Instance()->GetCurrentProfile() );
+	return true;
+}
+
+// Demented's dealt skater (desktop_demented.cpp).
+bool ScriptDesktopSelectSkaterLent( uint32 name )
+{
+	return desktop_switch_skater( name );
+}
+
+// @script | DesktopSelectSkater | desktop: switch to the named skater, keeping the created skater's stats
+bool ScriptDesktopSelectSkater(Script::CStruct *pParams, Script::CScript *pScript)
+{
+	uint32 profileName = 0;
+	pParams->GetChecksum( CRCD(0xa1dc81f9,"name"), &profileName, Script::NO_ASSERT );
+	return desktop_switch_skater( profileName );
+}
+
+// @script | DesktopQuitGame | desktop: closes the game, as the window's close button does
+extern "C" void desktop_request_quit( void );
+bool ScriptDesktopQuitGame(Script::CStruct *pParams, Script::CScript *pScript)
+{
+	desktop_request_quit();
+	return true;
+}
+
+// @script | DesktopAddModelItems | desktop: runs desktop_model_item once per
+// unlocked skater, in the select screen's order, with name, display_name
+// and item_id
+bool ScriptDesktopAddModelItems(Script::CStruct *pParams, Script::CScript *pScript)
+{
+	Obj::CPlayerProfileManager*	pPlayerProfileManager=Mdl::Skate::Instance()->GetPlayerProfileManager();
+	const int n = (int)pPlayerProfileManager->GetNumProfileTemplates();
+	int done = -1;
+	for ( int count = 0; count < n; count++ )
+	{
+		// Next skater_index above the last one shown.
+		Obj::CSkaterProfile* pBest = NULL;
+		int best = 0x7fffffff;
+		for ( int i = 0; i < n; i++ )
+		{
+			Obj::CSkaterProfile* pProfile = pPlayerProfileManager->GetProfileTemplateByIndex( i );
+			if ( !pProfile )
+				continue;
+			int index = 0;
+			pProfile->GetInfo()->GetInteger( CRCD(0x6f14c39c,"skater_index"), &index, Script::NO_ASSERT );
+			if ( index > done && index < best ) { best = index; pBest = pProfile; }
+		}
+		if ( !pBest )
+			break;
+		done = best;
+		int hidden = 0;
+		pBest->GetInfo()->GetInteger( CRCD(0x27eb9b9d,"is_hidden"), &hidden, Script::NO_ASSERT );
+		const char *p_display = NULL;
+		const uint32 name = pBest->GetSkaterNameChecksum();
+		// All skaters, secret ones included; Ped only picks from a ped list the game doesn't ship
+		if ( ( hidden && name == CRCD(0x061a741e,"ped") ) || !pBest->GetInfo()->GetString( CRCD(0x2ab66cb8,"display_name"), &p_display, Script::NO_ASSERT ) || !p_display )
+			continue;
+		Script::CStruct* pItem = new Script::CStruct;
+		pItem->AddChecksum( CRCD(0xa1dc81f9,"name"), name );
+		pItem->AddString( CRCD(0x2ab66cb8,"display_name"), p_display );
+		pItem->AddChecksum( Script::GenerateCRC( "item_id" ), name ^ 0x5eed0003 );
+		Script::RunScript( Script::GenerateCRC( "desktop_model_item" ), pItem, pScript->mpObject );
+		delete pItem;
+	}
+	return true;
+}
+#endif
+
 // @script | SelectCurrentSkater | sets the current profile to the specified skater
 // @parmopt name | name | | the name of the profile
 // @uparmopt name | name of the profile
@@ -3555,6 +3640,14 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 	Obj::CPlayerProfileManager*	pPlayerProfileManager=Mdl::Skate::Instance()->GetPlayerProfileManager();
 	Obj::CSkaterProfile* pSkaterProfile = Mdl::Skate::Instance()->GetCurrentProfile();
 
+#ifdef THUG_DESKTOP
+	// The pause menu's "Change Skater" (desktop) asks for the next unlocked one.
+	if ( profileName == Script::GenerateCRC( "desktop_next_skater" ) )
+	{
+		return desktop_switch_skater( pPlayerProfileManager->DesktopNextSkater( pSkaterProfile->GetSkaterNameChecksum() ) );
+	}
+#endif
+
 	// remember old checksum to see if the data has changed
 	if ( pSkaterProfile->GetSkaterNameChecksum() == profileName )
 	{
@@ -3562,6 +3655,10 @@ bool ScriptSelectCurrentSkater(Script::CStruct *pParams, Script::CScript *pScrip
 		return false;
 	}
 	
+#ifdef THUG_DESKTOP
+	// Any other pick (skate shop, story start) hands the loaned stats back.
+	pPlayerProfileManager->DesktopEndLend();
+#endif
 	pPlayerProfileManager->ApplyTemplateToCurrentProfile( profileName );
 	
 	return true;
@@ -3885,6 +3982,9 @@ bool ScriptSetGlobalFlag(Script::CStruct *pParams, Script::CScript *pScript)
 	pParams->GetInteger(CRCD(0x2e0b1465, "flag"), &flag, true);  		// Note we assert if "flag" is missing
 	
 	s_get_career(flag,pParams)->SetGlobalFlag(flag);
+#ifdef THUG_DESKTOP
+	if (flag >= 225 && flag <= 227) VLOG("LVL", "SetGlobalFlag %d", flag);
+#endif
 	
 	return true;
 }
@@ -3912,6 +4012,9 @@ bool ScriptUnSetGlobalFlag(Script::CStruct *pParams, Script::CScript *pScript)
 
 	
 	s_get_career(flag,pParams)->UnSetGlobalFlag(flag);
+#ifdef THUG_DESKTOP
+	if (flag >= 225 && flag <= 227) VLOG("LVL", "UnSetGlobalFlag %d", flag);
+#endif
 	
 	return true;
 }
@@ -5554,6 +5657,13 @@ bool ScriptGetSkaterVelocity( Script::CStruct* pParams, Script::CScript* pScript
 // @uparm STATS_AIR | global int value of the stat (defined in physics.q)
 // @parmopt name | skater | | the name of the profile you wish to get.  If you don't
 // provide a name, the current skater's profile will be returned
+#ifdef THUG_DESKTOP
+}	// namespace CFuncs
+bool DesktopThugZero( void );	// desktop_extras_glue.cpp
+bool desktop_demented_bind_ok( bool special, int index, uint32 key_combo );	// desktop_demented.cpp
+namespace CFuncs
+{
+#endif
 bool ScriptGetStatValue( Script::CStruct* pParams, Script::CScript* pScript )
 {
 	uint32 stat;
@@ -5570,6 +5680,11 @@ bool ScriptGetStatValue( Script::CStruct* pParams, Script::CScript* pScript )
 	
 	Dbg_MsgAssert( pSkaterProfile, ( "Unable to get skater profile") );
 	int value = pSkaterProfile->GetStatValue( stat );
+#ifdef THUG_DESKTOP
+	// THUG Zero: the stats menu shows the 0 the skater actually plays with.
+	if ( DesktopThugZero() && !pParams->ContainsComponentNamed( CRCD(0x5b8ab877,"skater") ))
+		value = 0;
+#endif
 	pScript->GetParams()->AddInteger( "stat_value", value );
 
 	return true;
@@ -5977,6 +6092,15 @@ bool ScriptBindTrickToKeyCombo( Script::CStruct* pParams, Script::CScript* pScri
 	Mdl::Skate * pSkate = Mdl::Skate::Instance();
 	Obj::CSkaterProfile* pSkaterProfile = pSkate->GetCurrentProfile();
 
+#ifdef THUG_DESKTOP
+	// Demented: a starter trick can't be replaced.
+	{
+		int index = -1;
+		pParams->GetInteger( "index", &index, Script::NO_ASSERT );
+		if ( !desktop_demented_bind_ok( pParams->ContainsFlag( "special" ), index, key_combo ) )
+			return false;
+	}
+#endif
 	// are we binding a special trick?
 	if ( pParams->ContainsFlag( "special" ) )
 	{

@@ -123,6 +123,11 @@ public:
 	void Clear();
 
 	void RecordButtons();
+#ifdef THUG_DESKTOP
+	void DesktopAirFlips();
+	uint32 m_flip_dir_avant, m_flip_derniere;
+	Tmr::Time m_flip_t, m_flip_fin;
+#endif
 	void Debounce ( int button, float time );
 
 	// The Button Event buffer.

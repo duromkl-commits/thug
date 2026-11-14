@@ -27,6 +27,9 @@
 **							  	  Includes									**
 *****************************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" unsigned int desktop_chaos_son_graine( void );	// desktop_demented.cpp: 0 = off
+#endif
 #include <core/defines.h>
 
 #include <gfx/nxviewman.h>
@@ -1049,6 +1052,27 @@ uint32 CSfxManager::PlaySound( uint32 checksum, sVolume *p_vol, float pitch, uin
 		Dbg_Message("******** NON-FATAL ERROR: Couldn't find sound %s", Script::FindChecksumName( checksum ));
 		return 0;
 	}
+
+#ifdef THUG_DESKTOP
+	// Demented's Chaos "Sound Salad": a one-shot sound plays another loaded
+	// one-shot instead (the same swap all event long). Looping sounds are
+	// left alone, so nothing gets stuck playing.
+	{
+		const uint32 graine = desktop_chaos_son_graine();
+		if( graine && !waveTableIndex->platformWaveInfo.looping )
+		{
+			static int s_ids[PERM_WAVE_TABLE_MAX_ENTRIES + WAVE_TABLE_MAX_ENTRIES];
+			int n = 0;
+			for( int i = 0; i < NumWavesInPermTable; i++ )
+				if( !WaveTable[i].platformWaveInfo.looping ) s_ids[n++] = i;
+			for( int i = 0; i < NumWavesInTable; i++ )
+				if( !WaveTable[i + PERM_WAVE_TABLE_MAX_ENTRIES].platformWaveInfo.looping ) s_ids[n++] = i + PERM_WAVE_TABLE_MAX_ENTRIES;
+			uint32 h = ( checksum ^ graine ) * 0x9E3779B1u;
+			h ^= h >> 15;
+			if( n > 1 ) waveTableIndex = &WaveTable[s_ids[h % (uint32)n]];
+		}
+	}
+#endif
 
 	// Just use checksum if no controlID is set
 	if (controlID == 0)

@@ -223,6 +223,11 @@ public:
 	uint32				GetBettingGuyId();
 
 	Script::CStruct*	GetGoalManagerParams();
+#ifdef THUG_DESKTOP
+	// The Pro Skater 4 career keeps its own goal memory (desktop_th4_glue.cpp).
+	void				DesktopExport( Script::CStruct* p_out );
+	void				DesktopImport( Script::CStruct* p_in );
+#endif
 
 	bool				ReplaceTrickText( uint32 goalId );
 	bool				ReplaceTrickText( uint32 goalId, const char* p_old_string, char* p_new_string, uint out_buffer_size );

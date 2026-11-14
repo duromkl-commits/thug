@@ -35,6 +35,15 @@
 #include <sk/components/skaterbalancetrickcomponent.h>
 
 #include <sk/objects/playerprofilemanager.h>
+#ifdef THUG_DESKTOP
+bool DesktopThugZero( void );	// desktop_extras_glue.cpp: a THUG Zero story is running
+// THUG Zero: no stat goals at all (no popups, sounds or payouts).
+bool DesktopDemented( void );	// desktop_demented.cpp
+// Demented: no stat goals either (the dealt skater stays as dealt).
+static inline bool desktop_zero( void ) { return DesktopThugZero() || DesktopDemented(); }
+#else
+static inline bool desktop_zero( void ) { return false; }
+#endif
 
 
 namespace Obj
@@ -303,7 +312,7 @@ void CStatsManagerComponent::Update()
     }
     
     // Return if stat goals turned off
-    if ( !stat_goals_on )
+    if ( !stat_goals_on || desktop_zero() )
     {
         return;
     }
@@ -942,7 +951,7 @@ void CStatsManagerComponent::CheckTimedRecord( uint32 checksum, float time, bool
         return;
     }
 
-    if ( !stat_goals_on )
+    if ( !stat_goals_on || desktop_zero() )
     {
         return;
     }
@@ -1040,12 +1049,17 @@ void CStatsManagerComponent::Bail()
 
 void CStatsManagerComponent::Land()
 {
+#ifdef THUG_DESKTOP
+    // THUG Zero: stat goals never pay out.
+    if ( DesktopThugZero() )
+        return;
+#endif
     if ( !(Mdl::Skate::Instance()->GetGameMode()->IsTrue( CRCD(0x1ded1ea4,"is_career") )) )
     {
         return;
     }
 
-    if ( !stat_goals_on )
+    if ( !stat_goals_on || desktop_zero() )
     {
         return;
     }

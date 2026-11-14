@@ -7,6 +7,9 @@
 
 #ifdef __PLAT_VITA__
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );
+#endif
 #endif
 #include <gel/components/inputcomponent.h>
 #include <gel/components/vibrationcomponent.h>
@@ -23,6 +26,11 @@
 #include <sk/gamenet/gamenet.h>
 
 #include <gel/objtrack.h>
+
+#ifdef THUG_DESKTOP
+bool DesktopDemented( void );	// desktop_demented.cpp
+bool DesktopFrontEndSkater( void );	// desktop_extras_glue.cpp
+#endif
 
 namespace Obj
 {
@@ -166,11 +174,19 @@ CBaseComponent::EMemberFunctionResult CInputComponent::CallMemberFunction( uint3
 
         // @script | LeftPressed | true if left is being pressed on the pad
 		case CRCC(0x78238598, "LeftPressed"):
+#ifdef THUG_DESKTOP
+			// Demented Mirror / reversed steering: the turn, brake and cess
+			// slide anims follow the way the skater actually turns
+			if( desktop_mirror_steer()) return m_pad.m_right.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
+#endif
 			return m_pad.m_left.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
 			break;
 			
         // @script | RightPressed | true if right is being pressed on the pad
 		case CRCC(0x1d604a9d, "RightPressed"):
+#ifdef THUG_DESKTOP
+			if( desktop_mirror_steer()) return m_pad.m_left.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
+#endif
 			return m_pad.m_right.GetPressed() ? CBaseComponent::MF_TRUE : CBaseComponent::MF_FALSE;
 			break;
 			
@@ -342,7 +358,12 @@ void CInputComponent::Debounce ( uint32 Checksum, float time, bool clear )
 bool CInputComponent::ignore_button_presses (   )
 {
 	// if any operable menus are up in net games, ignore input
+#ifdef THUG_DESKTOP
+	// Demented's pause menu doesn't freeze the game: same rule as online
+	if( !GameNet::Manager::Instance()->InNetGame() && !DesktopDemented()) return false;
+#else
 	if( !GameNet::Manager::Instance()->InNetGame()) return false;
+#endif
 	
 	if (Front::CScreenElementManager::Instance()->GetElement(CRCD(0x2edb780f, "controller_unplugged_dialog_anchor"))) return true;
 	
@@ -378,6 +399,9 @@ void CInputComponent::handle_input ( Inp::Data* input )
 	build_input_mask(input);
 
 	bool ignore = ignore_button_presses();
+#ifdef THUG_DESKTOP
+	if (DesktopFrontEndSkater()) ignore = true;
+#endif
 	if (IsInputDisabled() || ignore)
 	{
 		m_pad.Zero();
@@ -404,6 +428,9 @@ void CInputComponent::handle_input2 ( Inp::Data* input )
 //	build_input_mask(input);
 
 	bool ignore = ignore_button_presses();
+#ifdef THUG_DESKTOP
+	if (DesktopFrontEndSkater()) ignore = true;
+#endif
 	if (IsInputDisabled() || ignore)
 	{
 		m_pad2.Zero();

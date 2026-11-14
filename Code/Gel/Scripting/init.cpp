@@ -20,6 +20,18 @@
 #include <gel/scripting/scriptcache.h>
 #include <core/crc.h>
 
+// Desktop: room for the custom soundtrack's playlist entries (up to ~440
+// songs, one struct + four fields each), and the playable peds' and GTA
+// skaters' profiles (~300 more, each ~15 structs and ~80 fields, also copied
+// into the profile manager; desktop/src/custom_music.cpp).
+#ifdef THUG_DESKTOP
+#define DESKTOP_EXTRA_STRUCTS		36000
+#define DESKTOP_EXTRA_COMPONENTS	180000
+#else
+#define DESKTOP_EXTRA_STRUCTS		0
+#define DESKTOP_EXTRA_COMPONENTS	0
+#endif
+
 namespace Script
 {
 
@@ -51,14 +63,14 @@ void AllocatePools()
 	Mem::PushMemProfile("CComponent and Reserve CComponent");
 	
 	// 16 bytes each
-	CComponent::SCreatePool(84000, "CComponent");  // Mick:  increased by 2000 (82000 to 84000) to account for gap lists
+	CComponent::SCreatePool(84000 + DESKTOP_EXTRA_COMPONENTS, "CComponent");  // Mick:  increased by 2000 (82000 to 84000) to account for gap lists
 
 	Mem::PopMemProfile();
 	
 
 	Mem::PushMemProfile("CStruct");
 	// 4 bytes each  (Actually 8, or 12 with asserts)
-	CStruct::SCreatePool(18800, "CStruct");
+	CStruct::SCreatePool(18800 + DESKTOP_EXTRA_STRUCTS, "CStruct");
 	Mem::PopMemProfile();
 	
 	// 12 bytes each  (Actually 16)
@@ -103,7 +115,13 @@ void AllocatePools()
 	// 4000 is the max number of strings.
 	//AllocatePermanentStringHeap(60500,4000);
 	Mem::PushMemProfile("AllocatePermanentStringHeap");
+#ifdef THUG_DESKTOP
+	// Desktop: custom_music songs (3 strings each) and the extra skaters'
+	// profiles go here too; 160000 overflowed with Marcus's ~330 songs.
+	AllocatePermanentStringHeap(1000000,40000);
+#else
 	AllocatePermanentStringHeap(160000,7000);	
+#endif
 	Mem::PopMemProfile();
 	
 	Mem::Manager::sHandle().PopContext();

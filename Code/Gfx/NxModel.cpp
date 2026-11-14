@@ -563,6 +563,15 @@ bool CModel::AddGeom(const char* pMeshFileName, uint32 geomName, bool useAssetMa
 		{
 			Dbg_MsgAssert( false,( "Could not load asset %s", pMeshFileName ));
 		}	   		   
+#ifdef THUG_DESKTOP
+		// a node naming a model that isn't there (imported levels): skip it
+		// rather than crash on the NULL mesh below
+		if( !pMesh )
+		{
+			VLOG( "ERR", "!! model missing: %s", pMeshFileName );
+			return false;
+		}
+#endif
 
 		m_preloadedMeshNames[m_numPreloadedMeshes] = Script::GenerateCRC(pMeshFileName);
 		m_numPreloadedMeshes++;
@@ -572,6 +581,15 @@ bool CModel::AddGeom(const char* pMeshFileName, uint32 geomName, bool useAssetMa
 		Mem::PushMemProfile((char*)pMeshFileName);
 		pMesh = Nx::CEngine::sLoadMesh( pMeshFileName, texDictOffset, forceTexDictLookup, m_doShadowVolume );
 		Mem::PopMemProfile(/*(char*)pMeshFileName*/);
+#ifdef THUG_DESKTOP
+		// a node naming a model that isn't there (imported levels): skip it
+		// rather than crash on the NULL mesh below
+		if( !pMesh )
+		{
+			VLOG( "ERR", "!! model missing: %s", pMeshFileName );
+			return false;
+		}
+#endif
 		Dbg_MsgAssert( m_numMeshes < MAX_MESHES, ( "Too many meshes for this model (max=%d)", MAX_MESHES ) );
 		mp_mesh[m_numMeshes] = pMesh;
 		m_numMeshes++;

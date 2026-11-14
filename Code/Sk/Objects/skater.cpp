@@ -154,7 +154,14 @@
 #include <gel/scripting/component.h>
 #include <gel/scripting/vecpair.h>
 #include <gel/scripting/checksum.h>
+#ifdef THUG_DESKTOP
+#include "custom_music.h"
+#include "vita_log.h"
+#endif
 #include <sk/scripting/nodearray.h>
+#ifdef THUG_DESKTOP
+bool DesktopThugZero( void );	// desktop_extras_glue.cpp: a THUG Zero story is running
+#endif
 
 #ifdef __PLAT_NGC__
 #include "gfx/ngc/nx/nx_init.h"
@@ -624,6 +631,11 @@ float	CSkater::GetStat(EStat stat)
 		value += 3.0f;
 	}
 
+#ifdef THUG_DESKTOP
+	// THUG Zero: every stat stays at 0 for the whole story.
+	if( DesktopThugZero())
+		value = 0.0f;
+#endif
 	return value;
 	
 }
@@ -2014,6 +2026,23 @@ bool CSkater::SkaterEquals( Script::CStruct* pStructure )
 		if ( m_isPro )
 			return false;
 	}
+
+#ifdef THUG_DESKTOP
+	// Bail vocals: the create-a-skater and the extra skaters that have a voice
+	// (custom_music.cpp patches animevents.qb to ask this).
+	if ( pStructure->ContainsFlag( Crc::GenerateCRCFromString( "desktop_voiced" ) ) )
+	{
+		const bool voix = !m_isPro || custom_skater_voice_pitch( m_skaterNameChecksum );
+		static int n_log;
+		if ( n_log < 20 )
+		{
+			++n_log;
+			VLOG( "PCM", "bail vocals check: skater %08x %s, %s", m_skaterNameChecksum, m_isPro ? "pro" : "created", voix ? "voiced" : "silent" );
+		}
+		if ( !voix )
+			return false;
+	}
+#endif
 
 	if ( pStructure->ContainsFlag( CRCD(0x3f813177,"is_male") ) )
 	{
