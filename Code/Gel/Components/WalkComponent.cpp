@@ -10,6 +10,9 @@
 extern "C" int desktop_mirror_steer( void );	// desktop_demented.cpp
 #endif
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+extern "C" int desktop_control_opt( int i );	// desktop_extras.cpp: 2 = No Wallplants
+#endif
 #endif
 
 #ifdef TESTING_GUNSLINGER
@@ -2115,6 +2118,9 @@ void CWalkComponent::check_for_landing ( const Mth::Vector& previous_pos, const 
 	
 void CWalkComponent::maybe_wallplant (   )
 {
+#ifdef THUG_DESKTOP
+	if (desktop_control_opt(2)) return;	// Controls: No Wallplants
+#endif
 	if (!mp_input_component->GetControlPad().m_x.GetPressed()) return;
 	
 	// only wallplant on the way down

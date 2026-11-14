@@ -235,6 +235,19 @@ static uint32 trick_a( Script::CStruct *p_map, uint32 cle, int niv = 0 )
 	return 0;
 }
 
+// The name of the current skater's Up + X X trick (JumpSlot: Boneless,
+// Fastplant, Beanplant), NULL if unknown. For the Chef's boneless goals.
+extern "C" const char *desktop_jump_slot_name( void )
+{
+	Obj::CSkaterProfile *p = Mdl::Skate::Instance()->GetCurrentProfile();
+	if( !p ) return NULL;
+	const uint32 t = trick_a( p->GetTrickMapping( crc( "trick_mapping" )), crc( "JumpSlot" ));
+	Script::CStruct *tr = t ? Script::GetStructure( t, Script::NO_ASSERT ) : NULL, *par = NULL;
+	if( !tr || !tr->GetStructure( crc( "Params" ), &par ) || !par ) return NULL;
+	const char *n = NULL;
+	return par->GetText( crc( "Name" ), &n ) ? n : NULL;
+}
+
 // The key combo a trick sits on in a mapping, 0 if none.
 static uint32 cle_de( Script::CStruct *p_map, uint32 trick, int niv = 0 )
 {

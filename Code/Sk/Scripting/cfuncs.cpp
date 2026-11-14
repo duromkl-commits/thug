@@ -10622,7 +10622,7 @@ bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *)
 	return true;
 }
 
-// @script | DesktopControlOpt | desktop: controls option i (0 No Air Shuffles, 1 No Flips/Rolls) is on; with toggle, flips it first
+// @script | DesktopControlOpt | desktop: controls option i (0 No Air Shuffles, 1 No Flips/Rolls, 2 No Wallplants) is on; with toggle, flips it first
 extern "C" int desktop_control_opt( int i );
 extern "C" int desktop_control_opt_toggle( int i );
 bool ScriptDesktopControlOpt(Script::CStruct *pParams, Script::CScript *)
@@ -10632,6 +10632,80 @@ bool ScriptDesktopControlOpt(Script::CStruct *pParams, Script::CScript *)
 	if (pParams->ContainsFlag(Script::GenerateCRC("toggle")))
 		return desktop_control_opt_toggle(i) != 0;
 	return desktop_control_opt(i) != 0;
+}
+
+// @script | DesktopViewGoalsChapter | desktop: the chapter View Goals opens at
+// (desktop_chapter, 1-based): the one picked last in this level, else the
+// level's first chapter (LEVEL_CHAPTER_MAP), else story + 1 (unmapped levels:
+// Hotter Than Hell, the classic levels). Marcus 2026-11-14.
+static uint32 s_vg_level = 0;
+static int s_vg_chapter = 0;
+static bool s_vg_open = false;
+bool ScriptDesktopViewGoalsChapter(Script::CStruct *pParams, Script::CScript *pScript)
+{
+	int story = 0;
+	pParams->GetInteger(Script::GenerateCRC("story"), &story, Script::NO_ASSERT);
+	const uint32 level = Mdl::Skate::Instance()->m_cur_level;
+	if (level != s_vg_level) { s_vg_level = level; s_vg_chapter = 0; }
+	int first = -1;
+	Script::CStruct *p_map = Script::GetStructure(Script::GenerateCRC("LEVEL_CHAPTER_MAP"), Script::NO_ASSERT);
+	if (p_map) p_map->GetInteger(level, &first, Script::NO_ASSERT);
+	int c = story + 1;
+	s_vg_open = first >= 0;
+	if (first >= 0) c = s_vg_chapter > 0 ? s_vg_chapter : first + 1;
+	pScript->GetParams()->AddInteger(Script::GenerateCRC("desktop_chapter"), c);
+	return true;
+}
+
+// @script | DesktopViewGoalsRemember | desktop: View Goals closing; keeps current_chapter for this level
+bool ScriptDesktopViewGoalsRemember(Script::CStruct *, Script::CScript *)
+{
+	if (!s_vg_open) return true;
+	s_vg_open = false;
+	if (Mdl::Skate::Instance()->m_cur_level != s_vg_level) return true;
+	s_vg_chapter = Script::GetInteger(Script::GenerateCRC("current_chapter"), Script::NO_ASSERT);
+	return true;
+}
+
+// @script | DesktopJumpSlotText | desktop: text with "Boneless" swapped for the
+// skater's Up + X X trick (Fastplant, Beanplant...), into param 'out'
+extern "C" const char *desktop_jump_slot_name( void );
+bool ScriptDesktopJumpSlotText(Script::CStruct *pParams, Script::CScript *pScript)
+{
+	const char *text = "";
+	uint32 out = 0;
+	pParams->GetText(Script::GenerateCRC("text"), &text);
+	pParams->GetChecksum(Script::GenerateCRC("out"), &out, Script::NO_ASSERT);
+	if (!out) return false;
+	const char *nom = desktop_jump_slot_name();
+	static char r[1024];
+	if (!text) text = "";
+	if (nom && *nom && !strstr(nom, "oneless"))
+	{
+		char bas[64];
+		size_t nl = strlen(nom); if (nl > 60) nl = 60;
+		for (size_t k = 0; k < nl; ++k) bas[k] = (char)tolower((unsigned char)nom[k]);
+		bas[nl] = 0;
+		size_t o = 0;
+		for (const char *q = text; *q && o + 70 < sizeof(r); )
+		{
+			const char *ajout = NULL; size_t saut = 0;
+			if (!strncmp(q, "Bonelesses", 10)) { ajout = nom; saut = 10; }
+			else if (!strncmp(q, "Boneless", 8)) { ajout = nom; saut = 8; }
+			else if (!strncmp(q, "boneless", 8)) { ajout = bas; saut = 8; }
+			if (ajout)
+			{
+				memcpy(r + o, ajout, nl); o += nl;
+				if (saut == 10) r[o++] = 's';
+				q += saut;
+			}
+			else r[o++] = *q++;
+		}
+		r[o] = 0;
+	}
+	else snprintf(r, sizeof(r), "%s", text);
+	pScript->GetParams()->AddString(out, r);
+	return true;
 }
 #endif
 

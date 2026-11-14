@@ -54,8 +54,10 @@ extern "C" int extras_file_write( const char *file, const void *data, unsigned s
 }
 
 // Controls menu options (Marcus 2026-11-13): 0 = No Air Shuffles,
-// 1 = No Flips/Rolls. Kept in thug_controls.txt beside the exe ("01").
-static int s_opts[2];
+// 1 = No Flips/Rolls, 2 = No Wallplants (2026-11-14). Kept in
+// thug_controls.txt beside the exe ("010").
+#define DESKTOP_NB_OPTS 3
+static int s_opts[DESKTOP_NB_OPTS];
 static bool s_opts_lus = false;
 
 static void opts_lire( void )
@@ -64,7 +66,7 @@ static void opts_lire( void )
 	s_opts_lus = true;
 	unsigned n = 0;
 	char *d = (char *)extras_file_read( "thug_controls.txt", &n );
-	for( unsigned i = 0; d && i < n && i < 2; ++i )
+	for( unsigned i = 0; d && i < n && i < DESKTOP_NB_OPTS; ++i )
 		s_opts[i] = d[i] == '1';
 	free( d );
 }
@@ -72,15 +74,16 @@ static void opts_lire( void )
 extern "C" int desktop_control_opt( int i )
 {
 	opts_lire();
-	return i >= 0 && i < 2 ? s_opts[i] : 0;
+	return i >= 0 && i < DESKTOP_NB_OPTS ? s_opts[i] : 0;
 }
 
 extern "C" int desktop_control_opt_toggle( int i )
 {
 	opts_lire();
-	if( i < 0 || i >= 2 ) return 0;
+	if( i < 0 || i >= DESKTOP_NB_OPTS ) return 0;
 	s_opts[i] = !s_opts[i];
-	const char t[2] = { (char)( '0' + s_opts[0] ), (char)( '0' + s_opts[1] ) };
-	extras_file_write( "thug_controls.txt", t, 2 );
+	char t[DESKTOP_NB_OPTS];
+	for( int k = 0; k < DESKTOP_NB_OPTS; ++k ) t[k] = (char)( '0' + s_opts[k] );
+	extras_file_write( "thug_controls.txt", t, DESKTOP_NB_OPTS );
 	return s_opts[i];
 }

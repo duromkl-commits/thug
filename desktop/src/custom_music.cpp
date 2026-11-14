@@ -1184,6 +1184,45 @@ static void patch_air_shuffle( const unsigned char *qb, const std::vector<Jeton>
 	}
 }
 
+// Wallie boostplant as in ReTHAWed (walltricks.qb, Marcus 2026-11-14): in a
+// wallride, Up + X once (PressAndRelease) instead of Up + X X, the wallie
+// pushes off the wall at 35 (THUG 40) so plants chain up a wall, and the
+// trick queue is cleared at the plant. ReTHAWed's "Boostplant xN" message
+// is left out (nothing on screen Marcus didn't ask for).
+static void patch_boostplant( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
+{
+	const uint32_t n = crc( "WallRideTricks" ), tap2 = crc( "TapTwiceRelease" ), sortie = crc( "Wall_Ride_Jump_Out_Speed" );
+	for( size_t k = 0; k + 2 < j.size(); ++k )
+	{
+		if( est_nom( qb, j[k], sortie ) && qb[j[k + 1].pos] == T_EGAL && qb[j[k + 2].pos] == T_ENTIER
+		 && ( k == 0 || qb[j[k - 1].pos] == T_EOL || qb[j[k - 1].pos] == T_EOLNUM ))
+		{
+			Ecrit w; w.octet( T_ENTIER ); w.u32( 35 );
+			m.push_back( Modif{ j[k + 2].pos, j[k + 2].taille, w.o } );
+			VLOG( "MUS", "wallie: jump out speed 35" );
+			continue;
+		}
+		if( !est_nom( qb, j[k], n ) || qb[j[k + 1].pos] != T_EGAL ) continue;
+		if( k > 0 && qb[j[k - 1].pos] != T_EOL && qb[j[k - 1].pos] != T_EOLNUM ) continue;	// the definition
+		size_t e = k + 2;
+		while( e < j.size() && qb[j[e].pos] != T_EOL && qb[j[e].pos] != T_EOLNUM && qb[j[e].pos] != T_TAB ) ++e;
+		int prof = 0;
+		for( ; e < j.size(); ++e )
+		{
+			const unsigned char c = qb[j[e].pos];
+			if( c == T_TAB ) ++prof;
+			else if( c == T_FTAB && --prof == 0 ) break;
+			else if( est_nom( qb, j[e], tap2 ))
+			{
+				Ecrit w; w.nom( "PressAndRelease" );
+				m.push_back( Modif{ j[e].pos, j[e].taille, w.o } );
+				VLOG( "MUS", "wallie plant: single tap" );
+			}
+		}
+		return;
+	}
+}
+
 // Pause menu: Demented's own items (the Extras menu is gone, Marcus 2026-11-09).
 static const char *s_item_pause =
 	// Demented: the trick list, read only (the game's own View Tricks mode)
@@ -1196,6 +1235,12 @@ static const char *s_item_pause =
 
 // Demented's own scripts (appended to gamemenu.qb).
 static const char *s_demented_scripts =
+	// story start (not Demented): Intro_01 now plays after the pre-CAS menu, then this
+	"script desktop_intro_2\n"
+	"killskatercamanim all\n"
+	"unpausegame\n"
+	"PlayCutscene name = \"cutscenes\\Intro_02.cut\" exitScript = end_intro_2 dont_unload_anims\n"
+	"endscript\n"
 	// the modifiers menu, laid out like the difficulty menu
 	"script desktop_demented_menu focus = 0\n"
 	"dialog_box_exit\n"
@@ -1802,6 +1847,7 @@ static const char *s_controls_scripts =
 	"if ( <show> = 1 )\n"
 	"theme_menu_add_item { text = \"No Air Shuffles\" id = menu_desktop_noshuffle focus_script = controller_config_focus unfocus_script = controller_config_unfocus pad_choose_script = nullscript }\n"
 	"theme_menu_add_item { text = \"No Flips/Rolls\" id = menu_desktop_noflips focus_script = controller_config_focus unfocus_script = controller_config_unfocus pad_choose_script = nullscript }\n"
+	"theme_menu_add_item { text = \"No Wallplants\" id = menu_desktop_nowallplant focus_script = controller_config_focus unfocus_script = controller_config_unfocus pad_choose_script = nullscript }\n"
 	"endif\n"
 	"endscript\n"
 	"script desktop_controls_values\n"
@@ -1811,6 +1857,7 @@ static const char *s_controls_scripts =
 	"FormatText ChecksumName = text_color \"%i_UNHIGHLIGHTED_TEXT_COLOR\" i = ( THEME_COLOR_PREFIXES [ current_theme_prefix ] )\n"
 	"desktop_controls_value parent = menu_desktop_noshuffle vid = menu_desktop_noshuffle_value o = 0 text_color = <text_color>\n"
 	"desktop_controls_value parent = menu_desktop_noflips vid = menu_desktop_noflips_value o = 1 text_color = <text_color>\n"
+	"desktop_controls_value parent = menu_desktop_nowallplant vid = menu_desktop_nowallplant_value o = 2 text_color = <text_color>\n"
 	"endscript\n"
 	"script desktop_controls_value\n"
 	"if DesktopControlOpt i = <o>\n"
@@ -1861,7 +1908,7 @@ static void patch_controls( const unsigned char *qb, const std::vector<Jeton> &j
 		m.push_back( Modif{ j[a - 1].pos, 0, w1.o } );
 		Ecrit w2; compile_q( w2, "desktop_controls_values\n" );
 		m.push_back( Modif{ j[b].pos, 0, w2.o } );
-		VLOG( "MUS", "controls menu: No Air Shuffles / No Flips added" );
+		VLOG( "MUS", "controls menu: No Air Shuffles / No Flips / No Wallplants added" );
 		return;
 	}
 }
@@ -2720,8 +2767,11 @@ static void patch_pietons( const unsigned char *qb, const std::vector<Jeton> &j,
 			PietonJouable pj = { p.nom, p.affiche, p.femme, "" };
 			tous.push_back( pj );
 			char t[256];
-			char forme[64] = "";
-			if( p.taille > 0 ) snprintf( forme, sizeof( forme ), " body_shape = { scale = %.2f }", p.taille );
+			char forme[160] = "";
+			if( p.taille > 0 && p.taille <= 0.5f )	// tiny (Pipo Monkeys): board kept full size (Marcus)
+				snprintf( forme, sizeof( forme ), " body_shape = { scale = %.2f Bone_Board_Root = (%.2f,%.2f,%.2f) nonlocal_board }",
+				          p.taille, 1.0f / p.taille, 1.0f / p.taille, 1.0f / p.taille );
+			else if( p.taille > 0 ) snprintf( forme, sizeof( forme ), " body_shape = { scale = %.2f }", p.taille );
 			else if( p.femme ) strcpy( forme, " body_shape = female_scale_info" );
 			snprintf( t, sizeof( t ), "ped_body = { desc_id = desktop_gta_%s } ped_board = { desc_id = Skateboard }%s",
 			          p.nom, forme );
@@ -2984,6 +3034,39 @@ static void patch_avant( const unsigned char *qb, const std::vector<Jeton> &j, s
 		}
 }
 
+// The Chef's boneless goals (NY) count and name the skater's own Up + X X
+// trick: a dealt Demented pro (or any pro) may have a Fastplant or Beanplant
+// there (Marcus 2026-11-14). Each string in 'nom' holding "boneless" becomes
+// <desktop_jN>, set at the script top by DesktopJumpSlotText.
+static void patch_jump( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m, const char *nom )
+{
+	const uint32_t n = crc( nom );
+	static int s_num = 0;
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+		{
+			size_t a = k + 2;
+			while( a < j.size() && qb[j[a].pos] != T_EOL && qb[j[a].pos] != T_EOLNUM ) ++a;
+			if( a >= j.size()) return;
+			int nb = 0;
+			for( size_t b = k + 2; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+			{
+				if( qb[j[b].pos] != T_CHAINE ) continue;
+				const char *t = (const char *)( qb + j[b].pos + 5 );
+				if( !strstr( t, "oneless" )) continue;
+				char arg[24]; snprintf( arg, sizeof( arg ), "desktop_j%d", s_num++ );
+				std::string q = std::string( "DesktopJumpSlotText text = \"" ) + t + "\" out = " + arg + "\n";
+				Ecrit w; compile_q( w, q.c_str());
+				m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
+				Ecrit r; r.octet( T_ARG ); r.nom( arg );
+				m.push_back( Modif{ j[b].pos, j[b].taille, r.o } );
+				++nb;
+			}
+			VLOG( "MUS", "%s: %d boneless texts follow the jump slot", nom, nb );
+			return;
+		}
+}
+
 // Marcus's 13 Nov list (Demented only; DesktopDmGoal gives the originals
 // back outside it): New Jersey's chapter 1-3 goals.
 static void patch_dm_goals( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m )
@@ -3200,6 +3283,8 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_player_model( qb, j, m );
 	patch_niveaux( qb, j, m );
 	patch_air_shuffle( qb, j, m );
+	patch_boostplant( qb, j, m );
+	patch_debut( qb, j, m, "Trick_WallPlant", "ClearTrickQueue\n" );
 	patch_quitter( qb, j, m );
 	patch_sans_mtx( qb, j, m );
 	patch_controls( qb, j, m );
@@ -3227,6 +3312,19 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	}
 	patch_histoire( qb, j, m );
 	patch_dm_goals( qb, j, m );
+	// View Goals (Marcus 2026-11-14): opens at the level's first chapter, then
+	// at the one last picked until the level changes (DesktopViewGoalsChapter)
+	patch_avant( qb, j, m, "create_chapter_menu", "hide_current_goal",
+		"if NOT GotParam select_team\n"
+		"DesktopViewGoalsChapter story = <currentChapter>\n"
+		"change current_chapter = <desktop_chapter>\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "chapter_menu_exit", "DesktopViewGoalsRemember\n" );
+	{
+		static const char *chef[] = { "NY_AddGoal_Boneless01", "NY_AddGoal_Boneless02", "NY_AddGoal_Boneless03",
+			"NY_Goal_NoComply_Counter", "NY_Goal_Boneless02_TrickChecker", "NY_Goal_Boneless03_TrickChecker" };
+		for( size_t i = 0; i < sizeof( chef ) / sizeof( chef[0] ); ++i ) patch_jump( qb, j, m, chef[i] );
+	}
 	// Use the existing save selection with the desktop filesystem-backed card.
 	patch_debut( qb, j, m, "maybe_auto_load_from_memory_card",
 		"if DesktopFirstSaveCheck\n"
@@ -3327,6 +3425,20 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_debut( qb, j, m, "watch_cutscene_done", "if DesktopDemented\nDebounce X 0.5\npause_menu_gradient on\ncreate_watch_cutscenes_menu\nreturn\nendif\n" );
 	// the skater is dealt before the first intro, so it's in it
 	patch_debut( qb, j, m, "play_first_cutscene", "if DesktopDementedNeedsDeal\ndesktop_demented_roll\nendif\n" );
+	// Edit Skater BEFORE the first cutscene in every story mode but Demented
+	// (Marcus 2026-11-14): the pre-CAS menu first, then Intro_01, then Intro_02.
+	patch_debut( qb, j, m, "play_first_cutscene",
+		"if NOT DesktopDemented\n"
+		"launch_pre_cas_menu wait_for_skater = wait_for_skater\n"
+		"return\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "show_intro_2",
+		"if NOT DesktopDemented\n"
+		"killskatercamanim all\n"
+		"unpausegame\n"
+		"PlayCutscene name = \"cutscenes\\Intro_01.cut\" exitScript = desktop_intro_2 dont_unload_anims\n"
+		"return\n"
+		"endif\n" );
 	// View Tricks (Demented) goes back to the pause menu
 	patch_debut( qb, j, m, "edit_tricks_menu_exit",
 		"if DesktopDemented\n"

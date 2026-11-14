@@ -396,11 +396,23 @@ void CInputComponent::handle_input ( Inp::Data* input )
 {
 	if (GetObject()->IsPaused()) return;
 	
+#ifdef THUG_DESKTOP
+	// Main menu / startup screen skater: no button events at all (the
+	// Trigger_ events below fired before the ignore check, so tricks and
+	// the manual meter still answered the pad there, Marcus 2026-11-14)
+	const bool front_end = DesktopFrontEndSkater();
+	if (front_end)
+	{
+		m_last_mask = 0;
+		m_input_mask = 0;
+	}
+	else
+#endif
 	build_input_mask(input);
 
 	bool ignore = ignore_button_presses();
 #ifdef THUG_DESKTOP
-	if (DesktopFrontEndSkater()) ignore = true;
+	if (front_end) ignore = true;
 #endif
 	if (IsInputDisabled() || ignore)
 	{

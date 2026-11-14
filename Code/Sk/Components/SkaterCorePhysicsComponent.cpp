@@ -7,6 +7,9 @@
 
 #ifdef THUG_DESKTOP
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+extern "C" int desktop_control_opt( int i );	// desktop_extras.cpp: 2 = No Wallplants
+#endif
 extern "C" float desktop_demented_gravity( void );	// desktop_demented.cpp
 #endif
 #include <sk/objects/rail.h>
@@ -4299,6 +4302,9 @@ bool CSkaterCorePhysicsComponent::check_for_wallpush (   )
 bool CSkaterCorePhysicsComponent::check_for_wallplant (   )
 {
 	// requires that m_feeler is a wall
+#ifdef THUG_DESKTOP
+	if (desktop_control_opt(2)) return false;	// Controls: No Wallplants
+#endif
 	
 	// we must be somewhat vertical
 	if (GetMatrix()[Y][Y] < 0.1f) return false;

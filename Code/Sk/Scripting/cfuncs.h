@@ -342,6 +342,9 @@ bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScr
 #ifdef THUG_DESKTOP
 bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *);
 bool ScriptDesktopControlOpt(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopViewGoalsChapter(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopViewGoalsRemember(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopJumpSlotText(Script::CStruct *, Script::CScript *);
 #endif
 bool ScriptHideLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript );
 bool ScriptObserveNextSkater( Script::CStruct *pParams, Script::CScript *pScript );
