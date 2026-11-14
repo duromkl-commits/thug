@@ -328,6 +328,7 @@ R = {
 'rt_thps4_steamer': ('Elissa Steamer', 'Elissa', 27, 'Fort Myers, FL', 'street normal female'),
 'rt_thps4_thomas': ('Jamie Thomas', 'Jamie', 28, 'Dothan, AL', 'pro:thomas'),
 'rt_thps4_vallely': ('Mike Vallely', 'Mike', 32, 'Edison, NJ', 'pro:vallely'),
+'rt_thps4_chef': ('Chef', 'Chef', 46, 'Woodland Hills, CA', 'street heavy comic'),
 'rt_thps4_clown_a': ('Clown', 'Clown', 40, 'Carnival', 'street normal comic'),
 'rt_thps4_clown_a_hd': ('Clown', 'Clown', 40, 'Carnival', 'street normal comic'),
 'rt_thps4_clown_b': ('Clown', 'Clown', 38, 'Carnival', 'street normal comic'),

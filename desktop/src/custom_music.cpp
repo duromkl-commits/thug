@@ -2426,6 +2426,7 @@ static const PersoGTA s_gta[] = {
 	{ "rt_thps4_steamer", "Elissa Steamer", 1, "rethawed/thps4" },
 	{ "rt_thps4_thomas", "Jamie Thomas", 0, "rethawed/thps4" },
 	{ "rt_thps4_vallely", "Mike Vallely", 0, "rethawed/thps4" },
+	{ "rt_thps4_chef", "Chef", 0, "rethawed/thps4" },
 	{ "rt_thps4_clown_a", "Clown", 0, "rethawed/thps4", 0.7f },
 	{ "rt_thps4_clown_a_hd", "Clown", 0, "rethawed/thps4" },
 	{ "rt_thps4_clown_b", "Clown", 0, "rethawed/thps4", 0.7f },
