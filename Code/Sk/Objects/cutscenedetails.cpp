@@ -3891,7 +3891,12 @@ bool CCutsceneData::create_objects( uint32* pData )
 				
 				pRefModel->SetBoundingSphere( Mth::Vector(0.0f,0.0f,0.0f,50000.0f) );
 				pRefModel->Hide( false );
+#ifndef THUG_DESKTOP
 				pRefModel->EnableScaling( false );
+#else
+				// Desktop (Marcus 2026-11-14): shrunk skaters (Pipo Monkeys, kids)
+				// keep their size in cutscenes and goal dialogue scenes
+#endif
 
 				pRefModelComponent->UpdateBrightness();
 			}
