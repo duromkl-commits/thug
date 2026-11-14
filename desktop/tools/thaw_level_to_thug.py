@@ -19,6 +19,8 @@ is THUG's engine two games on, so most things map across directly:
    script bytecode is THUG's, except THAW's short-offset if/else.
    <zone>_NodeArray is renamed NodeArray (THUG's LoadNodeArray wants that name). Game objects (CTF flags, crowns:
    THAW models) are made inert. Gap scripts carry over as they are.
+   Node names THAW's prefix scripts need (Warehouse's flickering start room)
+   are rebuilt and written as checksum-name entries.
 Personal use with your own copy of the game data.
 """
 import os
@@ -295,6 +297,78 @@ def qb_to_thug(data, renames=None, node_fix=None, keep=None):
     return bytes(w.o), q
 
 
+
+# ---------------------------------------------------------------- prefixes
+
+def prefix_strings(qbs):
+    """Strings passed as prefix = "..." in the zone's scripts."""
+    out = set()
+    for b in qbs:
+        for t, c, v in Q.QB(b).items:
+            if not isinstance(v, Q.Script):
+                continue
+            toks = list(Q.tokens(v.code))
+            for k in range(len(toks) - 2):
+                (_, a, ab), (_, e, _), (_, st, sb) = toks[k:k + 3]
+                if a == 0x16 and struct.unpack_from('<I', ab, 1)[0] == crc('prefix') and e == 7 and st == 0x1b:
+                    out.add(sb[5:-1].decode('latin-1'))
+    return out
+
+
+def sector_geometry(d):
+    """{sector crc: (positions, mean vertex brightness)} from a THAW scene."""
+    sz, = struct.unpack_from('<I', d, 0x24)
+    S = 0x20 + sz
+    B = S + 8 + struct.unpack_from('<I', d, S + 4)[0]
+    nsec, o1, o2, _, o3, o4 = struct.unpack_from('<6I', d, B + 0x80)
+    mo = B + o4
+    geo = {}
+    for s in range(nsec):
+        scs, = struct.unpack_from('<I', d, B + o1 + 48 * s + 4)
+        nm, = struct.unpack_from('<I', d, B + o2 + 0x68 * s + 0x44)
+        P = []; C = []
+        for _ in range(nm):
+            nv, = struct.unpack_from('<H', d, mo + 0x26)
+            vo, = struct.unpack_from('<I', d, mo + 0x7c)
+            a = np.frombuffer(d[B + vo:B + vo + nv * 36], np.uint8).reshape(-1, 36)
+            P.append(a[:, :12].copy().view(np.float32)); C.append(a[:, 24:27].astype(float))
+            mo += 0xe0
+        if P:
+            geo[scs] = (np.concatenate(P), float(np.concatenate(C).mean()))
+    return geo
+
+
+def light_dark_names(geo, prefixes):
+    """Node names for a lit/unlit room pair.
+
+    THAW finds prefix = "X" nodes by their names, and the shipped qbs carry
+    only name checksums. Warehouse's start room is two copies of the same
+    geometry, <X>_Light and <X>_Dark, swapped by a flicker script: without
+    names both stay drawn and fight (stripes). Copies are found by identical
+    vertices; the darker of each pair is _Dark. Returns {crc: name}, to be
+    written as THUG checksum-name entries so its prefix lookup finds them."""
+    names = {}
+    for light in prefixes:
+        if not light.endswith('_Light'):
+            continue
+        dark = light[:-len('_Light')] + '_Dark'
+        if dark not in prefixes:
+            continue
+        keys = list(geo); n = 0
+        for i, a in enumerate(keys):
+            for b in keys[i + 1:]:
+                Pa, Pb = geo[a][0], geo[b][0]
+                if a in names or b in names or len(Pa) != len(Pb):
+                    continue
+                if np.allclose(np.sort(Pa, 0), np.sort(Pb, 0), atol=0.5):
+                    lo, hi = (a, b) if geo[a][1] <= geo[b][1] else (b, a)
+                    n += 1
+                    names[lo] = '%s%02d' % (dark, n)
+                    names[hi] = '%s%02d' % (light, n)
+        print('%s/%s: %d sector pairs' % (light, dark, n))
+    return names
+
+
 INERT = crc('th4_unused')
 
 
@@ -327,6 +401,12 @@ def convert_level(pak, L, dst):
     qbs = {n: b for t, n, b in files if n.endswith('.qb.wpc')}
     main = next(b for n, b in qbs.items() if n.endswith('/%s.qb.wpc' % zone))
     q, _ = qb_to_thug(main, renames, {crc('NodeArray'): fix_nodes})
+    scn_raw = next(b for t, n, b in files if t == T_SCN)
+    names = light_dark_names(sector_geometry(scn_raw), prefix_strings(qbs.values()))
+    if names:
+        # THUG reads node names from checksum-name entries in the node qb.
+        q = q[:-1] + b''.join(b'\x2b' + struct.pack('<I', c) + nm.encode() + b'\x00'
+                              for c, nm in sorted(names.items())) + b'\x00'
     open(os.path.join(o, L + '.qb'), 'wb').write(q)
     sc = next((b for n, b in qbs.items() if n.endswith('/%s_scripts.qb.wpc' % zone)), None)
     s, _ = qb_to_thug(sc) if sc else (b'\x01\x00', None)
