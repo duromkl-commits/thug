@@ -10,7 +10,8 @@ def crc(s):
     return c
 
 def lzss(src, n):
-    ring = bytearray(4096); r = 4078; out = bytearray(); i = 0; flags = 0
+    # Ring starts full of spaces, as in Neversoft's encoder (Code/Core/compress.cpp).
+    ring = bytearray(b" " * 4096); r = 4078; out = bytearray(); i = 0; flags = 0
     while len(out) < n and i < len(src):
         flags >>= 1
         if not flags & 0x100:
