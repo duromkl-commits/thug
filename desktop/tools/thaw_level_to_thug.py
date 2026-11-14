@@ -140,15 +140,19 @@ def convert_scn(d, has_alpha):
         for _ in range(nm):
             assert d[mo] == 0x40, hex(mo)
             mat, = struct.unpack_from('<I', d, mo + 0x14)
+            # Vertex: pos, normal, colour, then 0-2 uv sets (count @0x41);
+            # stride 28 + 8 per set. Only the first set is used.
             st = d[mo + 0x18]
-            assert st == 36, st
+            nuv = d[mo + 0x41]
+            assert st == 28 + 8 * nuv, (st, nuv)
             nv, = struct.unpack_from('<H', d, mo + 0x26)
             ni, = struct.unpack_from('<I', d, mo + 0x28)
             io, = struct.unpack_from('<I', d, mo + 0x5c)
             vo, = struct.unpack_from('<I', d, mo + 0x7c)
-            v = np.frombuffer(d[B + vo:B + vo + nv * 36], dt)
+            a = np.frombuffer(d[B + vo:B + vo + nv * st], np.uint8).reshape(-1, st)
             idx = np.array(struct.unpack_from('<%dH' % ni, d, B + io + 4), np.int64) + base
-            P.append(v['p']); C.append(v['c']); UV.append(v['uv'])
+            P.append(a[:, 0:12].copy().view('<f4')); C.append(a[:, 24:28].copy().view('<u4')[:, 0])
+            UV.append(a[:, 28:36].copy().view('<f4') if nuv else np.zeros((nv, 2), np.float32))
             meshes.append((mat, idx))
             base += nv
             mo += 0xe0
@@ -240,7 +244,7 @@ def fix_code(code):
         elif t == 0x48:
             out.append(0x26)
         elif t == 0x49:
-            raise ValueError('THAW short jump in a script')
+            pass	# case's jump to the next case: THUG's switch skips by itself
         elif t == 0x16 and struct.unpack_from('<I', b, 1)[0] in THAW_ONLY:
             out += b'\x16' + struct.pack('<I', THAW_ONLY[struct.unpack_from('<I', b, 1)[0]])
         else:
@@ -349,7 +353,8 @@ def sector_geometry(d):
         for _ in range(nm):
             nv, = struct.unpack_from('<H', d, mo + 0x26)
             vo, = struct.unpack_from('<I', d, mo + 0x7c)
-            a = np.frombuffer(d[B + vo:B + vo + nv * 36], np.uint8).reshape(-1, 36)
+            st = d[mo + 0x18]
+            a = np.frombuffer(d[B + vo:B + vo + nv * st], np.uint8).reshape(-1, st)
             P.append(a[:, :12].copy().view(np.float32)); C.append(a[:, 24:27].astype(float))
             mo += 0xe0
         if P:
@@ -428,17 +433,34 @@ def level_sounds(qbs):
 INERT = crc('th4_unused')
 
 
-def fix_nodes(nodes):
-    """GameObjects (THAW models: CTF flags, crowns) can't be created in THUG."""
-    out = []
-    for n in nodes:
-        n = Q.Struct(n)
-        cls = dict((k, v) for k, v in n if k).get(crc('Class'))
-        if cls == crc('GameObject'):
-            n = Q.Struct([(k, Q.Key(INERT) if k == crc('Class') else v) for k, v in n
-                          if k not in (crc('Model'),) and not (k == 0 and v == crc('CreatedAtStart'))])
-        out.append(n)
-    return out
+# Node classes whose objects need THAW models/particles THUG doesn't have.
+INERT_CLASSES = {crc('GameObject'), crc('Pedestrian'), crc('Vehicle'), crc('ParticleObject'),
+                 crc('ParticleEmitter')}
+
+
+def node_fixer(root_structs):
+    """Node array fix-up: THAW's node compression and model objects.
+
+    Bigger zones store shared node fields once, as root structs
+    (ncomp_LevelGeometry_1 = { Class = LevelGeometry CreatedAtStart ... })
+    that nodes name as a bare flag; they are expanded in place. Objects that
+    need THAW models (game objects, peds, cars, particles) are made inert."""
+    def fix(nodes):
+        out = []
+        for n in nodes:
+            e = []
+            for k, v in n:
+                if k == 0 and isinstance(v, int) and v in root_structs:
+                    e += list(root_structs[v])
+                else:
+                    e.append((k, v))
+            cls = dict((k, v) for k, v in e if k).get(crc('Class'))
+            if cls in INERT_CLASSES:
+                e = [(k, Q.Key(INERT) if k == crc('Class') else v) for k, v in e
+                     if k not in (crc('Model'),) and not (k == 0 and v == crc('CreatedAtStart'))]
+            out.append(Q.Struct(e))
+        return out
+    return fix
 
 
 def convert_level(pak, L, dst):
@@ -457,7 +479,8 @@ def convert_level(pak, L, dst):
     qbs = {n: b for t, n, b in files if n.endswith('.qb.wpc')}
     main = next(b for n, b in qbs.items() if n.endswith('/%s.qb.wpc' % zone))
     snd = level_sounds(qbs.values())
-    q, _ = qb_to_thug(main, renames, {crc('NodeArray'): fix_nodes},
+    roots = {c: v for t, c, v in Q.QB(main).items if isinstance(v, Q.Struct)}
+    q, _ = qb_to_thug(main, renames, {crc('NodeArray'): node_fixer(roots)},
                       extra={crc('LoadTerrain'): snd} if snd else None)
     scn_raw = next(b for t, n, b in files if t == T_SCN)
     names = light_dark_names(sector_geometry(scn_raw), prefix_strings(qbs.values()))

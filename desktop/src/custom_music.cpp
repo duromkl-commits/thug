@@ -2961,6 +2961,14 @@ static const NiveauTH4 s_niveaux_th4[] = {
 	// skate only for now (not in THUG's story level select).
 	{ "rt_ware", "Warehouse", 32, NULL,
 	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.5 heading_0 = 90 pitch_0 = -60 red_0 = 75 green_0 = 75 blue_0 = 75 mod_factor_0 = 0.7 heading_1 = 0 pitch_1 = -90 red_1 = 0 green_1 = 0 blue_1 = 0 mod_factor_1 = 1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "rt_sch", "School", 33, NULL,
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "rt_dj", "Downhill Jam", 34, NULL,
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "rt_burn", "Burnside", 35, NULL,
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
+	{ "rt_ros", "Roswell", 36, NULL,
+	  "ambient_red = 72 ambient_green = 72 ambient_blue = 72 ambient_mod_factor = 0.2 heading_0 = -30 pitch_0 = -60 red_0 = 110 green_0 = 110 blue_0 = 105 mod_factor_0 = 0.8 heading_1 = 200 pitch_1 = 33 red_1 = 23 green_1 = 24 blue_1 = 30 mod_factor_1 = 0.1 fog_red = 0 fog_green = 0 fog_blue = 0 fog_alpha = 0 fog_dist = 0" },
 };
 
 static bool niveau_installe( const char *dossier )
