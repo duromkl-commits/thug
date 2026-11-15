@@ -29,6 +29,8 @@ from scipy.spatial import cKDTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+NECK_MAP = False	# gmod_to_thug sets it: see the torso mapping in fit()
+
 PRO_SKINS = ('skater_hawk', 'skater_koston', 'skater_campbell', 'skater_vallely')
 
 SIDES = ('L', 'R')
@@ -176,6 +178,12 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
     # head: moves with the neck, keeps its size
     hd = share('Bone_Neck', 'Bone_Head', 'Bone_Jaw', 'Bone_Brow', 'Cloth_Hat', 'Bone_PonyTail_1', 'Bone_PonyTail_2')
     H = P + (t['Bone_Neck'] - J['Bone_Neck'])
+    if NECK_MAP and 'Bone_Neck' in J:
+        # gmod rigs: keep the source's neck length above the shoulders instead of
+        # snapping the head onto THUG's lower neck joint (head sank into the collar)
+        H[:, 1] += th_sh + (J['Bone_Neck'][1] - sh) - t['Bone_Neck'][1]
+        if log:
+            log('neck kept %.1f above THUG joint' % (th_sh + (J['Bone_Neck'][1] - sh) - t['Bone_Neck'][1]))
     def split(sh_, coord, j1, j2, soft=1.0):
         """A limb's share cut into its three segments by where each vertex
         lies along it (x for an arm, height for a leg), not by its weights:

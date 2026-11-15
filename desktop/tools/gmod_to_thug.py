@@ -19,6 +19,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import source_mdl as S  # noqa: E402
 from gtadae_to_thug import build, frame  # noqa: E402
+import thug_fit  # noqa: E402
+thug_fit.NECK_MAP = True
 
 VB = 'ValveBiped.Bip01_'
 MAP = {'Pelvis': 'root hips', 'Spine': 'spine lower', 'Spine1': 'belly', 'Spine2': 'spine upper',

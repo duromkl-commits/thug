@@ -14,7 +14,7 @@ L = [
     ('Andy MacDonald (MTV Skateboarding)/Skaters/9999x_MTVAndyMacDonald/MTVAndyMacDonald', 'rt_andy_macdonald', 'Andy MacDonald', 0, None, ''),
     ('Big Smoke/Big Smoke/sk_bigsmoke', 'rt_big_smoke', 'Big Smoke', 0, None, ''),
     ('Carl Johnson/Carl Johnson/CarlJohnson', 'rt_carl_johnson', 'Carl Johnson', 0, None, ''),
-    ('Crash Bandicoot (Updated)/Crash Bandicoot/Crash/Crash', 'rt_crash', 'Crash', 0, None, ''),
+    ('Crash Bandicoot (Updated)/Crash Bandicoot/Crash/Crash', 'rt_crash', 'Crash', 0, 0.75, ''),
     ('Dagoth Ur/dagoth ur/skater_burnquist_thaw', 'rt_dagoth_ur', 'Dagoth Ur', 0, None, ''),
     ('Disneys Extremely Goofy Skateboarding - Goofy  Max/Skaters/DEGS/Goofy/degs_goofy', 'rt_goofy', 'Goofy', 0, None, 'degs_goofy'),
     ('Disneys Extremely Goofy Skateboarding - Goofy  Max/Skaters/DEGS/Max/degs_max', 'rt_max', 'Max', 0, None, 'degs_max'),
