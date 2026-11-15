@@ -21,6 +21,7 @@ import source_mdl as S  # noqa: E402
 from gtadae_to_thug import build, frame  # noqa: E402
 import thug_fit  # noqa: E402
 thug_fit.NECK_MAP = True
+thug_fit.LEG_GAP = 0.6
 
 VB = 'ValveBiped.Bip01_'
 MAP = {'Pelvis': 'root hips', 'Spine': 'spine lower', 'Spine1': 'belly', 'Spine2': 'spine upper',

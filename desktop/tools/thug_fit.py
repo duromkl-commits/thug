@@ -30,6 +30,7 @@ from scipy.spatial import cKDTree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 NECK_MAP = False	# gmod_to_thug sets it: see the torso mapping in fit()
+LEG_GAP = 0.0	# gmod_to_thug: min inches between a leg's inner side and the midline
 
 PRO_SKINS = ('skater_hawk', 'skater_koston', 'skater_campbell', 'skater_vallely')
 
@@ -195,6 +196,7 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
 
     segs = []
     feet = []
+    legs_ = []
     for s, sg in (('L', 1), ('R', -1)):
         a = [J[x % s] for x in ARM]; A = [t[x % s] for x in ARM]
         armsh = share(*[g % s for g in ARM_ALL])
@@ -209,6 +211,7 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
         segs.append((shin, l[1], l[2], Lt[1], Lt[2]))
         segs.append((foot, None, l[2], None, Lt[2]))
         feet.append((s, foot, Lt[2]))
+        legs_.append((sg, legsh, Lt[0][1], Lt[1][1]))
     limb = np.zeros(n)
     for sh_, a, b, A, B in segs:
         if not sh_.any():
@@ -224,6 +227,22 @@ def fit(P, W, J, index, tpos, ref=None, log=None, guess=False):
     norm = limb + hd + rest
     out /= norm[:, None]
     Q = out
+    if LEG_GAP > 0:
+        # wide-legged sources squeezed onto THUG's narrower hips: the inner
+        # knees crossed the midline and stuck together; push each leg out,
+        # tapered to nothing at the crotch
+        for sg, ls, hy, ky in legs_:
+            m = ls > 0.95
+            if not m.any():
+                continue
+            low = m & (Q[:, 1] < ky + 2)
+            inner = (sg * Q[low, 0]).min() if low.any() else LEG_GAP
+            if inner < LEG_GAP:
+                inner = max(inner, LEG_GAP - 1.5)
+                f = np.clip((hy - 2 - Q[:, 1]) / 8.0, 0, 1) * ls
+                Q[:, 0] += sg * (LEG_GAP - inner) * f
+                if log:
+                    log('leg %+d pushed out %.1f in' % (sg, LEG_GAP - inner))
 
     # feet: soles levelled (some came out toes-up) and as long as a pro's
     # (some were tiny on the board), turned and scaled about THUG's ankle
