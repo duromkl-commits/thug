@@ -3099,7 +3099,29 @@ static void patch_dm( const unsigned char *qb, const std::vector<Jeton> &j, std:
 				// <arg> isn't allowed as an array element (the game's array reader
 				// spins on it: froze New Jersey's load), so [ X ] goes as a whole
 				const bool seul = b >= 1 && b + 1 < j.size() && qb[j[b - 1].pos] == T_TAB && qb[j[b + 1].pos] == T_FTAB;
-				std::string q = std::string( "DesktopDmGoal name = " ) + arg + " " + appel + ( seul ? " tableau" : "" ) + " def = ";
+				// one name of a longer [ A B ... ] list: the whole list goes, rebuilt
+				// by DesktopDmGoal with the roll at the same index (tab/idx)
+				size_t t0 = 0, t1 = 0; std::string tab; int idx = -1;
+				if( !seul && type == T_NOM )
+				{
+					size_t a0 = b;
+					while( a0 > 0 && ( qb[j[a0 - 1].pos] == T_NOM || qb[j[a0 - 1].pos] == T_EOL || qb[j[a0 - 1].pos] == T_EOLNUM )) --a0;
+					size_t a1 = b;
+					while( a1 + 1 < j.size() && ( qb[j[a1 + 1].pos] == T_NOM || qb[j[a1 + 1].pos] == T_EOL || qb[j[a1 + 1].pos] == T_EOLNUM )) ++a1;
+					if( a0 > 0 && qb[j[a0 - 1].pos] == T_TAB && a1 + 1 < j.size() && qb[j[a1 + 1].pos] == T_FTAB )
+					{
+						t0 = a0 - 1; t1 = a1 + 1; idx = 0; tab = "tab = [ ";
+						int n = 0;
+						for( size_t e = a0; e <= a1; ++e )
+						{
+							if( qb[j[e].pos] != T_NOM ) continue;
+							if( e == b ) idx = n;
+							char v[16]; snprintf( v, sizeof( v ), "#%08x ", lit32( qb + j[e].pos + 1 )); tab += v; ++n;
+						}
+						char v[24]; snprintf( v, sizeof( v ), "] idx = %d", idx ); tab += v;
+					}
+				}
+				std::string q = std::string( "DesktopDmGoal name = " ) + arg + " " + appel + ( seul ? " tableau" : "" ) + ( tab.empty() ? "" : " " + tab ) + " def = ";
 				if( type == T_ENTIER ) { char v[16]; snprintf( v, sizeof( v ), "%d", (int)lit32( qb + j[b].pos + 1 )); q += v; }
 				else if( type == T_NOM ) { char v[16]; snprintf( v, sizeof( v ), "#%08x", lit32( qb + j[b].pos + 1 )); q += v; }
 				else q += std::string( "\"" ) + (const char *)( qb + j[b].pos + 5 ) + "\"";
@@ -3108,9 +3130,42 @@ static void patch_dm( const unsigned char *qb, const std::vector<Jeton> &j, std:
 				m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
 				Ecrit r; r.octet( T_ARG ); r.nom( arg );
 				if( seul ) m.push_back( Modif{ j[b - 1].pos, j[b + 1].pos + j[b + 1].taille - j[b - 1].pos, r.o } );
+				else if( !tab.empty())
+				{
+					m.push_back( Modif{ j[t0].pos, j[t1].pos + j[t1].taille - j[t0].pos, r.o } );
+					b = t1;
+				}
 				else m.push_back( Modif{ j[b].pos, j[b].taille, r.o } );
 			}
 			VLOG( "MUS", "%s: %d goal values randomizable", nom, num );
+			return;
+		}
+}
+
+// Demented goal randomization for a field the goal doesn't have (a time on
+// a goal that uses the default one): 'champ = <arg>' goes in at the start of
+// the script's first struct (the AddGoal_X { ... } params); outside Demented
+// DesktopDmGoal leaves arg unset, so the field isn't there at all.
+static void patch_dm_ajout( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
+                            const char *nom, const char *champ, const char *appel )
+{
+	const uint32_t n = crc( nom );
+	static int s_num = 0;
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+		{
+			size_t a = k + 2;
+			while( a < j.size() && qb[j[a].pos] != T_EOL && qb[j[a].pos] != T_EOLNUM ) ++a;
+			size_t b = a;
+			while( b < j.size() && qb[j[b].pos] != T_STRUCT && qb[j[b].pos] != T_ENDSCRIPT ) ++b;
+			if( a >= j.size() || b >= j.size() || qb[j[b].pos] != T_STRUCT ) return;
+			char arg[32]; snprintf( arg, sizeof( arg ), "desktop_dma_%d", s_num++ );
+			std::string q = std::string( "DesktopDmGoal name = " ) + arg + " " + appel + " absent\n";
+			Ecrit w; compile_q( w, q.c_str());
+			m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
+			Ecrit r; r.nom( champ ); r.octet( T_EGAL ); r.octet( T_ARG ); r.nom( arg ); r.eol();
+			m.push_back( Modif{ j[b].pos + j[b].taille, 0, r.o } );
+			VLOG( "MUS", "%s: %s added (Demented)", nom, champ );
 			return;
 		}
 }
@@ -3202,6 +3257,93 @@ static void patch_dm_goals( const unsigned char *qb, const std::vector<Jeton> &j
 	patch_debut( qb, j, m, "NJ_Goal_Trickspot9_Start", "DesktopDmGoal name = score eric = start\n" );
 	patch_avant( qb, j, m, "NJ_Goal_Trickspot9_Score_add", "FormatText",
 		"DesktopDmGoal name = score eric = go key = 7 lo = 175000 hi = 1050000 step = 5000 time = 60.0\n" );
+
+	// Marcus's 16 Nov list ----------------------------------------------
+	// NJ: scrap metal for the tombstone maker, first part 15 - 45 s
+	patch_dm( qb, j, m, "NJ_AddGoal_TombCollect", "time", T_ENTIER, 45, "key = 8 lo = 15 hi = 45 step = 5" );
+	patch_dm( qb, j, m, "NJ_AddGoal_TombCollect", "time", T_ENTIER, 120, "key = 8 lo = 15 hi = 45 step = 5" );
+	// NJ: train station, 5 - 10 grinds around the circle
+	static const int stew[] = { 2, 3, 5 };
+	for( int i = 0; i < 3; ++i ) patch_dm( qb, j, m, "NJ_AddGoal_PorkAttack", "number", T_ENTIER, stew[i], "key = 9 lo = 5 hi = 10" );
+	patch_dm( qb, j, m, "NJ_AddGoal_PorkAttack", "goal_text", T_CHAINE, 0, "key = 9 lo = 5 hi = 10 fmt = \"Make Stew chase you %s times around the circle!\"" );
+	// NY: High Score 150,000 - 600,000 in 15 s - 2 min
+	patch_dm( qb, j, m, "NY_AddGoal_HS", "score", T_NOM, crc( "NY_HighScore_Score_Hard" ), "key = 10 lo = 150000 hi = 600000 step = 5000" );
+	patch_dm( qb, j, m, "NY_AddGoal_HS", "goal_text", T_NOM, crc( "NY_HighScore_Text_Hard" ), "key = 10 lo = 150000 hi = 600000 step = 5000 fmt = \"Get a High Score: %s points\"" );
+	patch_dm_ajout( qb, j, m, "NY_AddGoal_HS", "time", "key = 11 lo = 15 hi = 120 step = 5" );
+	// NY: Hold-grind combos, 1 - 4 rounds of Sick's 30 s
+	patch_dm( qb, j, m, "NY_AddGoal_HoldGrindTetris", "time", T_ENTIER, 30, "key = 12 lo = 1 hi = 4 mul = 30" );
+	patch_dm( qb, j, m, "NY_AddGoal_HoldGrindTetris", "time_to_stop_adding_tricks", T_ENTIER, 29, "key = 12 lo = 1 hi = 4 mul = 30 plus = -1" );
+	// NY: help the student, 30 s - 2 min
+	patch_dm_ajout( qb, j, m, "NY_AddGoal_NYUHottie", "time", "key = 13 lo = 30 hi = 120 step = 5" );
+	// NY: kill 5 famous skatespots, 1x - 10x each score, 15 s - 2 min each
+	static const struct { const char *s, *sc, *tx, *fmt; int lo; } spots[] = {
+		{ "NY_AddGoal_KillPY", "NY_KillPY_Score_Hard", "NY_KillPY_Text_Hard", "Score %s points at the Pyramid Ledges.", 5000 },
+		{ "NY_AddGoal_Kill77", "NY_Kill77_Score_Hard", "NY_Kill77_Text_Hard", "Score %s points in 78 Water", 10000 },
+		{ "NY_AddGoal_KillWaterfront", "NY_KillWaterfront_Score_Hard", "NY_KillWaterfront_Text_Hard", "Score %s points in the Waterfront", 20000 },
+		{ "NY_AddGoal_KillVet", "NY_KillVet_Score_Hard", "NY_KillVet_Text_Hard", "Score %s points in the Vet", 30000 },
+		{ "NY_AddGoal_KillBanks", "NY_KillBanks_Score_Hard", "NY_KillBanks_Text_Hard", "Score %s points in the Brooklyn Banks.", 40000 } };
+	for( int i = 0; i < 5; ++i )
+	{
+		char a[160], t[200], h[64];
+		snprintf( a, sizeof( a ), "key = %d lo = %d hi = %d step = 1000", 14 + i, spots[i].lo, spots[i].lo * 10 );
+		snprintf( t, sizeof( t ), "%s fmt = \"%s\"", a, spots[i].fmt );
+		snprintf( h, sizeof( h ), "key = %d lo = 15 hi = 120 step = 5", 19 + i );
+		patch_dm( qb, j, m, spots[i].s, "score", T_NOM, crc( spots[i].sc ), a );
+		patch_dm( qb, j, m, spots[i].s, "goal_text", T_NOM, crc( spots[i].tx ), t );
+		patch_dm_ajout( qb, j, m, spots[i].s, "time", h );
+	}
+	// NY: Stacy's relative 200,000 - 1,200,000
+	patch_dm( qb, j, m, "NY_AddGoal_RelativeBoss", "score", T_NOM, crc( "NY_RelativeBoss_Score_Hard" ), "key = 24 lo = 200000 hi = 1200000 step = 5000" );
+	patch_dm( qb, j, m, "NY_AddGoal_RelativeBoss", "goal_text", T_NOM, crc( "NY_RelativeBoss_Text_Hard" ),
+		"key = 24 lo = 200000 hi = 1200000 step = 5000 fmt = \"Get a High Score: %s points inside the building\"" );
+	// NY: find the punks who stole the decks, 45 s - 3 min
+	patch_dm( qb, j, m, "NY_AddGoal_DeliverDecks", "time", T_ENTIER, 180, "key = 25 lo = 45 hi = 180 step = 5" );
+	// Tampa: stickers, just "Remove 5 stickers", 45 s - 2 min
+	patch_dm( qb, j, m, "FL_AddGoal_Gap2", "goal_text", T_CHAINE, 0, "key = 26 fmt = \"Remove 5 stickers\"" );
+	patch_dm_ajout( qb, j, m, "FL_AddGoal_Gap2", "time", "key = 27 lo = 45 hi = 120 step = 5" );
+	// Tampa: donuts 10 s - 1 min
+	patch_dm( qb, j, m, "FL_AddGoal_Collect", "time", T_ENTIER, 60, "key = 28 lo = 10 hi = 60 step = 5" );
+	// Tampa: private eye's awning transfer, Sick's Japan (Circle+UpLeft) is any grab slot
+	static const char *awning[] = { "FL_AddGoal_Counter2", "FL_Gap_LapDance1", "FL_Gap_LapDance2" };
+	for( int i = 0; i < 3; ++i )
+		patch_dm( qb, j, m, awning[i], NULL, T_NOM, crc( "Air_CircleUL" ),
+			"key = 29 cles = [ Air_CircleU Air_CircleD Air_CircleL Air_CircleR Air_CircleUL Air_CircleUR Air_CircleDL Air_CircleDR ]" );
+	// Tampa: Andrew's 3 best combos, 1x - 10x
+	for( int i = 0; i < 3; ++i )
+	{
+		char n[40], a[120], t[160], sp[24];
+		snprintf( n, sizeof( n ), "FL_HORSE_Hard_Score%d", i + 1 );
+		snprintf( a, sizeof( a ), "key = %d lo = %d hi = %d step = 5000", 30 + i, ( 3 + i ) * 10000, ( 3 + i ) * 100000 );
+		patch_dm( qb, j, m, "FL_AddGoal_Horse", "score", T_NOM, crc( n ), a );
+		snprintf( n, sizeof( n ), "FL_HORSE_Hard_Text%d", i + 1 );
+		snprintf( t, sizeof( t ), "%s fmt = \"%%s points\"", a );
+		snprintf( sp, sizeof( sp ), "fl_horse_spot0%d", i + 1 );
+		patch_dm( qb, j, m, sp, "text", T_NOM, crc( n ), t );
+	}
+	// Contests: Sick's medal scores x the chapter number (Marcus: every chapter they're in)
+	static const char *comps[][2] = { { "FL_AddGoal_StreetComp", "FL_StreetComp_Hard_" }, { "FL_Addgoal_VertComp", "FL_VertComp_Hard_" },
+		{ "HI_Addgoal_LuauComp", "HI_Luau_Comp_Hard_" } };
+	static const char *medal[][2] = { { "gold_score", "GoldScore" }, { "silver_score", "SilverScore" }, { "bronze_score", "BronzeScore" } };
+	for( int c = 0; c < 3; ++c )
+		for( int k = 0; k < 3; ++k )
+		{
+			char n[64]; snprintf( n, sizeof( n ), "%s%s", comps[c][1], medal[k][1] );
+			patch_dm( qb, j, m, comps[c][0], medal[k][0], T_NOM, crc( n ), "chap" );
+		}
+	// Tampa: SPoT roof, part 1 text only; part 2 300,000 - 1,200,000 in 1 - 2 min
+	patch_dm( qb, j, m, "FL_AddGoal_SPoTRoof", "goal_text", T_CHAINE, 0, "key = 33 fmt = \"Get onto the roof of SPoT.\"" );
+	patch_dm( qb, j, m, "FL_AddGoal_SPoTRoof_GenericScore", "score", T_NOM, crc( "FL_GenericScore_Hard_Score" ), "key = 34 lo = 300000 hi = 1200000 step = 5000" );
+	patch_dm( qb, j, m, "FL_AddGoal_SPoTRoof_GenericScore", "goal_text", T_NOM, crc( "FL_GenericScore_Hard_Text" ),
+		"key = 34 lo = 300000 hi = 1200000 step = 5000 fmt = \"Let's see you beat %s!\"" );
+	patch_dm_ajout( qb, j, m, "FL_AddGoal_SPoTRoof_GenericScore", "time", "key = 35 lo = 60 hi = 120 step = 5" );
+	// Tampa: best trick contest, each landed trick of the others scores
+	// between Sick's low end and its high end x the chapter number
+	static const char *bt[][2] = { { "FL_Goal_BestTrick_Eric_Score_add", "FL_BestTrick_Eric_Hard_Range2" },
+		{ "FL_Goal_BestTrick_Ron_Score_add", "FL_BestTrick_Skater_Hard_Range2" }, { "FL_Goal_BestTrick_Johnny_Score_add", "FL_BestTrick_Skater_Hard_Range2" },
+		{ "FL_Goal_BestTrick_Chicken_Score_add", "FL_BestTrick_Skater_Hard_Range2" }, { "FL_Goal_BestTrick_Raven_Score_add", "FL_BestTrick_Skater_Hard_Range2" },
+		{ "FL_Goal_BestTrick2_Score_add", "FL_BestTrick2_Hard_HighRange2" }, { "FL_Goal_BestTrick2_Score_add", "FL_BestTrick2_Hard_MidRange2" },
+		{ "FL_Goal_BestTrick2_Score_add", "FL_BestTrick2_Hard_LowRange2" } };
+	for( size_t i = 0; i < sizeof( bt ) / sizeof( bt[0] ); ++i ) patch_dm( qb, j, m, bt[i][0], "b", T_NOM, crc( bt[i][1] ), "chap" );
 }
 
 // Imported levels (desktop): THPS4's levels, converted to THUG files by

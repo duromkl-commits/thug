@@ -2526,6 +2526,16 @@ bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
 		pParams->GetChecksum( crc( "def" ), &v, Script::NO_ASSERT );
 		if( dm ) v = cles->GetChecksum( (int)( g % cles->GetSize()));
 		o->RemoveComponent( nom );
+		Script::CArray *tab = NULL; int idx = -1;
+		if( pParams->GetArray( crc( "tab" ), &tab, Script::NO_ASSERT ) && tab && tab->GetSize()
+		 && pParams->GetInteger( crc( "idx" ), &idx, Script::NO_ASSERT ) && idx >= 0 && idx < (int)tab->GetSize())
+		{	// key_combos = [ A X ]: the list again, X rolled
+			Script::CArray a;
+			a.SetSizeAndType( tab->GetSize(), ESYMBOLTYPE_NAME );
+			for( uint32 i = 0; i < tab->GetSize(); ++i ) a.SetChecksum( i, (int)i == idx ? v : tab->GetChecksum( i ));
+			o->AddArray( nom, &a );
+			return true;
+		}
 		if( pParams->ContainsFlag( crc( "tableau" )))	// key_combos = [ X ]
 		{
 			Script::CArray a;
@@ -2539,11 +2549,21 @@ bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
 	const char *fmt = NULL;
 	pParams->GetString( crc( "fmt" ), &fmt, Script::NO_ASSERT );
 	o->RemoveComponent( nom );
+	// def may name a global (score = NY_HighScore_Score_Hard)
+	uint32 gdef = 0; int idef = 0;
+	pParams->GetInteger( crc( "def" ), &idef, Script::NO_ASSERT );
+	if( pParams->GetChecksum( crc( "def" ), &gdef, Script::NO_ASSERT ) && gdef )
+	{
+		Script::CSymbolTableEntry *e = Script::Resolve( gdef );
+		if( e && e->mType == ESYMBOLTYPE_INTEGER ) idef = e->mIntegerValue;
+	}
 	if( !dm )
 	{
-		const char *t = NULL; int v = 0;
-		if( pParams->GetString( crc( "def" ), &t, Script::NO_ASSERT )) o->AddString( nom, t );
-		else { pParams->GetInteger( crc( "def" ), &v, Script::NO_ASSERT ); o->AddInteger( nom, v ); }
+		const char *t = NULL;
+		if( pParams->ContainsFlag( crc( "absent" ))) {}	// the goal's own default
+		else if( pParams->GetString( crc( "def" ), &t, Script::NO_ASSERT )) o->AddString( nom, t );
+		else if( gdef ) o->AddChecksum( nom, gdef );
+		else o->AddInteger( nom, idef );
 		return true;
 	}
 	int lo = 0, hi = 0, step = 1;
@@ -2552,7 +2572,16 @@ bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
 	pParams->GetInteger( crc( "step" ), &step, Script::NO_ASSERT );
 	if( step < 1 ) step = 1;
 	if( hi < lo ) hi = lo;
-	const int v = lo + (int)( g % (uint64)(( hi - lo ) / step + 1 )) * step;
+	int v = lo + (int)( g % (uint64)(( hi - lo ) / step + 1 )) * step;
+	if( pParams->ContainsFlag( crc( "chap" )))
+	{	// x the chapter number (contests, Marcus 2026-11-16): fixed, no roll
+		Game::CGoalManager *gm = Game::GetGoalManager();
+		const int c = gm ? gm->GetCurrentChapter() + 1 : 1;
+		v = idef * ( c < 1 ? 1 : c );
+	}
+	int mul = 1, plus = 0;
+	if( pParams->GetInteger( crc( "mul" ), &mul, Script::NO_ASSERT )) v *= mul;
+	if( pParams->GetInteger( crc( "plus" ), &plus, Script::NO_ASSERT )) v += plus;
 	if( fmt )
 	{
 		char n[24], t[160];
