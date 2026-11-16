@@ -376,6 +376,7 @@ static GLuint s_gamma_prog = 0;
 static GLint  s_gamma_loc_reve = -1;
 extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte );	// desktop_demented.cpp
 extern "C" float desktop_chaos_ghost( void );	// desktop_demented.cpp: Chaos Heavy Ghosting, 0 = off
+extern "C" float desktop_chaos_seisme( void );	// desktop_demented.cpp: Chaos Earthquake strength, 0 = off
 // SetScreenBlur from the game's scripts (PS2 ghosting): previous frame weight
 static float s_flou_script = 0.0f;
 extern "C" void desktop_set_screen_blur( int amount )
@@ -563,11 +564,34 @@ static void gamma_draw( int x, int y, int w, int h, GLuint img )
 		glUniform3f( s_gamma_loc_reve, ra, rt, rh );
 	}
 	glBindTexture( GL_TEXTURE_2D, img );
+	// Demented Chaos EARTHQUAKE!!!: the whole picture (game, HUD, cutscenes)
+	// jolts and tilts, zoomed in just enough that no edge shows
+	float qx[4] = { -1, 1, -1, 1 }, qy[4] = { -1, -1, 1, 1 };
+	{
+		const float q = desktop_chaos_seisme();
+		if( q > 0.0f )
+		{
+			const float t = (float)SDL_GetTicks() / 1000.0f;
+			const float dx = q * 0.035f * ( 0.6f * sinf( t * 37.0f ) + 0.4f * sinf( t * 23.0f + 1.3f ));
+			const float dy = q * 0.035f * ( 0.6f * sinf( t * 41.0f + 0.7f ) + 0.4f * sinf( t * 29.0f ));
+			const float r = q * 0.025f * sinf( t * 17.0f );
+			const float asp = h > 0 ? (float)w / (float)h : 1.0f;
+			const float z = 1.0f + ( asp + 1.0f / asp ) * fabsf( r ) + 2.2f * q * 0.035f;
+			const float c = cosf( r ), sn = sinf( r );
+			for( int i = 0; i < 4; ++i )
+			{
+				// rotate in pixel space so the tilt isn't squashed by the aspect
+				const float px = qx[i] * z * asp, py = qy[i] * z;
+				qx[i] = ( px * c - py * sn ) / asp + dx;
+				qy[i] = px * sn + py * c + dy;
+			}
+		}
+	}
 	glBegin( GL_TRIANGLE_STRIP );
-	glTexCoord2f( 0, 0 ); glVertex2f( -1, -1 );
-	glTexCoord2f( 1, 0 ); glVertex2f(  1, -1 );
-	glTexCoord2f( 0, 1 ); glVertex2f( -1,  1 );
-	glTexCoord2f( 1, 1 ); glVertex2f(  1,  1 );
+	glTexCoord2f( 0, 0 ); glVertex2f( qx[0], qy[0] );
+	glTexCoord2f( 1, 0 ); glVertex2f( qx[1], qy[1] );
+	glTexCoord2f( 0, 1 ); glVertex2f( qx[2], qy[2] );
+	glTexCoord2f( 1, 1 ); glVertex2f( qx[3], qy[3] );
 	glEnd();
 
 	glBindBuffer( GL_ARRAY_BUFFER, buf );
@@ -655,7 +679,7 @@ extern "C" void vglSwapBuffers( GLboolean )
 	glClear( GL_COLOR_BUFFER_BIT );
 	const DesktopConfig &cfg = desktop_config();
 	const bool gamma = ( s_gamma_k[0] != 1.0f || s_gamma_k[1] != 1.0f || s_gamma_k[2] != 1.0f
-	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f || desktop_chaos_ghost() > 0.0f || s_flou_script > 0.0f
+	                     || cfg.ps2_dither || cfg.overscan > 0.0f || cfg.soften > 0.0f || cfg.ghosting > 0.0f || desktop_chaos_ghost() > 0.0f || desktop_chaos_seisme() > 0.0f || s_flou_script > 0.0f
 	                     || cfg.tv_levels || cfg.saturation != 1.0f || desktop_chaos_dream( &s_reve_tmp[0], &s_reve_tmp[1], &s_reve_tmp[2] ))
 	                   && gamma_prog();
 	if( gamma )
