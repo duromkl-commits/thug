@@ -29,6 +29,8 @@
 
 #ifdef THUG_DESKTOP
 extern "C" unsigned int desktop_chaos_son_graine( void );	// desktop_demented.cpp: 0 = off
+// set while the skater's own sounds play (terrain.cpp, soundcomponent.cpp): never salad
+extern "C" { int desktop_son_brut = 0; }
 #endif
 #include <core/defines.h>
 
@@ -1058,7 +1060,7 @@ uint32 CSfxManager::PlaySound( uint32 checksum, sVolume *p_vol, float pitch, uin
 	// one-shot instead (the same swap all event long). Looping sounds are
 	// left alone, so nothing gets stuck playing.
 	{
-		const uint32 graine = desktop_chaos_son_graine();
+		const uint32 graine = desktop_son_brut ? 0 : desktop_chaos_son_graine();	// skating sounds stay (Marcus)
 		if( graine && !waveTableIndex->platformWaveInfo.looping )
 		{
 			static int s_ids[PERM_WAVE_TABLE_MAX_ENTRIES + WAVE_TABLE_MAX_ENTRIES];

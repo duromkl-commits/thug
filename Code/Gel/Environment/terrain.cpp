@@ -25,6 +25,9 @@
 #include <sk/gamenet/gamenet.h>
 #include <sys/config/config.h>
 #include <sys/replay/replay.h>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_son_brut;	// soundfx.cpp: the skater's sounds stay out of Sound Salad
+#endif
 
 
 
@@ -823,7 +826,13 @@ void					CTerrainManager::sPlaySound( ETerrainActionType action, ETerrainType te
 	
 	pitchPercent = sGetPitchPercent( &soundInfo, pitchPercent );
 	
+#ifdef THUG_DESKTOP
+	desktop_son_brut = 1;
+#endif
 	sfx_manager->PlaySound( soundInfo.m_soundChecksum, &vol, pitchPercent, 0, NULL, soundInfo.mp_soundName );
+#ifdef THUG_DESKTOP
+	desktop_son_brut = 0;
+#endif
 }
 
 /******************************************************************/

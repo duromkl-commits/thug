@@ -1814,6 +1814,26 @@ static void sans_icones( const char *in, std::string &o )
 			apres = r + 1;
 		}
 		while( !o.empty() && o[o.size() - 1] == ' ' && ( *apres == ' ' || *apres == 0 || *apres == '.' || *apres == ',' || *apres == '!' || *apres == '\\' )) o.erase( o.size() - 1 );
+		// a long trick name wraps the key combo over two lines ("(\bd" / "+ \b2)"),
+		// each line comes here alone: the "+" joining the halves goes too
+		{
+			size_t e = o.size();
+			while( e > 0 && o[e - 1] == ' ' ) --e;
+			if( e > 0 && ( o[e - 1] == '+' || o[e - 1] == '/' ))
+			{
+				--e;
+				while( e > 0 && o[e - 1] == ' ' ) --e;
+				o.erase( e );
+			}
+			const char *r = apres;
+			while( *r == ' ' ) ++r;
+			if(( *r == '+' || *r == '/' ) && ( r[1] == 0 || r[1] == ' ' || r[1] == ')' ))
+			{
+				++r;
+				while( *r == ' ' ) ++r;
+				if( *r == 0 || *r == ')' ) apres = r;
+			}
+		}
 		p = apres;
 	}
 }
@@ -2634,6 +2654,24 @@ static bool donne_skater( bool en_jeu )
 {
 	Flux f( &s_x_deal );	// seeded
 	Obj::CPlayerProfileManager *pm = ppm();
+	// Marcus 2026-11-16: a random skater only with the Chaos randomizer on;
+	// otherwise the run is played (every life) with the created skater, own stats
+	if( !s_run.mods[MOD_R_MONDE] && !s_run.mods[MOD_CHAOS] )
+	{
+		if( en_jeu ) return true;
+		Obj::CSkaterProfile *c = pm->GetProfileTemplate( CRCD( 0xa7be964, "custom" ));
+		const char *d = NULL;
+		if( c ) c->GetInfo()->GetString( CRCD( 0x2ab66cb8, "display_name" ), &d, Script::NO_ASSERT );
+		snprintf( s_run.nom, sizeof( s_run.nom ), "%s", d && *d ? d : "Created Skater" );
+		s_run.skater = CRCD( 0xa7be964, "custom" );
+		CFuncs::ScriptDesktopSelectSkaterLent( s_run.skater );
+		note_depart();
+		if( Game::CGoalManager *gm = Game::GetGoalManager())
+			for( int i = 0; i < gm->GetNumGoals(); ++i )
+				if( Game::CGoal *g = gm->GetGoalByIndex( i )) g->ReplaceTrickText();
+		VLOG( "DSK", "demented: created skater (no Chaos randomizer), %d starter tricks", (int)s_run.depart_cles.size());
+		return true;
+	}
 	std::vector<Obj::CSkaterProfile *> v;
 	const int n = (int)pm->GetNumProfileTemplates();
 	for( int i = 0; i < n; ++i )
