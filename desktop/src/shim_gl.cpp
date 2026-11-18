@@ -374,6 +374,7 @@ void (*g_desktop_post_hook)( GLuint, int, int ) = NULL;
 static float  s_gamma_k[3] = { 1.0f, 1.0f, 1.0f };
 static GLuint s_gamma_prog = 0;
 static GLint  s_gamma_loc_reve = -1;
+static GLint  s_gamma_loc_seis = -1;
 extern "C" int desktop_chaos_dream( float *amp, float *t, float *teinte );	// desktop_demented.cpp
 extern "C" float desktop_chaos_ghost( void );	// desktop_demented.cpp: Chaos Heavy Ghosting, 0 = off
 extern "C" float desktop_chaos_seisme( void );	// desktop_demented.cpp: Chaos Earthquake strength, 0 = off
@@ -419,6 +420,7 @@ static bool gamma_prog( void )
 		"uniform float tv;\n"		// 1 = TV video levels (PS2 output)
 		"uniform float sat;\n"		// colour saturation, 1 = unchanged
 		"uniform vec3 reve;\n"		// Demented Chaos: wave size, time, hue turn (radians)
+		"uniform vec4 seis;\n"		// Demented Chaos Earthquake: offset x, y, tilt (radians), zoom (1 = off)
 		"varying vec2 t;\n"
 		// 4x4 Bayer matrix (the ordered dither Aseprite uses): every
 		// threshold once, spread as evenly as possible, so a flat colour
@@ -437,6 +439,15 @@ static bool gamma_prog( void )
 	// One window pixel of the finished picture.
 		"vec3 px(vec2 f) {\n"
 		"	vec2 u = 0.5 + ((f - grille.xy) / taille.xy - 0.5) * zoom;\n"
+		"	if (seis.w > 1.0) {\n"
+		"		vec2 d = u - 0.5;\n"
+		"		float a = taille.x / taille.y;\n"
+		"		d.x *= a;\n"
+		"		float cs = cos(seis.z), sn = sin(seis.z);\n"
+		"		d = vec2(d.x * cs - d.y * sn, d.x * sn + d.y * cs) / seis.w;\n"
+		"		d.x /= a;\n"
+		"		u = 0.5 + d + seis.xy;\n"
+		"	}\n"
 		"	if (reve.x > 0.0) u += reve.x * vec2(sin(u.y * 17.0 + reve.y * 1.7), 0.6 * sin(u.x * 13.0 + reve.y * 1.3));\n"
 		"	if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) return vec3(0.0);\n"
 		"	vec3 c = texture2D(img, u).rgb;\n"
@@ -510,6 +521,7 @@ static bool gamma_prog( void )
 	s_gamma_loc_tv = glGetUniformLocation( p, "tv" );
 	s_gamma_loc_sat = glGetUniformLocation( p, "sat" );
 	s_gamma_loc_reve = glGetUniformLocation( p, "reve" );
+	s_gamma_loc_seis = glGetUniformLocation( p, "seis" );
 	GLint avant = 0;
 	glGetIntegerv( GL_CURRENT_PROGRAM, &avant );
 	glUseProgram( p );
@@ -565,28 +577,23 @@ static void gamma_draw( int x, int y, int w, int h, GLuint img )
 	}
 	glBindTexture( GL_TEXTURE_2D, img );
 	// Demented Chaos EARTHQUAKE!!!: the whole picture (game, HUD, cutscenes)
-	// jolts and tilts, zoomed in just enough that no edge shows
-	float qx[4] = { -1, 1, -1, 1 }, qy[4] = { -1, -1, 1, 1 };
+	// jolts and tilts, zoomed in just enough that no edge shows (done in the
+	// shader: it reads the picture by window pixel, not by the quad)
 	{
+		float sx = 0.0f, sy = 0.0f, sr = 0.0f, sz = 1.0f;
 		const float q = desktop_chaos_seisme();
 		if( q > 0.0f )
 		{
 			const float t = (float)SDL_GetTicks() / 1000.0f;
-			const float dx = q * 0.035f * ( 0.6f * sinf( t * 37.0f ) + 0.4f * sinf( t * 23.0f + 1.3f ));
-			const float dy = q * 0.035f * ( 0.6f * sinf( t * 41.0f + 0.7f ) + 0.4f * sinf( t * 29.0f ));
-			const float r = q * 0.025f * sinf( t * 17.0f );
+			sx = q * 0.03f * ( 0.6f * sinf( t * 37.0f ) + 0.4f * sinf( t * 23.0f + 1.3f ));
+			sy = q * 0.03f * ( 0.6f * sinf( t * 41.0f + 0.7f ) + 0.4f * sinf( t * 29.0f ));
+			sr = q * 0.025f * sinf( t * 17.0f );
 			const float asp = h > 0 ? (float)w / (float)h : 1.0f;
-			const float z = 1.0f + ( asp + 1.0f / asp ) * fabsf( r ) + 2.2f * q * 0.035f;
-			const float c = cosf( r ), sn = sinf( r );
-			for( int i = 0; i < 4; ++i )
-			{
-				// rotate in pixel space so the tilt isn't squashed by the aspect
-				const float px = qx[i] * z * asp, py = qy[i] * z;
-				qx[i] = ( px * c - py * sn ) / asp + dx;
-				qy[i] = px * sn + py * c + dy;
-			}
+			sz = 1.0f + ( asp + 1.0f / asp ) * fabsf( sr ) + 2.2f * q * 0.03f + 0.001f;
 		}
+		glUniform4f( s_gamma_loc_seis, sx, sy, sr, sz );
 	}
+	const float qx[4] = { -1, 1, -1, 1 }, qy[4] = { -1, -1, 1, 1 };
 	glBegin( GL_TRIANGLE_STRIP );
 	glTexCoord2f( 0, 0 ); glVertex2f( qx[0], qy[0] );
 	glTexCoord2f( 1, 0 ); glVertex2f( qx[1], qy[1] );
