@@ -1003,6 +1003,19 @@ uint32 CGoalPed::GetGoalAnimations( const char* type )
 	}
 	else if ( type )
 	{
+#ifdef THUG_DESKTOP
+		// Converted THPS4 levels carry <level>_pro_anims_<type> arrays made of
+		// THPS4's own ped anims: THUG's arrays name anims their pros lack.
+		const char* p_goal = strstr( p_goal_name, "_goal_" );
+		if ( !p_goal ) p_goal = strstr( p_goal_name, "_Goal_" );
+		if ( p_goal && p_goal - p_goal_name < 32 )
+		{
+			char level_array_name[128];
+			sprintf( level_array_name, "%.*s_pro_anims_%s", (int)( p_goal - p_goal_name ), p_goal_name, type );
+			if ( Script::GetArray( level_array_name, Script::NO_ASSERT ) )
+				return Script::GenerateCRC( level_array_name );
+		}
+#endif
 		// build the name of the pro's generic anims array
 		const char* p_pro_name = GetProFirstName();
 		char pro_array_name[128];

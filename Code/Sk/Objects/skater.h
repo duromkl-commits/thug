@@ -99,7 +99,11 @@
 	#endif
 #endif
 
-#if defined(__PLAT_XBOX__) || defined(__PLAT_WN32__)
+#if defined(THUG_DESKTOP)
+// Desktop plays with PS2 controls: either trigger breaks a spine, R2 walks one.
+#define	BREAK_SPINE_BUTTONS (control_pad.m_L2.GetPressed() || control_pad.m_R2.GetPressed())
+#define	WALK_SPINE_BUTTONS (control_pad.m_R2.GetPressed())
+#elif defined(__PLAT_XBOX__) || defined(__PLAT_WN32__)
 #define	BREAK_SPINE_BUTTONS (control_pad.m_L2.GetPressed() && control_pad.m_R2.GetPressed())
 #define	WALK_SPINE_BUTTONS (control_pad.m_L2.GetPressed() && control_pad.m_R2.GetPressed())
 #endif

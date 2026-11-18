@@ -276,6 +276,12 @@ private:
 	
 	// The offset from the skater's true origin at which to display the skater.  Used to get CAS scaled skaters looking correct.
 	float							m_display_offset;
+#ifdef THUG_DESKTOP
+	// Desktop: on-foot body lean (WalkComponent.cpp, desktop_lean).
+	void							desktop_lean ( Mth::Matrix& display );
+	bool							m_lean_valid;
+	float							m_lean_forward, m_lean_side, m_lean_side_rate, m_lean_forward_rate;
+#endif
 	
 	struct SContact
 	{

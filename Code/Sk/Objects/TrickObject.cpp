@@ -129,7 +129,7 @@ bool CTrickObject::InitializeTrickObjectColor( int seqIndex )
 
 	// TODO:  Should also screen out if it doesn't have any geometry
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(m_NameChecksum);				
-	Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",m_NameChecksum,Script::FindChecksumName(m_NameChecksum)));
+	if (!p_sector) return false;	// desktop: converted levels can have trick objects with no sector
 	p_sector->ClearColor();
 	if (!Config::CD())
 	{
@@ -150,7 +150,7 @@ bool CTrickObject::InitializeTrickObjectColor( int seqIndex )
 bool CTrickObject::ModulateTrickObjectColor( int seqIndex )
 {
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(m_NameChecksum);				
-	Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",m_NameChecksum,Script::FindChecksumName(m_NameChecksum)));
+	if (!p_sector) return false;	// desktop: converted levels can have trick objects with no sector
 
 	Script::CArray* p_graffiti_col_tab = Script::GetArray( "graffitiColors" );
 	Dbg_MsgAssert( (uint) seqIndex < p_graffiti_col_tab->GetSize(), ( "graffitiColors array too small" ) );
@@ -182,7 +182,7 @@ bool CTrickObject::ModulateTrickObjectColor( int seqIndex )
 bool CTrickObject::ClearTrickObjectColor( int seqIndex )
 {
 	Nx::CSector *p_sector = Nx::CEngine::sGetSector(m_NameChecksum);				
-	Dbg_MsgAssert(p_sector,("sGetSector(0x%x) returned NULL (%s)",m_NameChecksum,Script::FindChecksumName(m_NameChecksum)));
+	if (!p_sector) return false;	// desktop: converted levels can have trick objects with no sector
 
 	Script::CArray* p_graffiti_col_tab = Script::GetArray( "graffitiColors" );
 	Dbg_MsgAssert( (uint) seqIndex < p_graffiti_col_tab->GetSize(), ( "graffitiColors array too small" ) );

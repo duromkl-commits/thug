@@ -1394,7 +1394,7 @@ void CRigidBodyComponent::get_sound_setup ( uint32 sound_type_id )
 
 	Script::CStruct* p_sound_struct = NULL;
 	p_base_struct->GetStructure(sound_type_id, &p_sound_struct);
-	Dbg_MsgAssert(p_sound_struct, ("Sound type '%s' not found in RigidBodySounds", Script::FindChecksumName(sound_type_id)));
+	if (!p_sound_struct) return;	// desktop: THAW sound types THUG lacks
 
 	Script::CStruct* p_struct;
 

@@ -16,9 +16,15 @@
 **  précisément ce que les logs VITA_STUB() serviront à repérer au palier 2. **
 *****************************************************************************/
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_ecran_43( void );
+#endif
 #include <float.h>
 #include <stdlib.h>
 #include <gfx/nx.h>
+#ifdef THUG_DESKTOP
+#include <gfx/NxLoadScreen.h>
+#endif
 #include <gfx/nxtexman.h>
 #include <gfx/nxviewman.h>
 #include <gfx/nxsector.h>
@@ -65,6 +71,11 @@ void VitaDessineEcranChargementSiActif( void );
 // mis de cote pendant la phase logique et rejoues une fois le decor pose.
 void VitaDessinerModelesReportes( void );
 int VitaDessinsEnAttente( void );
+#ifdef THUG_DESKTOP
+}
+extern "C" void desktop_portrait_grab( void );
+namespace Nx {
+#endif
 void VitaLibererDifferes( void );
 extern bool g_vita_image_ouverte;
 }
@@ -566,6 +577,12 @@ extern "C" void vita_vgl_init_tot( void )
 		  res_fallback ? "resolution rabaissee" : "resolution accordee" );
 	VLOG( "GFX", "GL_VERSION=%s", (const char *)glGetString( GL_VERSION ));
 
+#ifdef THUG_DESKTOP
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	vglSwapBuffers(GL_FALSE);
+	CLoadScreen::sDesktopBeginBoot();
+#else
 	// Ecran de lancement (vita/src/vita_ecran_boot.c) : l'image de pic0 reste
 	// a l'ecran pendant le demarrage du moteur. A defaut, l'ancien effacement.
 	if( !vita_ecran_boot())
@@ -574,6 +591,7 @@ extern "C" void vita_vgl_init_tot( void )
 		glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 		vglSwapBuffers( GL_FALSE );
 	}
+#endif
 
 }
 
@@ -634,6 +652,10 @@ void	CEngine::s_plat_start_engine()
 	// (camera.qb) pose l'aspect 1,7778 et widescreen_camera_fov = 88,18 :
 	// meme champ VERTICAL que les 72 degres en 4:3, le cadrage XBox (xemu).
 	// Sans lui, 72 degres a l'horizontale en 16:9 zoomaient l'image de 1,3.
+#ifdef THUG_DESKTOP
+	// Desktop in 4:3: the Xbox's non-widescreen setup (no script).
+	if( !desktop_ecran_43())
+#endif
 	Script::RunScript( "screen_setup_widescreen" );
 }
 
@@ -738,7 +760,11 @@ void	CEngine::s_plat_pre_render()
 	NxVita::OmbreCarteRendu();
 	ACC( ACC_OMBRE );
 	NxVita::GammaImageDebut();
+#ifdef THUG_DESKTOP
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+#else
 	glClearColor( 0.45f, 0.05f, 0.65f, 1.0f );
+#endif
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 	g_vita_image_ouverte = true;	// #48
 	vita_glspy_ouverte = 1; vita_glspy_phase = 1;
@@ -902,18 +928,38 @@ void	CEngine::s_plat_render_world()
 	// besoin d'ecrire la profondeur pour ne pas etre recouvert, donc il ne
 	// masque plus le decor la ou il est transparent.
 	VitaDessinerModelesReportes();
+#ifdef THUG_DESKTOP
+	desktop_portrait_grab();	// shim_gl.cpp: only while a portrait is asked for
+#endif
 	NxVita::VitaMondeFin();
 	ACC( ACC_MONDE );
 }
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_set_screen_blur( int amount );	// shim_gl.cpp
+#endif
 void	CEngine::s_plat_set_screen_blur(uint32 amount)
 {
+#ifdef THUG_DESKTOP
+	// The PS2's frame feedback (0 = off, 255 = only the last frame): the
+	// menus' pulse_blur (STORY MODE...) and some cutscenes use it.
+	desktop_set_screen_blur( (int)amount );
+#else
 	VITA_STUB();
+#endif
 }
+
+#ifdef THUG_DESKTOP
+extern "C" void desktop_set_letterbox( int on );
+#endif
 
 void	CEngine::s_plat_set_letterbox(bool letterbox)
 {
+#ifdef THUG_DESKTOP
+	desktop_set_letterbox( letterbox );
+#else
 	VITA_STUB();
+#endif
 }
 
 void	CEngine::s_plat_set_color_buffer_clear(bool clear)

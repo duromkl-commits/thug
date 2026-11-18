@@ -27,6 +27,11 @@
 #include <sk/components/skatercorephysicscomponent.h>
 #include <sk/components/skaterbalancetrickcomponent.h>
 #include <sk/components/skaterstatecomponent.h>
+#ifdef THUG_DESKTOP
+#include <math.h>
+#include <sys/timer.h>
+namespace Obj { class CCompositeObject; }
+#endif
 
 
 namespace Obj
@@ -848,6 +853,17 @@ void CSkaterCameraComponent::Update( void )
 	{
 		addShake( cam_pos, frame_matrix );
 	}
+
+	const bool desktop_fp = false;
+#ifdef THUG_DESKTOP
+	if( mpSkater->IsLocalClient() && ( mMode < SKATERCAM_FIRST_REPLAY_MODE ))
+	{
+		DesktopCameraWeight( p_cam_comp->GetCamera(), mpSkater->GetVel(), false, false,
+							 mpSkaterStateComponent && mpSkaterStateComponent->GetFlag( IS_BAILING ),
+							 instantly, cam_pos, frame_matrix );
+		// (Demented Chaos EARTHQUAKE!!! shakes the whole picture now: shim_gl.cpp)
+	}
+#endif
 		
 	// Now do collision detection.
 	
@@ -864,7 +880,7 @@ void CSkaterCameraComponent::Update( void )
 		no_camera_collision = false;
 	}
 	
-	if (no_camera_collision)
+	if (no_camera_collision || desktop_fp)
 	{
 		// no camera collision if doing a lip trick on a moving object
 		//printf ("Lip trick on moving object\n");

@@ -19,6 +19,12 @@ public:
 	static void					sStartLoadingBar(float seconds);
 	static void					sHide();
 	static bool					sIsActive() { return s_active; }
+#ifdef THUG_DESKTOP
+	static void					sDesktopDrawBar();
+	static void					sDesktopBeginBoot();
+	static void					sDesktopBoot();
+	static void					sDesktopDisplay(const char *filename, bool level_change, bool returning_to_menu);
+#endif
 
 	static void					sSetLoadingBarPos(int x, int y);
 	static void					sSetLoadingBarSize(int width, int height);

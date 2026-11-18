@@ -37,6 +37,12 @@
 
 #include <sys/profiler.h>
 
+#ifdef THUG_DESKTOP
+#include <gel/music/music.h>
+#include <gel/soundfx/soundfx.h>
+extern "C" int desktop_play_movie( const char *p_name, float volume );	// desktop/src/movie_player.cpp
+#endif
+
 
 /*****************************************************************************
 **								DBG Information								**
@@ -51,8 +57,20 @@ namespace Flx
 
 void PlayMovie( const char *pMovieName )
 {
+#ifdef THUG_DESKTOP
+	// As the Xbox (Xbox/p_movies.cpp): music and streams stop, the movie
+	// plays at the louder of the music and sound volumes.
+	Spt::SingletonPtr< Sfx::CSfxManager > sfx_manager;
+	const float music_vol = Pcm::GetVolume();
+	const float sfx_vol   = sfx_manager->GetMainVolume();
+	const float vol       = music_vol > sfx_vol ? music_vol : sfx_vol;
+	Pcm::StopMusic();
+	Pcm::StopStreams();
+	desktop_play_movie( pMovieName, vol * 0.01f );
+#else
 	return; // lwss: stubbed for now..
 	//PMovies_PlayMovie( pMovieName );
+#endif
 }
 
 }  // namespace Flx

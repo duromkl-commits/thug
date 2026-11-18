@@ -6,6 +6,9 @@
 //****************************************************************************
 
 #include <gel/components/walkcomponent.h>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );
+#endif
 #include <gel/components/inputcomponent.h>
 #include <gel/components/animationcomponent.h>
 #include <gel/components/walkcameracomponent.h>
@@ -788,6 +791,9 @@ void CWalkComponent::go_hang_state (   )
 	{
 		control_vel = s_get_param(CRCD(0xd77ee881, "hang_move_speed")) * m_control_magnitude
 			* (mp_input_component->GetControlPad().m_leftAngle > 0.0f ? 1.0f : -1.0f);
+#ifdef THUG_DESKTOP
+		if (desktop_mirror_steer()) control_vel = -control_vel;	// Demented Mirror / reversed steering
+#endif
 	}
 	else
 	{

@@ -27,6 +27,10 @@
 #include <core/crc.h>
 #endif
 
+#ifdef THUG_DESKTOP
+#include "vita_log.h"
+#endif
+
 namespace Script
 {
 
@@ -121,6 +125,21 @@ static char *sAddToSpecialStringHeap(const char *p_string)
 
 	char *p_heap_string=NULL;
 	
+#ifdef THUG_DESKTOP
+	// Asserts are compiled out, so a full heap used to be overrun (a big
+	// custom_music folder plus the extra skaters did it, Marcus 2026-11-07).
+	// Say so and fall back to an ordinary allocation, which DeleteString frees.
+	if (s_permanent_string_heap_size-(sp_permanent_string_heap_top-sp_permanent_string_heap)<len+1 ||
+		s_num_permanent_string_checksums>=s_max_permanent_string_checksums)
+	{
+		static int s_dit=0;
+		if (s_dit++<4) VLOG("MEM","!! permanent string heap full (%u bytes, %u strings)",
+			(unsigned)s_permanent_string_heap_size,(unsigned)s_max_permanent_string_checksums);
+		char *p_new=(char*)Mem::Malloc(len+1);
+		strcpy(p_new,p_string);
+		return p_new;
+	}
+#endif
 	// Not found, so add to the pile of strings.
 	Dbg_MsgAssert(sp_permanent_string_heap,("NULL sp_permanent_string_heap ??"));
 	
@@ -148,6 +167,11 @@ void UsePermanentStringHeap()
 void UseRegularStringHeap()
 {
 	s_use_permanent_string_heap=false;
+#ifdef THUG_DESKTOP
+	VLOG("SYS","permanent strings: %u of %u bytes, %u of %u strings",
+		(unsigned)(sp_permanent_string_heap_top-sp_permanent_string_heap),(unsigned)s_permanent_string_heap_size,
+		(unsigned)s_num_permanent_string_checksums,(unsigned)s_max_permanent_string_checksums);
+#endif
 
 	// 56K memory saving, though this assumes that UsePermanentStringHeap() won't be called
 	// again after UseRegularStringHeap(). If it is, the code will assert as soon as a string

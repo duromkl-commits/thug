@@ -70,6 +70,11 @@ public:
 	void							Reset (   );
 	void							ExcludeBalanceButtons ( int& numButtonsToIgnore, uint32 pButtonsToIgnore[] );
 	float							GetBalanceStat ( uint32 Checksum );
+#ifdef THUG_DESKTOP
+	// DualSense triggers: the balance meter's lean, -4096..4096 (0 grind,
+	// 1 lip, 2 manual).
+	float							DesktopLean ( int which ) { return which == 0 ? mGrind.mManualLean : ( which == 1 ? mLip.mManualLean : mManual.mManualLean ); }
+#endif
 	void							ClearBalanceParameters (   );
 	
 private:

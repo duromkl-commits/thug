@@ -8,8 +8,15 @@
 #ifdef TESTING_GUNSLINGER
 
 #include <gel/components/gunslingercameralookaroundcomponent.cpp>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_world( void );
+#endif
 
 #else
+
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_world( void );
+#endif
 
 #include <gel/components/cameralookaroundcomponent.h>
 #include <gel/components/inputcomponent.h>
@@ -152,6 +159,9 @@ void CCameraLookAroundComponent::Update()
 		}
 		
 		target = 3.0f * p_control_pad->m_scaled_rightX;
+#ifdef THUG_DESKTOP
+		if (desktop_mirror_world()) target = -target;	// Demented Mirror
+#endif
 		if (Mth::Abs(target - mLookaroundHeading) > 0.001f)
 		{
 			mLookaroundHeading += (target - mLookaroundHeading) * 3.75f * frame_length;

@@ -37,6 +37,10 @@
 #ifdef __PLAT_VITA__
 #include <sk/objects/skatercareer.h>
 #include "vita_log.h"
+#ifdef THUG_DESKTOP
+void desktop_demented_bail( void );	// desktop_demented.cpp: Perma Bail, run stats
+extern "C" int custom_skater_voice_pitch( unsigned int name_checksum );	// custom_music.cpp
+#endif
 // ISSUE PUBLIQUE #6 « Can't manual » : trace du chemin complet d'un manual,
 // muette par defaut, armee par la commande « trk 1 » (p_siodev.cpp).
 //   [TRK] +Up / +Down ...      evenements de direction ENREGISTRES (ou ignores)
@@ -46,6 +50,10 @@
 //   [TRK] equilibre ...        le skater est entre (ou sorti) en manual
 // La premiere etape qui manque dans le journal designe la cause.
 int g_vita_trace_trk = 0;
+#ifdef THUG_DESKTOP
+extern "C" int desktop_full_log( void );
+extern "C" int desktop_control_opt( int i );	// desktop_extras.cpp: 0 No Air Shuffles, 1 No Flips/Rolls
+#endif
 static const char *trk_nom_direction( uint Button )
 {
 	static const char *s_noms[9] = { "?", "Up", "Down", "Left", "Right",
@@ -140,6 +148,13 @@ CTrickComponent::CTrickComponent() : CBaseComponent()
 	mp_skater_flip_and_rotate_component=NULL;
 	mp_skater_state_component=NULL;
     mp_stats_manager_component=NULL;
+#ifdef THUG_DESKTOP
+	m_flip_dir_avant = m_flip_derniere = 0;
+#ifdef THUG_DESKTOP
+	if( desktop_full_log()) g_vita_trace_trk = 1;	// [TRK] direction presses (lip direction hunt)
+#endif
+	m_flip_t = m_flip_fin = 0;
+#endif
 				 
 	Clear();
 }
@@ -1894,6 +1909,11 @@ bool CTrickComponent::TrickIsDefined(Script::CStruct *pTrick)
 	uint32 ScriptChecksum=0;
 	if (pTrick->GetChecksum(0xa6d2d890/* Scr */,&ScriptChecksum))
 	{
+#ifdef THUG_DESKTOP
+		// Controls menu "No Air Shuffles" (Marcus): the shuffle isn't a trick
+		if (ScriptChecksum==0x9ed95ce7/* WalkingAirShuffle */ && desktop_control_opt(0))
+			return false;
+#endif
 		return true;
 	}
 	if (pTrick->GetChecksum(0x22e168c1/* Scripts */,&ScriptChecksum))
@@ -2613,6 +2633,18 @@ void CTrickComponent::SetExtraTricks(Script::CStruct *pParams, Script::CScript *
 	Dbg_MsgAssert(pScript,("NULL pScript"));
 	
 	mGotExtraTricks=true;
+#ifdef THUG_DESKTOP
+	{
+		// Marcus: No Reverts didn't stop reverts. Who still hands them out?
+		static int s_n = 0;
+		uint32 t = 0;
+		pParams->GetChecksum(CRCD(0x1e26fd3e,"Tricks"),&t);
+		if (t == 0xee1d4d7e /* Reverts */ && s_n++ < 30)
+			VLOG("LVL", "reverts given by %s (%08x), no reverts flag %d",
+				Script::FindChecksumName(pScript->GetBaseScript()), (unsigned)pScript->GetBaseScript(),
+				(int)Mdl::Skate::Instance()->GetCareer()->GetGlobalFlag(225));
+	}
+#endif
 	
 	mExtraTricksInfiniteDuration=true;
 	float Duration=0.0f;
@@ -3017,6 +3049,99 @@ void CTrickComponent::ExcludeExtraTricks(const char *pIgnoreName)
 	}	
 }
 
+#ifdef THUG_DESKTOP
+// THUG2 / American Wasteland flips and rolls (Marcus): in the air, a quick
+// double tap of one direction flips the skater that way, Up = front flip,
+// Down = back flip, Left / Right = a roll. desktop_air_flip (custom_music.cpp)
+// turns the body and scores it; landing before it comes round is a bail.
+// The flip in progress (local skater): Land asks DesktopAirFlipBail whether
+// it lands too early. Marcus: 0.8 s, and a little grace at the end so a
+// flip that's basically round (then a revert) isn't a bail. Grinds, lips
+// and wallrides take it mid-flip and end it.
+static bool s_flip_en_cours = false;
+static bool s_air_trick = false;	// a flip or grab trick done on this jump
+extern "C" void desktop_air_trick_mark( void ) { s_air_trick = true; }
+static Tmr::Time s_flip_debut = 0;
+static const Tmr::Time FLIP_DUREE = 800, FLIP_GRACE = 640;	// round enough after 80%
+
+// DesktopAirFlipBail (desktop_extras_glue.cpp): landed too early? (clears it)
+extern "C" int desktop_air_flip_bail( void )
+{
+	const bool b = s_flip_en_cours && Tmr::GetTime() - s_flip_debut < FLIP_GRACE;
+	s_flip_en_cours = false;
+	return b ? 1 : 0;
+}
+
+void CTrickComponent::DesktopAirFlips()
+{
+	static const Tmr::Time DOUBLE_TAP = 250, DUREE = FLIP_DUREE;
+	uint32 input_mask = mp_input_component->GetInputMask();
+	uint32 d = CSkaterPad::sGetDirection(
+		input_mask & Inp::Data::mA_UP,
+		input_mask & Inp::Data::mA_DOWN,
+		input_mask & Inp::Data::mA_LEFT,
+		input_mask & Inp::Data::mA_RIGHT
+	);
+	if ( d != PAD_U && d != PAD_D && d != PAD_L && d != PAD_R ) d = 0;	// diagonals don't count
+	const Tmr::Time now = Tmr::GetTime();
+	const bool en_l_air = mp_skater_state_component->GetState() == AIR
+		&& !mp_skater_state_component->GetFlag( IS_BAILING )
+		&& !mp_skater_state_component->GetDriving()
+		&& !mp_skater_state_component->GetPhysicsState();	// skating, not on foot
+	if ( !en_l_air )
+	{
+		m_flip_derniere = 0;
+		const EStateType e = mp_skater_state_component->GetState();
+		if ( e == RAIL || e == LIP || e == WALL || e == WALLPLANT ) s_flip_en_cours = false;	// grinded out of it
+		s_air_trick = false;	// a new jump needs its own flip or grab trick
+	}
+	else if ( d && d != m_flip_dir_avant )
+	{
+		const int k = d == PAD_U ? 0 : d == PAD_D ? 1 : d == PAD_L ? 2 : 3;
+		// THUG2: a roll needs a flip or grab trick going, not just an ollie
+		// (flips too): FlipTrick / GrabTrick mark it (desktop_air_trick_mark)
+		const bool permis = s_air_trick && (input_mask & (Inp::Data::mA_SQUARE | Inp::Data::mA_CIRCLE));
+		// Controls menu "No Flips/Rolls" (Marcus)
+		if ( desktop_control_opt(1) ) { m_flip_derniere = 0; m_flip_dir_avant = d; return; }
+		if ( d == m_flip_derniere && now - m_flip_t < DOUBLE_TAP && now >= m_flip_fin && permis )
+		{
+			static const char *s_noms[4] = { "Front Flip", "Back Flip", "Left Roll", "Right Roll" };
+			Script::CStruct p;
+			p.AddInteger( Script::GenerateCRC( "k" ), k );
+			p.AddString( CRCD(0xa1dc81f9, "name"), s_noms[k] );
+			// 1000 each as in THUG2; the combo's repeat penalty makes spam worth less.
+			// Marcus: not a trick of its own in the combo text, so no SetTrickName /
+			// Display (that took over the trick in progress: a special's name and
+			// its special colour). An unnamed trick only adds points to the combo,
+			// like the grind shuffle bonus; blocking, so it doesn't take the spin.
+			if ( GetSkater()->IsLocalClient() )
+			{
+				Mdl::Score *pScore = GetScoreObject();
+				if ( pScore )
+				{
+					char vide[1] = { 0 };
+					Mdl::Score::Flags f = Mdl::Score::vBLOCKING;
+					if ( mp_skater_core_physics_component->IsSwitched() ) f |= Mdl::Score::vSWITCH;
+					pScore->Trigger( vide, 1000, f );
+					mTallyAngles = 0.0f;	// as Display BlockSpin: the next trick starts its own spin
+				}
+			}
+			GetObject()->SpawnScriptPlease( Script::GenerateCRC( "desktop_air_flip" ), &p );
+			m_flip_fin = now + DUREE;
+			s_flip_en_cours = true;
+			s_flip_debut = now;
+			m_flip_derniere = 0;
+		}
+		else
+		{
+			m_flip_derniere = d;
+			m_flip_t = now;
+		}
+	}
+	m_flip_dir_avant = d;
+}
+#endif
+
 void CTrickComponent::RecordButtons()
 {
 	uint32 input_mask = mp_input_component->GetInputMask();
@@ -3188,6 +3313,9 @@ void CTrickComponent::Update()
 	}
 	
 	RecordButtons();
+#ifdef THUG_DESKTOP
+	DesktopAirFlips();
+#endif
 	
 	mp_skater_balance_trick_component->ExcludeBalanceButtons(mNumButtonsToIgnore, mpButtonsToIgnore);
 	
@@ -3903,6 +4031,18 @@ CBaseComponent::EMemberFunctionResult CTrickComponent::CallMemberFunction( uint3
 				}
 				
 				GetScoreObject()->Bail();
+#ifdef THUG_DESKTOP
+				desktop_demented_bail();
+				// Extra skaters' bail voices: THUG only voices the bails whose
+				// anims carry a knee/ankle/kick event, so most bails were
+				// silent (Marcus heard it once). Every bail asks for one;
+				// cfuncs.cpp drops a second within 1.5 s.
+				if ( custom_skater_voice_pitch( GetSkater()->m_skaterNameChecksum ) > 0 )
+				{
+					static const char *s_scr[3] = { "HandleBailKneeStream", "HandleBailAnkleStream", "HandleBailKickStream" };
+					Script::RunScript( Script::GenerateCRC( s_scr[Mth::Rnd( 3 )] ), NULL, GetObject() );
+				}
+#endif
 			}
 
 			// tell any observers to balk if they want:

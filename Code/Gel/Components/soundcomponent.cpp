@@ -30,6 +30,9 @@
 #include <sk/modules/frontend/frontend.h>
 #include <sk/objects/emitter.h>
 #include <sk/objects/proxim.h>
+#ifdef THUG_DESKTOP
+extern "C" int desktop_son_brut;	// soundfx.cpp: the skater's sounds stay out of Sound Salad
+#endif
 
 
 namespace Obj
@@ -600,7 +603,15 @@ int CSoundComponent::PlaySound_VolumeAndPan( uint32 soundChecksum, float volume,
 	// TODO:  Replay code handling sound components
 	Replay::WritePositionalSoundEffect(m_id,soundChecksum,volume,pitch,dropoffDist);
 	#endif
+#ifdef THUG_DESKTOP
+	// the skater's own sounds (board, bails, tricks) keep themselves in Sound Salad (Marcus)
+	desktop_son_brut = GetObject() && GetObject()->GetType() == 1 /* SKATE_TYPE_SKATER */;
+	const int r = sfx_manager->PlaySoundWithPos( soundChecksum, &soundUpdateInfo, this, noPosUpdate );
+	desktop_son_brut = 0;
+	return r;
+#else
 	return ( sfx_manager->PlaySoundWithPos( soundChecksum, &soundUpdateInfo, this, noPosUpdate ) );
+#endif
 } // end of PlaySound_VolumeAndPan( )
 
 	

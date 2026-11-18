@@ -1,5 +1,8 @@
 #include <core/defines.h>
 #include <sys/mem/CompactPool.h>
+#ifdef THUG_DESKTOP
+#include "vita_log.h"
+#endif
 
 
 #ifdef __DEBUG_COMPACTPOOL__
@@ -139,6 +142,11 @@ void * CCompactPool::Allocate()
 	}
 
 	Dbg_MsgAssert(0, ("Out of %ss (%d max) in their Compact Pool", m_name, m_totalItems));
+#ifdef THUG_DESKTOP
+	// Asserts are compiled out: say it, the NULL that follows crashes somewhere else.
+	static int s_dit = 0;
+	if( s_dit++ < 8 ) VLOG( "MEM", "!! out of %s (%d max) in their pool", m_name, m_totalItems );
+#endif
 	
 	return NULL;
 }

@@ -16,6 +16,10 @@
 #include <core/crc.h> // For Crc::GenerateCRCFromString
 #include <sys/file/pip.h>
 #include <Sys/File/filesys.h>
+#ifdef THUG_DESKTOP
+#include <stdlib.h>
+#include "custom_music.h"
+#endif
 
 namespace Script
 {
@@ -83,6 +87,17 @@ void LoadQB(const char *p_fileName, EBoolAssertIfDuplicateSymbols assertIfDuplic
 	uint8 *p_qb=(uint8*)Pip::Load(p_fileName);
 	Mem::Manager::sHandle().PopContext();
 		
+#ifdef THUG_DESKTOP
+	// Custom soundtrack: songs from the custom_music folder join the
+	// playlist scripts (desktop/src/custom_music.cpp).
+	uint8 *p_perso=custom_music_patch_qb(p_fileName,p_qb);
+	if (p_perso)
+	{
+		ParseQB(p_fileName,p_perso,assertIfDuplicateSymbols);
+		free(p_perso);
+	}
+	else
+#endif
 	// Parse the QB, which creates all the symbols defined within it.
 	ParseQB(p_fileName,p_qb,assertIfDuplicateSymbols);
 	

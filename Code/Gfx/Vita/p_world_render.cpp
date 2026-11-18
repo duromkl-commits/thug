@@ -35,7 +35,9 @@ extern "C" void vita_memspy_niveau( void );
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
+#ifndef THUG_DESKTOP
 #include <arm_neon.h>	// teinte de scene (#15)
+#endif
 
 #include "vita_log.h"
 #include "p_NxModel.h"
@@ -2549,6 +2551,20 @@ static void mat_mul( float *out, const float *a, const float *b )
 // "pll X" : plan lointain (#69). XBox : 32000 (NX/render.cpp:1788) ; Vita : 100000.
 float g_vita_plan_loin = 100000.0f;
 
+#ifdef THUG_DESKTOP
+extern "C" void desktop_ssao_projection( float f, float aspect, float znear, float zfar );
+extern "C" void desktop_ssao( void );
+extern "C" void desktop_post( void );
+extern "C" void desktop_portrait_grab( void );
+extern "C" int desktop_mirror_world( void );		// desktop_demented.cpp: Mirror (and Chaos)
+extern "C" float desktop_chaos_fov( void );
+// Portrait camera (desktop_portraits.cpp): while set, the world and the
+// models are drawn from this eye, looking at this point, with this
+// vertical field of view.
+bool  g_desktop_portrait_cam = false;
+float g_desktop_portrait_eye[3], g_desktop_portrait_at[3], g_desktop_portrait_vfov = 16.0f;
+#endif
+
 static void set_projection( float fov_deg, float aspect, float znear, float zfar )
 {
 	float f = 1.0f / tanf( fov_deg * 0.5f * 3.14159265f / 180.0f );
@@ -2560,15 +2576,38 @@ static void set_projection( float fov_deg, float aspect, float znear, float zfar
 	m[10] = ( zfar + znear ) / ( znear - zfar );
 	m[11] = -1.0f;
 	m[14] = ( 2.0f * zfar * znear ) / ( znear - zfar );
+#ifdef THUG_DESKTOP
+	// Demented's Mirror: the world flipped left to right by the projection,
+	// triangle winding flipped with it so culling still keeps the fronts.
+	{
+		const bool miroir = desktop_mirror_world() != 0 && !g_desktop_portrait_cam;
+		if( miroir ) m[0] = -m[0];
+		glFrontFace( miroir ? GL_CW : GL_CCW );
+	}
+#endif
 
 	glMatrixMode( GL_PROJECTION );
 	glLoadMatrixf( m );
+#ifdef THUG_DESKTOP
+	desktop_ssao_projection( f, aspect, znear, zfar );
+#endif
 
 	// Conservee pour le calcul du tronc de vision : la relire depuis GL
 	// couterait une synchronisation, et on la connait deja.
 	memcpy( s_proj, m, sizeof( s_proj ));
 }
 
+
+// The projection's x and y focal terms (m0 is negative in Demented's Mirror),
+// for 3D elements placed at a 2D screen position (Element3d.cpp).
+bool GetProjectionFocal( float *m0, float *m5 )
+{
+	if( s_proj[5] == 0.0f )
+		return false;
+	*m0 = s_proj[0];
+	*m5 = s_proj[5];
+	return true;
+}
 
 bool GetViewMatrix( float out[16] )
 {
@@ -2617,8 +2656,38 @@ bool RefreshViewFromCamera( void )
 	if( !p_cam )
 		return false;
 
-	Mth::Matrix &cm  = p_cam->GetMatrix();
-	Mth::Vector &pos = p_cam->GetPos();
+	Mth::Matrix cm  = p_cam->GetMatrix();
+	Mth::Vector pos = p_cam->GetPos();
+#ifdef THUG_DESKTOP
+	if( g_desktop_portrait_cam )
+	{
+		// Same layout as the game camera: rows right, up, back (the view
+		// looks down -back). Handedness copied from the real camera.
+		Mth::Vector eye( g_desktop_portrait_eye[0], g_desktop_portrait_eye[1], g_desktop_portrait_eye[2] );
+		Mth::Vector at( g_desktop_portrait_at[0], g_desktop_portrait_at[1], g_desktop_portrait_at[2] );
+		Mth::Vector back = eye - at;
+		back[3] = 0.0f;
+		back.Normalize();
+		Mth::Vector haut( 0.0f, 1.0f, 0.0f, 0.0f );
+		Mth::Vector droite = Mth::CrossProduct( haut, back );
+		droite.Normalize();
+		Mth::Vector r0 = cm[0], r1 = cm[1], r2 = cm[2];
+		r0[3] = r1[3] = r2[3] = 0.0f;
+		if( Mth::DotProduct( Mth::CrossProduct( r0, r1 ), r2 ) < 0.0f )
+			droite = -droite;
+		haut = Mth::CrossProduct( back, droite );
+		if( Mth::DotProduct( haut, Mth::Vector( 0.0f, 1.0f, 0.0f, 0.0f )) < 0.0f )
+			haut = -haut;
+		haut.Normalize();
+		for( int c = 0; c < 3; ++c )
+		{
+			cm[0][c] = droite[c];
+			cm[1][c] = haut[c];
+			cm[2][c] = back[c];
+		}
+		pos = eye;
+	}
+#endif
 
 	float v[16];
 	for( int c = 0; c < 3; ++c )
@@ -2831,7 +2900,14 @@ void SetWorldProjection( void )
 			      p_cam ? p_cam->GetHFOV() : -1.0f, aspect, v );
 		}
 	}
-	set_projection( v, aspect, 4.0f, g_vita_plan_loin );
+#ifdef THUG_DESKTOP
+	if( g_desktop_portrait_cam )
+	{
+		set_projection( g_desktop_portrait_vfov, aspect, 4.0f, g_vita_plan_loin );
+		return;
+	}
+#endif
+	set_projection( v * desktop_chaos_fov(), aspect, 4.0f, g_vita_plan_loin );
 }
 
 
@@ -4303,7 +4379,11 @@ static bool s_vcw_ecrit = false;		// des couleurs animees sont en place
 
 static inline unsigned char *vcw_donnees( GLuint nom )
 {
+#ifdef THUG_DESKTOP
+	return desktop_buffer_data( nom );
+#else
 	return nom ? *(unsigned char * const *)nom : NULL;
+#endif
 }
 
 // --- Sommets de rendu des secteurs (#5), voir p_world_render.h --------------
@@ -4937,6 +5017,7 @@ static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
 	const unsigned int f7r = (unsigned int)( f[0] * 128.0f + 0.5f );
 	const unsigned int f7g = (unsigned int)( f[1] * 128.0f + 0.5f );
 	const unsigned int f7b = (unsigned int)( f[2] * 128.0f + 0.5f );
+#ifndef THUG_DESKTOP	// NEON (ARM) ; le PC prend la boucle scalaire
 	if( g_vita_teinte_neon && ( f7r <= 255 ) && ( f7g <= 255 ) && ( f7b <= 255 ))
 	{
 		// Tete scalaire jusqu'a une adresse de destination alignee sur 16.
@@ -4960,6 +5041,7 @@ static void teinter_tampon( GLuint nom, unsigned char **pp_orig, int n_total,
 			vst1q_u8( (uint8_t *)( w + v ), vcombine_u8( lo, hi ));
 		}
 	}
+#endif
 	for( ; v < nombre; ++v )
 		w[v] = teinte_sommet( o + 4 * v, fr, fg, fb );
 }
@@ -5589,6 +5671,10 @@ void RenderWorld( void )
 				VLOG( "CAM", "meme frame : ecart orientation %.4f", sqrtf( d ));
 			memcpy( v, s_view_models, sizeof( v ));
 		}
+#ifdef THUG_DESKTOP
+		else if( g_desktop_portrait_cam && s_cam_models_ok )
+			memcpy( v, s_view_models, sizeof( v ));
+#endif
 
 		glLoadMatrixf( v );
 		memcpy( s_cur_view, v, sizeof( s_cur_view ));
@@ -6838,6 +6924,16 @@ void RenderWorld( void )
 	{
 		VitaMondeEtape( MW_OMBRE );
 		ombre_reception( true, RANG_TRANSP, RANG_TRI );
+#ifdef THUG_DESKTOP
+		// Ambient occlusion, then bloom and haze, once the whole world is
+		// down: roads, grass and decals are blended "opaques" drawn in the
+		// translucent passes, and after the opaque pass they missed it.
+		desktop_ssao();
+		// Building portraits: no bloom/haze; the grab comes after the
+		// models' translucent pieces (p_nx.cpp), which some heads are.
+		if( !g_desktop_portrait_cam )
+			desktop_post();
+#endif
 	}
 	if( pass == RANG_CIEL )
 	{

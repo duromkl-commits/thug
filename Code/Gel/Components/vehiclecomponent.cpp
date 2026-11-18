@@ -5,6 +5,9 @@
 //* CREATION DATE:  1/31/3
 //****************************************************************************
 
+#ifdef THUG_DESKTOP
+extern "C" int desktop_mirror_steer( void );	// desktop_demented.cpp
+#endif
 #include <core/defines.h>
 #include <core/allmath.h>
 
@@ -617,6 +620,14 @@ void CVehicleComponent::Finalize (   )
 	}
 	m_body_pos -= center_of_mass;
 	m_skater_pos -= center_of_mass;
+#ifdef THUG_DESKTOP
+	// diagnostic (Marcus: cars sit low, leafblower rider not on the seat)
+	VLOG( "LVL", "vehicle: com (%.1f %.1f %.1f) body (%.1f %.1f %.1f) skater (%.1f %.1f %.1f) visible=%d anim=%s",
+		center_of_mass[X], center_of_mass[Y], center_of_mass[Z], m_body_pos[X], m_body_pos[Y], m_body_pos[Z],
+		m_skater_pos[X], m_skater_pos[Y], m_skater_pos[Z], (int)m_skater_visible, Script::FindChecksumName( m_skater_anim ));
+	for (int n = 0; n < m_num_wheels; ++n)
+		VLOG( "LVL", "  wheel %d at (%.1f %.1f %.1f) r=%.1f", n, mp_wheels[n].pos[X], mp_wheels[n].pos[Y], mp_wheels[n].pos[Z], mp_wheels[n].radius );
+#endif
 	
 	update_dependent_variables();
 	
@@ -2521,9 +2532,27 @@ void CVehicleComponent::apply_environment_collisions (   )
 	line_feeler.SetCache(&m_collision_cache);
 	
 	m_num_collision_points = 0;
+#ifdef THUG_DESKTOP
+	// Marcus: cars drive halfway into walls. Do the body feelers see them?
+	static int s_frame = 0, s_lignes = 0;
+	const bool trace = ( ++s_frame % 20 ) == 0 && s_lignes < 150;
+#endif
 	for (int collider_idx = vVP_NUM_COLLIDERS; collider_idx--; )
 	{
 		SCollider& collider = mp_colliders[collider_idx];
+#ifdef THUG_DESKTOP
+		if (trace)
+		{
+			rect_feeler.SetRectangle(collider.world);
+			const bool hit = rect_feeler.GetCollision();
+			++s_lignes;
+			VLOG("LVL", "car collider %d corner (%.0f %.0f %.0f) e1 (%.0f %.0f %.0f) e2 (%.0f %.0f %.0f) hit=%d surfaces=%d pos (%.0f %.0f %.0f)",
+				collider_idx, collider.world.m_corner[X], collider.world.m_corner[Y], collider.world.m_corner[Z],
+				collider.world.m_first_edge[X], collider.world.m_first_edge[Y], collider.world.m_first_edge[Z],
+				collider.world.m_second_edge[X], collider.world.m_second_edge[Y], collider.world.m_second_edge[Z],
+				(int)hit, hit ? rect_feeler.GetNumCollisionSurfaces() : 0, m_pos[X], m_pos[Y], m_pos[Z]);
+		}
+#endif
 		
 		// first we use a rectangular feeler
 		
@@ -3086,6 +3115,9 @@ void CVehicleComponent::get_input (   )
 			m_controls.steering = 1.0f;
 		}
 	}
+	#ifdef THUG_DESKTOP
+	if (desktop_mirror_steer()) m_controls.steering = -m_controls.steering;	// Demented Mirror / reversed steering
+#endif
 	
 	m_controls.throttle = control_pad.m_x.GetPressed();
 	m_controls.handbrake = control_pad.m_R1.GetPressed() && !m_no_handbrake;

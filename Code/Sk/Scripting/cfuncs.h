@@ -339,6 +339,13 @@ bool ScriptSetCurrentGameType( Script::CStruct *pParams, Script::CScript *pScrip
 bool ScriptDumpNetMessageStats( Script::CStruct *pParams, Script::CScript *pScript );
 bool ScriptNotifyBailDone( Script::CStruct *pParams, Script::CScript *pScript );
 bool ScriptDisplayLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript );
+#ifdef THUG_DESKTOP
+bool ScriptDesktopFirstSaveCheck(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopControlOpt(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopViewGoalsChapter(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopViewGoalsRemember(Script::CStruct *, Script::CScript *);
+bool ScriptDesktopJumpSlotText(Script::CStruct *, Script::CScript *);
+#endif
 bool ScriptHideLoadingScreen( Script::CStruct *pParams, Script::CScript *pScript );
 bool ScriptObserveNextSkater( Script::CStruct *pParams, Script::CScript *pScript );
 bool ScriptPrintMemInfo( Script::CStruct *pParams, Script::CScript *pScript );

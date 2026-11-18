@@ -1766,6 +1766,31 @@ bool CPedLogicComponent::do_collision_check( Mth::Vector *p_v0, Mth::Vector *p_v
 /*                                                                */
 /******************************************************************/
 
+#ifdef THUG_DESKTOP
+bool CPedLogicComponent::DesktopIsSkater( void )
+{
+	return ( m_flags & PEDLOGIC_IS_SKATER ) != 0;
+}
+
+bool CPedLogicComponent::DesktopRush( const Mth::Vector &cible, float pas )
+{
+	if( !GetMotionComponentFromObject( GetObject()) || ( m_flags & PEDLOGIC_IS_SKATER )) return false;
+	Mth::Vector d = cible - GetObject()->m_pos;
+	d[Y] = 0.0f;
+	d[W] = 0.0f;
+	const float l = d.Length();
+	if( l < 1.0f ) return true;
+	if( pas > l ) pas = l;
+	Mth::Vector avant = GetObject()->m_pos;
+	GetObject()->m_pos += d * ( pas / l );
+	m_flags &= ~PEDLOGIC_TO_NODE_IS_LIP;
+	AdjustHeading( avant );
+	StickToGround();
+	AdjustNormal();
+	return true;
+}
+#endif
+
 void CPedLogicComponent::StickToGround()
 {
 	// stick to ground modified from the motion component...uses

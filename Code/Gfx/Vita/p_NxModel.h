@@ -50,6 +50,12 @@ struct SGpuMesh
 	GLuint	ibo;
 	GLuint	texture;
 	unsigned int blend;		// blend mode du materiau, 0 = opaque
+#ifdef THUG_DESKTOP
+	// Xbox alpha cutoff of the material (cut-out textures: car rims, fences),
+	// 0 = none. Passe 1 of a RIGID model borrows its base's vbo (vbo_partage).
+	unsigned int alpha_cutoff;
+	unsigned char vbo_partage;
+#endif
 	// MATFLAG_PASS_COLOR_LOCKED (0x80) de la passe 0 : la teinte du geom ne
 	// s'applique PAS. [SOURCE] XBox/NX/mesh.cpp:607 (HandleColorOverride).
 	// Yeux, logos, une partie du corps : sans ce drapeau, la couleur CAS
@@ -431,6 +437,15 @@ private:
 	// raison de le supposer bon. Cette trace le dira au moment ou une mission
 	// reclamera ses barrieres.
 	virtual bool	plat_set_material_color( uint32 mat_checksum, int pass, Image::RGBA rgba );
+#ifdef THUG_DESKTOP
+public:
+	// the goal star's texture recoloured: brightness x f (0..1 each), at the
+	// next render; NULL = its own texture back
+	void			DesktopTeinte( const float *f );
+private:
+	bool			desktop_teinte_poser( bool pose, unsigned int *p_garde, int n_garde );
+	void			desktop_teinte_oublier();
+#endif
 	// Issue #16 : la version de base est un STUB (NxGeom.cpp:488) -- les
 	// tatouages et logos du CAS restaient a leur place par defaut.
 	virtual bool	plat_set_uv_matrix( uint32 mat_checksum, int pass, const Mth::Matrix &mat );

@@ -281,8 +281,14 @@ static SceUInt64 s_boucle_us = 0;
 // coute au CPU que les tirages et 64 octets ecrits par particule : plafond
 // releve a 6000 (Vancouver en demandait 4575 ; le chemin CPU les a dessinees
 // sans incident avant le plafond, avec des sommets plus gros).
+#ifdef THUG_DESKTOP
+// Desktop: no per-frame cap, like the Xbox/PS2 (the cap was for the Vita's CPU)
+int g_vita_prt_budget = 1 << 30;
+int g_vita_prt_budget_shd = 1 << 30;
+#else
 int g_vita_prt_budget = 2000;
 int g_vita_prt_budget_shd = 6000;
+#endif
 static int s_budget_restant = 0;
 static inline unsigned char couleur_x2( float c )
 {

@@ -551,6 +551,15 @@ bool CSkeleton::ApplyBoneScale( Script::CStruct* pBodyShapeStructure )
 			}
 
 			Mth::Vector vec = Mth::Vector( 1.0f, 1.0f, 1.0f, 1.0f );
+			bool boneLocal = localScale;
+#ifdef THUG_DESKTOP
+			// Desktop: body_shape { ... nonlocal_board } scales the whole board
+			// (root, deck ends, trucks) from its root, for tiny skaters.
+			if ( name == CRCD(0x98971faf, "bone_board_root") && pBodyShapeStructure->ContainsFlag( CRCD(0xadd5ea43, "nonlocal_board") ) )
+			{
+				boneLocal = false;
+			}
+#endif
 			if ( GetBoneScale( name, &vec ) )
 			{
 				vec[X] *= theBoneScaleVector[X];
@@ -558,7 +567,7 @@ bool CSkeleton::ApplyBoneScale( Script::CStruct* pBodyShapeStructure )
 				vec[Z] *= theBoneScaleVector[Z];
 				vec[W] = 1.0f;
 
-				bool success = SetBoneScale(name, vec, localScale);
+				bool success = SetBoneScale(name, vec, boneLocal);
 				if ( !success )
 				{
 					Dbg_MsgAssert( 0, ( "Couldn't apply bone scale %s", Script::FindChecksumName(mp_bones[i].m_name) ) );
@@ -1107,6 +1116,18 @@ void CSkeleton::Update( Mth::Quat* pQuat, Mth::Vector* pTrans )
 		
 				if ( p_currentBone->m_flags & nxBONEFLAGS_SCALENONLOCAL )
 				{
+#ifdef THUG_DESKTOP
+					// Desktop: a board scale (body_shape Bone_Board_Root, small skaters
+					// such as the Pipo Monkeys) grows the whole board around where it
+					// already sits; scaling its offset too would lift it off the feet.
+					if ( p_currentBone->m_name == CRCD(0x98971faf, "bone_board_root") )
+					{
+						Mth::Vector pos = (*p_currentMatrix)[Mth::POS];
+						p_currentMatrix->Scale( p_currentBone->m_scale );
+						(*p_currentMatrix)[Mth::POS] = pos;
+					}
+					else
+#endif
 					p_currentMatrix->Scale( p_currentBone->m_scale );
 				}
 

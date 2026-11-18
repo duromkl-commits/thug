@@ -136,6 +136,7 @@ void VitaMondeFin( void );
 // Matrice de vue de la derniere frame, pour que les modeles se placent dans
 // le meme repere que le decor. Rend false tant qu'aucune camera n'existe.
 bool GetViewMatrix( float out[16] );
+bool GetProjectionFocal( float *m0, float *m5 );
 
 // Pose la projection perspective du monde. Indispensable avant de dessiner un
 // modele : sans elle, on herite de la projection ORTHOGRAPHIQUE laissee par la

@@ -67,6 +67,12 @@ protected:
 	void					update();
 
 	char *					mp_text;
+#ifdef THUG_DESKTOP
+	char *					mp_desktop_orig;	// the text as set, before Demented's Chaos got at it
+	int						m_desktop_orig_taille;
+	int						m_desktop_gen;		// Chaos generation it was scrambled for
+	int						m_desktop_jeu;		// -1 unknown, 1 made in play (stays scrambled when a menu opens), 0 menu text
+#endif
 
 	uint32					m_font_checksum;
 	Nx::CFont *				mp_font;

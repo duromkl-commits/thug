@@ -6,6 +6,9 @@
 //****************************************************************************
 
 #include <gel/components/suspendcomponent.h>
+#ifdef THUG_DESKTOP
+extern "C" float desktop_object_distance( void );
+#endif
 
 #include <gel/components/modelcomponent.h>
 
@@ -118,6 +121,9 @@ void CSuspendComponent::InitFromStructure( Script::CStruct* pParams )
 	
 		// if we've got a suspend distance, then convert it into inches
 		m_suspend_distance *= 12.0f;
+#ifdef THUG_DESKTOP
+		m_suspend_distance *= desktop_object_distance();
+#endif
 		m_suspend_distance_squared=m_suspend_distance*m_suspend_distance;
 		m_never_suspend=false;
 	}
@@ -152,6 +158,14 @@ void CSuspendComponent::InitFromStructure( Script::CStruct* pParams )
 		m_lod_dist[1] *= 12.0f;
 		m_lod_dist[2] *= 12.0f;
 		m_lod_dist[3] *= 12.0f;
+#ifdef THUG_DESKTOP
+		// Desktop: peds and moving objects stay visible further than the PS2's
+		// hide distance (lod_dist2, often ~125 ft), set by object_distance.
+		m_lod_dist[0] *= desktop_object_distance();
+		m_lod_dist[1] *= desktop_object_distance();
+		if ( m_lod_dist[1] >= m_lod_dist[2] ) m_lod_dist[1] = m_lod_dist[2] - 1.0f;
+		if ( m_lod_dist[0] >= m_lod_dist[1] ) m_lod_dist[0] = m_lod_dist[1] - 1.0f;
+#endif
 		if ( m_lod_dist[0]>=m_lod_dist[1] )
 		{
 			Script::PrintContents( pParams );

@@ -91,6 +91,12 @@ class CElement3d : public CScreenElement
 
 	// These three are used for when the object needs to scale according to the distance from the camera.
 	bool 	m_scale_with_distance;
+#ifdef THUG_DESKTOP
+	bool	m_desktop_ecran;	// desktop_screen_pos: placed with the real projection, 2D margin included
+	bool	m_desktop_propre;	// desktop_own_mesh: its own copy of the mesh, so its tint is its own
+	bool	m_desktop_etoile;	// model "arrow" (the goal star)
+	unsigned int m_desktop_cle;	// Random Colours seed its star colour was made for (0 = red)
+#endif
 	float 	m_scale_multiplier;
 	float 	m_max_scale;
 
@@ -112,6 +118,10 @@ public:
 	virtual		~CElement3d();
 
 	void		SetProperties(Script::CStruct *p_props);
+#ifdef THUG_DESKTOP
+	// Skater Life pie menu: the head looks at the highlighted option.
+	void		DesktopSetAngles(float x, float y, float z) { m_angle_x = x; m_angle_y = y; m_angle_z = z; }
+#endif
 	void		SetMorph(Script::CStruct *pProps);
 
 	void		UnloadModels();

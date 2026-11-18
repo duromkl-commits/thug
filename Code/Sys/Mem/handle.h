@@ -35,7 +35,11 @@
 namespace Mem
 {
 
-
+// Allocator is only complete further down the include chain when the
+// original allocator is compiled out (desktop and Vita builds). Naming it
+// through a template makes the lookup happen at instantiation, which GCC 13
+// requires; older and newer compilers accept either form.
+template < class _T > struct HandleAllocator { typedef Allocator type; };
 
 /*****************************************************************************
 **							     Type Defines								**
@@ -91,7 +95,7 @@ protected :
 template < class _T > inline   
 //Handle< _T >::Handle< _T >( _T* ptr ) 
 Mem::Handle<_T>::Handle( _T* ptr )
-: m_ptr ( ptr ), m_id ( Allocator::sGetId( ptr ))
+: m_ptr ( ptr ), m_id ( HandleAllocator< _T >::type::sGetId( ptr ))
 {
 	
 }
@@ -154,7 +158,7 @@ Handle< _T >&		Handle< _T >::operator = ( _T* ptr )
 	
 
 	m_ptr = ptr;
-	m_id  = Allocator::sGetId( ptr );
+	m_id  = HandleAllocator< _T >::type::sGetId( ptr );
 
 	return *this;	
 }
@@ -169,7 +173,7 @@ _T*		Handle< _T >::GetPointer ( void ) const
 {
 	
 
-	if (( m_ptr ) && ( m_id == Allocator::sGetId( m_ptr )))
+	if (( m_ptr ) && ( m_id == HandleAllocator< _T >::type::sGetId( m_ptr )))
 	{
 		Dbg_AssertType( m_ptr, _T );
 		return m_ptr;

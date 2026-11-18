@@ -52,6 +52,10 @@ protected:
 public:
 	void							LockToObject();
 	bool							IsLockEnabled() const {return m_lock_enabled;}
+#ifdef __PLAT_VITA__
+	// True when LockToObject will draw this object's model this frame.
+	bool							VitaDessineLeModele() {return m_lock_enabled && get_locked_to_object();}
+#endif
 	void							EnableLock( bool enabled ) {m_lock_enabled = enabled;}
 	
 protected:
