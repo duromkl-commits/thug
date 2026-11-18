@@ -703,6 +703,7 @@ SCFunction CFunctionLookupTable[]=
 	{"DesktopDementedIsOn",	CFuncs::ScriptDesktopDementedIsOn},
 	{"DesktopDementedNeedsDialog",	CFuncs::ScriptDesktopDementedNeedsDialog},
 	{"DesktopDementedUnlockAll",	CFuncs::ScriptDesktopDementedUnlockAll},
+	{"DesktopDementedRandomSkater",	CFuncs::ScriptDesktopDementedRandomSkater},
 	{"DesktopDementedDialogShown",	CFuncs::ScriptDesktopDementedDialogShown},
 	{"DesktopDementedName",	CFuncs::ScriptDesktopDementedName},
 	{"DesktopTricksViewOnly",	CFuncs::ScriptDesktopTricksViewOnly},

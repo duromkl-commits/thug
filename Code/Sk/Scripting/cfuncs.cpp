@@ -3881,6 +3881,12 @@ bool ScriptFreeStreamFrameAmp( Script::CStruct *pParams, Script::CScript *pScrip
 // @parmopt float | volR | 100.0 | volume of right channel
 // @parmopt float | pitch | 100.0 | 
 // @parmopt name | id | 0 | control ID (used instead of sound name for script control purposes)
+} // namespace CFuncs
+#ifdef THUG_DESKTOP
+extern "C" int desktop_son_brut;	// soundfx.cpp
+#endif
+namespace CFuncs
+{
 bool ScriptPlaySound(Script::CStruct *pParams, Script::CScript *pScript)
 {
 	uint32 SoundChecksum = 0;
@@ -3909,12 +3915,21 @@ bool ScriptPlaySound(Script::CStruct *pParams, Script::CScript *pScript)
 	vol.SetChannelVolume( 1, VolR );
 	
 	Sfx::CSfxManager * sfx_manager =  Sfx::CSfxManager::Instance();
+#ifdef THUG_DESKTOP
+	// Sounds the skater's own scripts play (Hidden Combo, special trick,
+	// boneless...) stay out of Sound Salad, like its board sounds (Marcus)
+	const int desktop_brut0 = desktop_son_brut;
+	if( pScript && pScript->mpObject && pScript->mpObject->GetType() == SKATE_TYPE_SKATER ) desktop_son_brut = 1;
+#endif
 	if( !sfx_manager->PlaySound( SoundChecksum, &vol, Pitch, id ))
 	{
 #ifdef __NOPT_ASSERT__
 		printf( "failed to play sound %s", Script::FindChecksumName( SoundChecksum ) );
 #endif	
 	}
+#ifdef THUG_DESKTOP
+	desktop_son_brut = desktop_brut0;
+#endif
 	return true;
 }
 

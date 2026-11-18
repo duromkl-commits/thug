@@ -2852,6 +2852,12 @@ bool ScriptDesktopDementedNeedsDialog( Script::CStruct *pParams, Script::CScript
 	return s_run.actif && !s_run.dialogue;
 }
 
+// @script | DesktopDementedRandomSkater | desktop: a Demented run whose skater is a random deal (Chaos / Random World)
+bool ScriptDesktopDementedRandomSkater( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	return s_run.actif && ( s_run.mods[MOD_R_MONDE] || s_run.mods[MOD_CHAOS] );
+}
+
 // @script | DesktopDementedUnlockAll | desktop: true in a Demented run's first
 // Edit Skater menu (before the deal): every CAS item and board shown, Design
 // Deck open (Marcus 2026-11-18). Sets CAD_UNLOCKED until the menu is done.

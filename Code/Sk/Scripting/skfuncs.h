@@ -166,6 +166,7 @@ bool ScriptDesktopDmGoal(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedIsOn(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedNeedsDialog(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedUnlockAll(Script::CStruct *pParams, Script::CScript *pScript);
+bool ScriptDesktopDementedRandomSkater(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedDialogShown(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopDementedName(Script::CStruct *pParams, Script::CScript *pScript);
 bool ScriptDesktopTricksViewOnly(Script::CStruct *pParams, Script::CScript *pScript);

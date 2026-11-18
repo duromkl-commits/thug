@@ -3837,13 +3837,29 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_debut( qb, j, m, "script_change_tod", "DesktopRandoTod\n" );	// Demented Random World
 	patch_debut( qb, j, m, "watch_cutscene_done", "if DesktopDemented\nDebounce X 0.5\npause_menu_gradient on\ncreate_watch_cutscenes_menu\nreturn\nendif\n" );
 	// Edit Skater BEFORE the first cutscene in every story mode (Marcus
-	// 2026-11-14; Demented too since 2026-11-18, Chaos runs included: "Edit
-	// only", the skater is still dealt): the pre-CAS menu first, then the
-	// Demented deal, then Intro_01 (so the dealt skater is in it), then Intro_02.
+	// 2026-11-14; Demented created-skater runs too since 2026-11-18): the
+	// pre-CAS menu first, then the Demented deal, then Intro_01, then Intro_02.
+	// Not with Chaos/Random World (Marcus, later the same day): the skater is
+	// a random deal there, so no Edit Skater: dealt, Intro_01, Intro_02.
 	patch_debut( qb, j, m, "play_first_cutscene",
+		"if NOT DesktopDementedRandomSkater\n"
 		"launch_pre_cas_menu wait_for_skater = wait_for_skater\n"
-		"return\n" );
+		"return\n"
+		"endif\n"
+		"if DesktopDementedNeedsDeal\n"
+		"desktop_demented_roll\n"
+		"endif\n" );
+	patch_debut( qb, j, m, "launch_pre_cas_menu",
+		"if DesktopDementedRandomSkater\n"
+		"if DesktopDementedNeedsDialog\n"
+		"if NOT ( goto_cad = 1 )\n"
+		"desktop_demented_deal\n"
+		"return\n"
+		"endif\n"
+		"endif\n"
+		"endif\n" );
 	patch_debut( qb, j, m, "show_intro_2",
+		"if NOT DesktopDementedRandomSkater\n"
 		"if DesktopDementedNeedsDeal\n"
 		"desktop_demented_roll\n"
 		"endif\n"
@@ -3851,7 +3867,8 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		"killskatercamanim all\n"
 		"unpausegame\n"
 		"PlayCutscene name = \"cutscenes\\Intro_01.cut\" exitScript = desktop_intro_2 dont_unload_anims\n"
-		"return\n" );
+		"return\n"
+		"endif\n" );
 	// Demented's first Edit Skater menu (before the deal): everything
 	// unlocked, boards included, and Design Deck open (Marcus 2026-11-18)
 	patch_debut( qb, j, m, "create_pre_cas_menu", "DesktopDementedUnlockAll\n" );
