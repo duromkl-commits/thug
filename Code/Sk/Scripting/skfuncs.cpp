@@ -2510,6 +2510,15 @@ bool ScriptPlaySkaterCamAnim( Script::CStruct *pParams, Script::CScript *pScript
 				// skater was scaled up, so the following script will
 				// shut off the scaling on the skater...  restore_skater_camera
 				// will re-enable it when the movie is done
+#ifdef THUG_DESKTOP
+				// Desktop (Marcus 2026-11-18): shrunk skaters (kids, Pipo
+				// Monkeys, Alien) keep their size in goal dialogue scenes
+				bool desktop_petit = false;
+				if ( Obj::CModelComponent* pMC = GetModelComponentFromObject( pSkater ) )
+					if ( pMC->GetModel() && pMC->GetModel()->IsScalingEnabled() && pMC->GetModel()->GetScale()[Y] < 0.999f )
+						desktop_petit = true;
+				if ( !desktop_petit )
+#endif
 				Script::RunScript( CRCD(0xdf00bdff,"disable_skater_scaling") );
 
 				// start the movie with the default params...

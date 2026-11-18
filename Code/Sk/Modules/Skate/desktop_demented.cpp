@@ -151,6 +151,7 @@ struct Run
 	int		bails, gagnes, perdus;
 	bool	fini;			// summary shown, waiting to go back to the menu
 	bool	dialogue;		// the "You've been dealt" box was shown
+	bool	cad_pose;		// CAD_UNLOCKED set just for the first Edit Skater menu
 	bool	hud;
 	int		stats_custom[10];	// the created skater's own, put back after
 	bool	stats_gardees;
@@ -2582,6 +2583,28 @@ bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
 	Script::CArray *cles = NULL;
 	if( pParams->GetArray( crc( "cles" ), &cles, Script::NO_ASSERT ) && cles && cles->GetSize())
 	{
+		// a goal text built around the rolled slot: fmt's %k = that slot's
+		// entry in the global struct 'carte' (its buttons), the rest kept
+		const char *fmtk = NULL;
+		if( pParams->GetString( crc( "fmt" ), &fmtk, Script::NO_ASSERT ) && fmtk )
+		{
+			const char *d = NULL;
+			pParams->GetString( crc( "def" ), &d, Script::NO_ASSERT );
+			o->RemoveComponent( nom );
+			if( !dm ) { o->AddString( nom, d ? d : "" ); return true; }
+			const uint32 v = cles->GetChecksum( (int)( g % cles->GetSize()));
+			uint32 carte = 0;
+			const char *k = "";
+			pParams->GetChecksum( crc( "carte" ), &carte, Script::NO_ASSERT );
+			Script::CStruct *st = carte ? Script::GetStructure( carte, Script::NO_ASSERT ) : NULL;
+			if( st ) st->GetString( v, &k, Script::NO_ASSERT );
+			std::string t;
+			for( const char *q = fmtk; *q; ++q )
+				if( q[0] == '%' && q[1] == 'k' ) { t += k ? k : ""; ++q; }
+				else t += *q;
+			o->AddString( nom, t.c_str());
+			return true;
+		}
 		uint32 v = 0;
 		pParams->GetChecksum( crc( "def" ), &v, Script::NO_ASSERT );
 		if( dm ) v = cles->GetChecksum( (int)( g % cles->GetSize()));
@@ -2593,6 +2616,24 @@ bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
 			Script::CArray a;
 			a.SetSizeAndType( tab->GetSize(), ESYMBOLTYPE_NAME );
 			for( uint32 i = 0; i < tab->GetSize(); ++i ) a.SetChecksum( i, (int)i == idx ? v : tab->GetChecksum( i ));
+			// tout: every entry rolled, no slot twice while there are enough (Wedding Guest's photos)
+			if( dm && pParams->ContainsFlag( crc( "tout" )))
+			{
+				std::vector<uint32> pris;
+				for( uint32 i = 0; i < tab->GetSize(); ++i )
+				{
+					const uint32 n = cles->GetSize();
+					uint32 r = (uint32)( sous_graine( g, 1 + i ) % n );
+					for( uint32 e = 0; e < n && pris.size() < n; ++e, r = ( r + 1 ) % n )
+					{
+						bool deja = false;
+						for( uint32 x : pris ) deja |= x == cles->GetChecksum( r );
+						if( !deja ) break;
+					}
+					pris.push_back( cles->GetChecksum( r ));
+					a.SetChecksum( i, cles->GetChecksum( r ));
+				}
+			}
 			o->AddArray( nom, &a );
 			return true;
 		}
@@ -2604,6 +2645,28 @@ bool ScriptDesktopDmGoal( Script::CStruct *pParams, Script::CScript *pScript )
 			o->AddArray( nom, &a );
 		}
 		else o->AddChecksum( nom, v );
+		return true;
+	}
+	// paire = (x,y): a RandomRange the game rolls each time (Slam City Jam),
+	// in Demented x the chapter number (both ends, or the top only: haut)
+	float px = 0.0f, py = 0.0f;
+	if( pParams->GetPair( crc( "paire" ), &px, &py, Script::NO_ASSERT ))
+	{
+		int lo = (int)px, hi = (int)py;
+		if( dm && pParams->ContainsFlag( crc( "chap" )))
+		{
+			Game::CGoalManager *gm = Game::GetGoalManager();
+			int c = gm ? gm->GetCurrentChapter() + 1 : 1;
+			if( c < 1 ) c = 1;
+			hi *= c;
+			if( !pParams->ContainsFlag( crc( "haut" ))) lo *= c;
+		}
+		if( hi < lo ) hi = lo;
+		const uint32 r = ((uint32)rand() << 16 ) ^ ((uint32)rand() << 1 ) ^ (uint32)rand();
+		const int v = lo + (int)( r % (uint32)( hi - lo + 1 ));
+		o->RemoveComponent( nom );
+		o->AddInteger( nom, v );
+		VLOG( "DSK", "demented: goal range %d - %d -> %d", lo, hi, v );
 		return true;
 	}
 	const char *fmt = NULL;
@@ -2695,7 +2758,8 @@ static bool donne_skater( bool en_jeu )
 	Flux f( &s_x_deal );	// seeded
 	Obj::CPlayerProfileManager *pm = ppm();
 	// Marcus 2026-11-16: a random skater only with the Chaos randomizer on;
-	// otherwise the run is played (every life) with the created skater, own stats
+	// otherwise the run is played (every life) with the created skater
+	// (random 0-10 stats since 2026-11-18)
 	if( !s_run.mods[MOD_R_MONDE] && !s_run.mods[MOD_CHAOS] )
 	{
 		if( en_jeu ) return true;
@@ -2703,6 +2767,19 @@ static bool donne_skater( bool en_jeu )
 		const char *d = NULL;
 		if( c ) c->GetInfo()->GetString( CRCD( 0x2ab66cb8, "display_name" ), &d, Script::NO_ASSERT );
 		snprintf( s_run.nom, sizeof( s_run.nom ), "%s", d && *d ? d : "Created Skater" );
+		// random 0-10 stats for the created skater too (Marcus 2026-11-18);
+		// its own come back at the run's end like a dealt pro's
+		if( c )
+		{
+			for( int i = 0; i < 10; ++i )
+			{
+				int v0 = 0;
+				c->GetInfo()->GetInteger( crc( s_stats[i] ), &v0, Script::NO_ASSERT );
+				if( !s_run.stats_gardees ) s_run.stats_custom[i] = v0;
+				c->GetInfo()->AddInteger( crc( s_stats[i] ), (int)hasard( 11 ));
+			}
+			s_run.stats_gardees = true;
+		}
 		s_run.skater = CRCD( 0xa7be964, "custom" );
 		CFuncs::ScriptDesktopSelectSkaterLent( s_run.skater );
 		note_depart();
@@ -2775,9 +2852,31 @@ bool ScriptDesktopDementedNeedsDialog( Script::CStruct *pParams, Script::CScript
 	return s_run.actif && !s_run.dialogue;
 }
 
+// @script | DesktopDementedUnlockAll | desktop: true in a Demented run's first
+// Edit Skater menu (before the deal): every CAS item and board shown, Design
+// Deck open (Marcus 2026-11-18). Sets CAD_UNLOCKED until the menu is done.
+bool ScriptDesktopDementedUnlockAll( Script::CStruct *pParams, Script::CScript *pScript )
+{
+	if( !s_run.actif || s_run.dialogue ) return false;
+	Obj::CSkaterCareer *car = Mdl::Skate::Instance()->GetCareer();
+	const int f = Script::GetInteger( crc( "CAD_UNLOCKED" ));
+	if( car && !s_run.cad_pose && !car->GetGlobalFlag( f ))
+	{
+		car->SetGlobalFlag( f );
+		s_run.cad_pose = true;
+	}
+	return true;
+}
+
 // @script | DesktopDementedDialogShown | desktop: marks the dealt box as shown
 bool ScriptDesktopDementedDialogShown( Script::CStruct *pParams, Script::CScript *pScript )
 {
+	if( s_run.cad_pose )
+	{
+		s_run.cad_pose = false;
+		if( Obj::CSkaterCareer *car = Mdl::Skate::Instance()->GetCareer())
+			car->UnSetGlobalFlag( Script::GetInteger( crc( "CAD_UNLOCKED" )));
+	}
 	s_run.dialogue = true;
 	return true;
 }
@@ -3005,7 +3104,7 @@ bool ScriptDesktopDementedSlotTricks( Script::CStruct *pParams, Script::CScript 
 			if( p->GetSpecialTrickInfo( s ).IsUnassigned()) libres.push_back( s );
 		}
 		if( ok.empty()) continue;
-		const int s = libres.empty() ? ok[hasard( (uint32)ok.size())] : libres[hasard( (uint32)libres.size())];
+		int s = libres.empty() ? ok[hasard( (uint32)ok.size())] : libres[hasard( (uint32)libres.size())];
 		// a key combo of its kind that no other special uses
 		Script::CStruct *st = Script::GetStructure( crc( s_sp_types[type_special( trick )] ), Script::NO_ASSERT );
 		uint32 combo = 0;
@@ -3017,6 +3116,14 @@ bool ScriptDesktopDementedSlotTricks( Script::CStruct *pParams, Script::CScript 
 			if( !utilise ) combo = k;
 		}
 		if( !combo ) combo = p->GetSpecialTrickInfo( s ).m_TrickSlot;
+		// Craziest Footage's McTwist goes on Right, Down + Circle (Marcus), in
+		// the slot that has that combo if one does
+		if( trick == crc( "Trick_McTwist" ))
+		{
+			combo = crc( "SpAir_R_D_Circle" );
+			for( int o = 0; o < ns; ++o )
+				if( p->GetSpecialTrickInfo( o ).m_TrickSlot == combo ) { s = o; break; }
+		}
 		if( !combo ) continue;
 		Obj::SSpecialTrickInfo inf;
 		inf.m_TrickSlot = combo;

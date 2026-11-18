@@ -2828,6 +2828,47 @@ bool CGoal::AddTempSpecialTrick()
 		p_keyBindings->RemoveFlag( trick_info.m_TrickSlot );
 	}
 
+#ifdef THUG_DESKTOP
+	// Demented's skaters can have every air special combo taken, or every
+	// special slot full: the CAT (Soul Skating in New Jersey) then borrows
+	// the last air special's slot and combo, given back when the goal ends
+	if ( !found_trick && is_cat )
+	{
+		const int max_slots = Script::GetInteger( CRCD(0x20297d6f,"max_number_of_special_trickslots"), Script::NO_ASSERT );
+		if ( !p_keyBindings->GetNextComponent() || numTricks >= Obj::CSkaterProfile::vMAXSPECIALTRICKSLOTS || ( max_slots > 0 && numTricks >= max_slots ) )
+		{
+			static const char *s_air[] = { "SpAir_R_D_Circle", "SpAir_L_R_Circle", "SpAir_L_D_Circle", "SpAir_L_D_Square", "SpAir_R_D_Square",
+				"SpAir_D_U_Circle", "SpAir_D_U_Square", "SpAir_D_L_Circle", "SpAir_D_L_Square", "SpAir_L_R_Square", "SpAir_L_U_Circle",
+				"SpAir_L_U_Square", "SpAir_D_R_Square", "SpAir_R_L_Circle", "SpAir_R_L_Square", "SpAir_R_U_Circle", "SpAir_R_U_Square",
+				"SpAir_U_D_Circle", "SpAir_U_D_Square", "SpAir_U_L_Circle", "SpAir_U_L_Square", "SpAir_U_R_Circle", "SpAir_U_R_Square", "SpAir_D_R_Circle" };
+			int k = -1;
+			for ( int i = numTricks - 1; i >= 0 && k < 0; i-- )
+			{
+				const uint32 slot = pSkaterProfile->GetSpecialTrickInfo( i ).m_TrickSlot;
+				for ( unsigned a = 0; a < sizeof( s_air ) / sizeof( s_air[0] ); a++ )
+					if ( slot == Crc::GenerateCRCFromString( s_air[a] ) ) { k = i; break; }
+			}
+			if ( k >= 0 )
+			{
+				const Obj::SSpecialTrickInfo old = pSkaterProfile->GetSpecialTrickInfo( k );
+				mp_params->AddInteger( "desktop_cat_k", k );
+				mp_params->AddChecksum( "desktop_cat_name", old.m_TrickName );
+				mp_params->AddChecksum( "desktop_cat_slot", old.m_TrickSlot );
+				mp_params->AddInteger( "desktop_cat_iscat", old.m_isCat ? 1 : 0 );
+				Script::CStruct* pScriptParams = new Script::CStruct();
+				pScriptParams->AddChecksum( CRCD(0xa92a2280,"trickSlot"), old.m_TrickSlot );
+				pScriptParams->AddInteger( CRCD(0x7f8c98fe,"index"), trickName );
+				pScriptParams->AddInteger( CRCD(0x7f264be9,"special_trick_index"), k );
+				Script::RunScript( CRCD(0x466576c8,"load_premade_cat"), pScriptParams );
+				delete pScriptParams;
+				mp_params->AddInteger( CRCD( 0xbc678826, "should_remove_trick" ), 2 );
+				key_combo = old.m_TrickSlot;
+				found_trick = true;	// nothing more to bind
+				printf( "CAT goal: no free special, borrowed special %d\n", k );
+			}
+		}
+	}
+#endif
 	// if we didn't find the trick, grab the first available, unused key combo
 	if ( !found_trick )
 	{
@@ -2903,6 +2944,21 @@ void CGoal::RemoveTempSpecialTrick()
 	// do we need to take out the trick we added?
 	int should_remove;
 	mp_params->GetInteger( "should_remove_trick", &should_remove, Script::ASSERT );
+#ifdef THUG_DESKTOP
+	if ( should_remove == 2 )
+	{
+		// the CAT borrowed a special (AddTempSpecialTrick): it goes back
+		int k = -1, iscat = 0;
+		Obj::SSpecialTrickInfo old;
+		mp_params->GetInteger( "desktop_cat_k", &k, Script::NO_ASSERT );
+		mp_params->GetChecksum( "desktop_cat_name", &old.m_TrickName, Script::NO_ASSERT );
+		mp_params->GetChecksum( "desktop_cat_slot", &old.m_TrickSlot, Script::NO_ASSERT );
+		mp_params->GetInteger( "desktop_cat_iscat", &iscat, Script::NO_ASSERT );
+		old.m_isCat = iscat != 0;
+		if ( k >= 0 ) pSkaterProfile->SetSpecialTrickInfo( k, old );
+		mp_params->AddInteger( CRCD( 0xbc678826, "should_remove_trick" ), 0 );
+	}
+#endif
 	if ( should_remove == 1 )
 	{
 		// printf("removing special trick\n");

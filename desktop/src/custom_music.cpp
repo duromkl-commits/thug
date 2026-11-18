@@ -3070,6 +3070,8 @@ static void patch_retire( const unsigned char *qb, const std::vector<Jeton> &j, 
 		}
 }
 
+static int s_dm_rang = -1;	// patch_dm: >= 0 = only that match (0 = the first)
+
 // Demented goal randomization: in script 'nom', each value of field 'champ'
 // (an int, a name, or a string; 'vieux' = its value, NULL for any string)
 // becomes <arg_N>, and a DesktopDmGoal call that sets arg_N ('appel', with
@@ -3085,16 +3087,18 @@ static void patch_dm( const unsigned char *qb, const std::vector<Jeton> &j, std:
 			while( a < j.size() && qb[j[a].pos] != T_EOL && qb[j[a].pos] != T_EOLNUM ) ++a;
 			if( a >= j.size()) return;
 			static int s_num = 0;	// arg names unique across calls (several per script)
-			int num = 0;
+			int num = 0, rang = 0;
 			for( size_t b = k + 2; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
 			{
 				const unsigned char t = qb[j[b].pos];
 				if( t != type ) continue;
-				if( type == T_CHAINE ? ( vieux != 0 ) : ( lit32( qb + j[b].pos + 1 ) != vieux )) continue;
+				// a string: vieux = crc of its text (0 = any string)
+				if( type == T_CHAINE ? ( vieux != 0 && crc( (const char *)( qb + j[b].pos + 5 )) != vieux ) : ( lit32( qb + j[b].pos + 1 ) != vieux )) continue;
 				if( c )
 				{
 					if( b < 2 || qb[j[b - 1].pos] != T_EGAL || !est_nom( qb, j[b - 2], c )) continue;
 				}
+				if( s_dm_rang >= 0 && rang++ != s_dm_rang ) continue;	// only the Nth of identical values
 				char arg[32]; snprintf( arg, sizeof( arg ), "desktop_dm_%d", s_num++ ); ++num;
 				// <arg> isn't allowed as an array element (the game's array reader
 				// spins on it: froze New Jersey's load), so [ X ] goes as a whole
@@ -3138,6 +3142,40 @@ static void patch_dm( const unsigned char *qb, const std::vector<Jeton> &j, std:
 				else m.push_back( Modif{ j[b].pos, j[b].taille, r.o } );
 			}
 			VLOG( "MUS", "%s: %d goal values randomizable", nom, num );
+			return;
+		}
+}
+
+// Demented goal randomization of a 'champ = RandomRange (x,y)' (Slam City
+// Jam): the range and its token go, <arg> takes their place, set by
+// DesktopDmGoal (paire = (x,y)), which rolls in the range each time like the game.
+static void patch_dm_paire( const unsigned char *qb, const std::vector<Jeton> &j, std::vector<Modif> &m,
+                            const char *nom, const char *champ, float x, float y, const char *appel )
+{
+	const uint32_t n = crc( nom ), c = crc( champ );
+	static int s_num = 0;
+	for( size_t k = 0; k + 1 < j.size(); ++k )
+		if( qb[j[k].pos] == T_SCRIPT && est_nom( qb, j[k + 1], n ))
+		{
+			size_t a = k + 2;
+			while( a < j.size() && qb[j[a].pos] != T_EOL && qb[j[a].pos] != T_EOLNUM ) ++a;
+			if( a >= j.size()) return;
+			int num = 0;
+			for( size_t b = k + 4; b < j.size() && qb[j[b].pos] != T_ENDSCRIPT; ++b )
+			{
+				if( qb[j[b].pos] != T_PAIRE || qb[j[b - 1].pos] != 48 /* RandomRange */ || qb[j[b - 2].pos] != T_EGAL || !est_nom( qb, j[b - 3], c )) continue;
+				float px, py;
+				memcpy( &px, qb + j[b].pos + 1, 4 ); memcpy( &py, qb + j[b].pos + 5, 4 );
+				if( px != x || py != y ) continue;
+				char arg[32]; snprintf( arg, sizeof( arg ), "desktop_dmp_%d", s_num++ ); ++num;
+				char q[256];
+				snprintf( q, sizeof( q ), "DesktopDmGoal name = %s %s paire = (%.1f,%.1f)\n", arg, appel, x, y );
+				Ecrit w; compile_q( w, q );
+				m.push_back( Modif{ j[a].pos + j[a].taille, 0, w.o } );
+				Ecrit r; r.octet( T_ARG ); r.nom( arg );
+				m.push_back( Modif{ j[b - 1].pos, j[b].pos + j[b].taille - j[b - 1].pos, r.o } );
+			}
+			VLOG( "MUS", "%s: %d goal ranges randomizable", nom, num );
 			return;
 		}
 }
@@ -3344,6 +3382,146 @@ static void patch_dm_goals( const unsigned char *qb, const std::vector<Jeton> &j
 		{ "FL_Goal_BestTrick2_Score_add", "FL_BestTrick2_Hard_HighRange2" }, { "FL_Goal_BestTrick2_Score_add", "FL_BestTrick2_Hard_MidRange2" },
 		{ "FL_Goal_BestTrick2_Score_add", "FL_BestTrick2_Hard_LowRange2" } };
 	for( size_t i = 0; i < sizeof( bt ) / sizeof( bt[0] ); ++i ) patch_dm( qb, j, m, bt[i][0], "b", T_NOM, crc( bt[i][1] ), "chap" );
+
+	// Marcus's 18 Nov list (San Diego to New Jersey's last chapters) ------
+	#define DM_FLIPS "cles = [ Air_SquareU Air_SquareD Air_SquareL Air_SquareR Air_SquareUL Air_SquareUR Air_SquareDL Air_SquareDR ]"
+	#define DM_GRABS "cles = [ Air_CircleU Air_CircleD Air_CircleL Air_CircleR Air_CircleUL Air_CircleUR Air_CircleDL Air_CircleDR ]"
+	char a[400];
+	// SD: Flip the Big Stairs, each photo a random flip slot (photos 2-4 double taps)
+	patch_dm( qb, j, m, "SD_AddGoal_Gap", NULL, T_NOM, crc( "Air_SquareR" ), "key = 36 " DM_FLIPS );
+	static const struct { const char *ajout, *intro, *combo, *texte, *fin; } photos[] = {
+		{ "SD_AddGoal_Gap2", "SD_Gap2_Intro", "Air_SquareL", "%t \\n(\\b6 + \\b1 + \\b1)\\n over the stairs", "over the stairs" },
+		{ "SD_AddGoal_Gap3", "SD_Gap3_Intro", "Air_SquareU", "%t \\n(\\b7 + \\b1 + \\b1)\\n over the stairs", "over the stairs" },
+		{ "SD_AddGoal_Gap4", "SD_Gap4_Intro", "Air_SquareDL", "%t \\n(\\bc + \\b1 + \\b1)\\n over the stairs", "over the stairs" },
+		// Air Out the Atrium, random grab slots (the last part checks Circle+Down whatever its list says)
+		{ "SD_AddGoal_Gap6", "SD_Gap6_Intro", "Air_CircleR", "%t \\n(\\b5 + \\b2 + \\b2)\\n over the Atrium Gap", "over the Atrium Gap" },
+		{ "SD_AddGoal_Gap7", "SD_Gap7_Intro", "Air_CircleU", "%t \\n(\\b7 + \\b2 + \\b2)\\n over the Atrium Gap", "over the Atrium Gap" },
+		{ "SD_AddGoal_Gap8", "SD_Gap8_Intro", "Air_CircleD", "%t \\n(\\b4 + \\b2 + \\b2)\\n over the Atrium Gap", "over the Atrium Gap" } };
+	for( int i = 0; i < 6; ++i )
+	{
+		const bool flip = i < 3;
+		const int cle = 37 + i;
+		const char *cles = flip ? DM_FLIPS : DM_GRABS;
+		snprintf( a, sizeof( a ), "key = %d %s", cle, cles );
+		// photo 4 of the atrium lists Circle+Left but checks Circle+Down
+		patch_dm( qb, j, m, photos[i].ajout, NULL, T_NOM, crc( i == 5 ? "Air_CircleL" : photos[i].combo ), a );
+		patch_dm( qb, j, m, photos[i].intro, NULL, T_NOM, crc( photos[i].combo ), a );
+		patch_dm( qb, j, m, flip ? "SD_StartGap_MOH_Stairs" : "SD_StartGap_Atrium", NULL, T_NOM, crc( photos[i].combo ), a );
+		char t[400];
+		snprintf( t, sizeof( t ), "%s carte = goal_tetris_trick_text_double_tap fmt = \"%%t \\n(%%k)\\n %s\"", a, photos[i].fin );
+		patch_dm( qb, j, m, photos[i].intro, NULL, T_CHAINE, crc( photos[i].texte ), t );
+	}
+	patch_dm( qb, j, m, "SD_AddGoal_Gap5", NULL, T_NOM, crc( "Air_CircleL" ), "key = 43 " DM_GRABS );
+	// Daredevil High Line 5 s - 1 min
+	patch_dm_ajout( qb, j, m, "SD_AddGoal_Collect", "time", "key = 44 lo = 5 hi = 60 step = 5" );
+	// Rooftop Technician: Sick's flip (Square+DownRight) any flip slot, 5 s - 1 min
+	patch_dm( qb, j, m, "SD_AddGoal_Gap9", NULL, T_NOM, crc( "Air_SquareDR" ), "key = 45 " DM_FLIPS );
+	patch_dm( qb, j, m, "SD_EndGap_BB_Sawhorse", NULL, T_NOM, crc( "Air_SquareDR" ), "key = 45 " DM_FLIPS );
+	patch_dm( qb, j, m, "SD_AddGoal_Gap9", "time", T_ENTIER, 120, "key = 46 lo = 5 hi = 60 step = 5" );
+	// Let's Get This Party Started 30 s - 2 min, No Band 45 s - 1:30
+	patch_dm( qb, j, m, "SD_AddGoal_Gaps11", "time", T_ENTIER, 180, "key = 47 lo = 30 hi = 120 step = 5" );
+	patch_dm_ajout( qb, j, m, "SD_AddGoal_Collect2", "time", "key = 48 lo = 45 hi = 90 step = 5" );
+	// No One Likes a Dude Festival: combo 100,000 - 1,200,000, big score 150,000 - 1,300,000
+	patch_dm( qb, j, m, "SD_AddGoal_HighCombo2", "score", T_NOM, crc( "SD_HC2_Hard" ), "key = 49 lo = 100000 hi = 1200000 step = 5000" );
+	patch_dm( qb, j, m, "SD_AddGoal_HighCombo2", "goal_text", T_NOM, crc( "SD_HC2_Hard_Text" ), "key = 49 lo = 100000 hi = 1200000 step = 5000 fmt = \"Show me a %s point combo\"" );
+	patch_dm( qb, j, m, "SD_AddGoal_HighScore", "score", T_NOM, crc( "SD_HS_Hard" ), "key = 50 lo = 150000 hi = 1300000 step = 5000" );
+	patch_dm( qb, j, m, "SD_AddGoal_HighScore", "goal_text", T_NOM, crc( "SD_HS_Hard_Text" ), "key = 50 lo = 150000 hi = 1300000 step = 5000 fmt = \"Show me a big score!\\n%s points\"" );
+	// Acid Drop the Two Towers 10 s - 1 min, Round Up the Posse 45 s - 1:30
+	patch_dm( qb, j, m, "SD_AddGoal_Gap10", "time", T_ENTIER, 120, "key = 51 lo = 10 hi = 60 step = 5" );
+	patch_dm( qb, j, m, "SD_AddGoal_Collect3", "time", T_ENTIER, 120, "key = 52 lo = 45 hi = 90 step = 5" );
+	// 3 Is No Crowd 50,000 - 650,000; stickers 5 - 30 s; demo high score 200,000 - 2,600,000
+	patch_dm( qb, j, m, "SD_AddGoal_HighCombo", "score", T_NOM, crc( "SD_HC_Hard" ), "key = 53 lo = 50000 hi = 650000 step = 5000" );
+	patch_dm( qb, j, m, "SD_AddGoal_HighCombo", "goal_text", T_NOM, crc( "SD_HC_Hard_Text" ), "key = 53 lo = 50000 hi = 650000 step = 5000 fmt = \"Let's see a %s point combo\"" );
+	patch_dm( qb, j, m, "SD_AddGoal_Counter3", "time", T_ENTIER, 30, "key = 54 lo = 5 hi = 30 step = 5" );
+	patch_dm( qb, j, m, "SD_AddGoal_ProScore", "score", T_NOM, crc( "SD_PS_Hard" ), "key = 55 lo = 200000 hi = 2600000 step = 5000" );
+	patch_dm( qb, j, m, "SD_AddGoal_ProScore", "goal_text", T_NOM, crc( "SD_PS_Hard_Text" ), "key = 55 lo = 200000 hi = 2600000 step = 5000 fmt = \"Get a High Score to impress the media. %s points\"" );
+
+	// HI: Wedding Guest, each of the 4 photos its own flip slot (no repeats)
+	patch_dm( qb, j, m, "HI_AddGoal_WeddingGuest", NULL, T_NOM, crc( "Air_SquareL" ), "key = 56 tout " DM_FLIPS );
+	// Impress the girls: combos 25,000 - 375,000
+	patch_dm( qb, j, m, "HI_Bikini_Dummy_Got_Trick", NULL, T_NOM, crc( "HI_ImpressGirls_Hard_Score" ), "key = 57 lo = 25000 hi = 375000 step = 5000" );
+	patch_dm( qb, j, m, "HI_AddGoal_Counter", "goal_text", T_NOM, crc( "HI_ImpressGirls_Hard_Text" ),
+		"key = 57 lo = 25000 hi = 375000 step = 5000 fmt = \"Impress 3 groups of bikini girls\\nwith %s combos\"" );
+	// Off The Walls, Kill Wallows, Island Liptrick Tour 1 - 2 min; Climb the Hotel 30 s - 1 min
+	patch_dm_ajout( qb, j, m, "HI_AddGoal_OTW_Manual", "time", "key = 58 lo = 60 hi = 120 step = 5" );
+	patch_dm_ajout( qb, j, m, "HI_AddGoal_KillWallows", "time", "key = 59 lo = 60 hi = 120 step = 5" );
+	patch_dm( qb, j, m, "HI_AddGoal_Liptricks", "time", T_ENTIER, 120, "key = 60 lo = 60 hi = 120 step = 5" );
+	patch_dm( qb, j, m, "HI_AddGoal_SurfriderRoof", "time", T_ENTIER, 60, "key = 61 lo = 30 hi = 60 step = 5" );
+	// Craziest Footage Ever, the roof: 500,000 - 8,000,000 (the McTwist stays, see DesktopDementedSlotTricks)
+	patch_dm( qb, j, m, "HI_AddGoal_GenericScore", "score", T_NOM, crc( "HI_GenericScore_Hard_Score" ), "key = 62 lo = 500000 hi = 8000000 step = 10000" );
+	patch_dm( qb, j, m, "HI_AddGoal_GenericScore", "goal_text", T_NOM, crc( "HI_GenericScore_Hard_Text" ),
+		"key = 62 lo = 500000 hi = 8000000 step = 10000 fmt = \"Get %s points here on the roof\"" );
+
+	// Vancouver: Bust Some Flatland part 2, manual combo 10,000 - 170,000
+	patch_dm( qb, j, m, "VC_Gaps2_Enter_Flatland_spawned", NULL, T_ENTIER, 10000, "key = 63 lo = 10000 hi = 170000 step = 5000" );
+	patch_dm( qb, j, m, "VC_Gaps2_Checkscore", NULL, T_ENTIER, 10000, "key = 63 lo = 10000 hi = 170000 step = 5000" );
+	patch_dm( qb, j, m, "VC_AddGoal_HawkBowl", "goal_text", T_CHAINE, crc( "Get 10,000 points in a manual combo \\n\\b7 \\b4 to enter manual" ),
+		"key = 63 lo = 10000 hi = 170000 step = 5000 fmt = \"Get %s points in a manual combo \\n\\b7 \\b4 to enter manual\"" );
+	// Slam City Fan 10 s - 1 min, Impress the Reporter 500,000 - 8,000,000, guest passes combo 10 s - 1 min
+	patch_dm_ajout( qb, j, m, "VC_AddGoal_ComboCollect", "time", "key = 64 lo = 10 hi = 60 step = 5" );
+	patch_dm( qb, j, m, "VC_AddGoal_Reporter", "score", T_ENTIER, 500000, "key = 65 lo = 500000 hi = 8000000 step = 10000" );
+	patch_dm( qb, j, m, "VC_AddGoal_Reporter", "goal_text", T_CHAINE, crc( "Get 500,000 points" ), "key = 65 lo = 500000 hi = 8000000 step = 10000 fmt = \"Get %s points\"" );
+	patch_dm( qb, j, m, "VC_AddGoal_Collect", "time", T_ENTIER, 60, "key = 66 lo = 10 hi = 60 step = 5" );
+	// ADIO 10 s - 1 min, Vans 10,000 - 190,000, Circa 10 - 30 s
+	patch_dm_ajout( qb, j, m, "VC_AddGoal_ADIO", "time", "key = 67 lo = 10 hi = 60 step = 5" );
+	patch_dm( qb, j, m, "VC_Goal_Vans_CheckScore", NULL, T_ENTIER, 10000, "key = 68 lo = 10000 hi = 190000 step = 5000" );
+	patch_dm( qb, j, m, "VC_Goal_Vans_inCombo", NULL, T_CHAINE, crc( " Crowd Active - Score 10,000 ! " ), "key = 68 lo = 10000 hi = 190000 step = 5000 fmt = \" Crowd Active - Score %s ! \"" );
+	patch_dm( qb, j, m, "VC_AddGoal_VANS", "goal_text", T_CHAINE, crc( "Find and Impress the kids with 10,000 points" ),
+		"key = 68 lo = 10000 hi = 190000 step = 5000 fmt = \"Find and Impress the kids with %s points\"" );
+	patch_dm_ajout( qb, j, m, "VC_AddGoal_Circa", "time", "key = 69 lo = 10 hi = 30 step = 5" );
+	// Es score spots: 100,000 - 1,900,000, 200,000 - 3,800,000, 300,000 - 5,700,000
+	static const struct { int vieux, rang, lo; const char *spot, *texte; } es[] = {
+		{ 100000, 0, 100000, "VC_horse_spot01", "100,000 points" }, { 200000, 0, 200000, "VC_horse_spot02", "200,000 points" },
+		{ 200000, 1, 300000, "VC_horse_spot03", "200,000 points" } };
+	for( int i = 0; i < 3; ++i )
+	{
+		snprintf( a, sizeof( a ), "key = %d lo = %d hi = %d step = 10000", 70 + i, es[i].lo, es[i].lo * 19 );
+		s_dm_rang = es[i].rang;
+		patch_dm( qb, j, m, "VC_AddGoal_Emerica", "score", T_ENTIER, es[i].vieux, a );
+		s_dm_rang = -1;
+		char t[200]; snprintf( t, sizeof( t ), "%s fmt = \"%%s points\"", a );
+		patch_dm( qb, j, m, es[i].spot, "text", T_CHAINE, crc( es[i].texte ), t );
+	}
+
+	// Slam City Jam contests: Sick's ranges x the chapter number; Best of Show:
+	// Eric's range, its top end x the chapter number
+	static const struct { const char *s; float x, y; const char *champ; } scj[] = {
+		{ "SJ_AddGoal_Competition", 390000, 410000, "gold_score" }, { "SJ_AddGoal_Competition", 280000, 290000, "silver_score" },
+		{ "SJ_AddGoal_Competition", 150000, 160000, "bronze_score" }, { "SJ_AddGoal_Competition02", 390000, 410000, "gold_score" },
+		{ "SJ_AddGoal_Competition02", 280000, 290000, "silver_score" }, { "SJ_AddGoal_Competition02", 150000, 160000, "bronze_score" } };
+	for( int i = 0; i < 6; ++i ) patch_dm_paire( qb, j, m, scj[i].s, scj[i].champ, scj[i].x, scj[i].y, "chap" );
+	patch_dm_paire( qb, j, m, "SJ_Goal_Trickspot4_Start", "goal_score", 90000, 120000, "chap haut" );
+
+	// Moscow: Blind Big Brother 5 - 20 s, caveman tank combo 60,000 - 1,200,000, distract the guards 5 - 35 s
+	patch_dm( qb, j, m, "RU_AddGoal_race2", "time", T_ENTIER, 20, "key = 73 lo = 5 hi = 20 step = 1" );
+	patch_dm( qb, j, m, "RU_AddGoal_trickspot", "score", T_ENTIER, 60000, "key = 74 lo = 60000 hi = 1200000 step = 5000" );
+	patch_dm( qb, j, m, "RU_AddGoal_trickspot", "goal_text", T_CHAINE, crc( "Caveman a tank in a 60,000 point combo" ),
+		"key = 74 lo = 60000 hi = 1200000 step = 5000 fmt = \"Caveman a tank in a %s point combo\"" );
+	patch_dm( qb, j, m, "RU_Addgoal_Collect", "time", T_ENTIER, 35, "key = 75 lo = 5 hi = 35 step = 5" );
+	// ratings 400,000 - 2,000,000, circus act manual 30,000 - 120,000, gap hunting 10 s - 1 min
+	patch_dm( qb, j, m, "RU_AddGoal_SweepsWeek", "score", T_ENTIER, 400000, "key = 76 lo = 400000 hi = 2000000 step = 5000" );
+	patch_dm( qb, j, m, "RU_AddGoal_SweepsWeek", "goal_text", T_CHAINE, crc( "Get 400,000 ratings points total" ),
+		"key = 76 lo = 400000 hi = 2000000 step = 5000 fmt = \"Get %s ratings points total\"" );
+	patch_dm( qb, j, m, "RU_AddGoal_gaps2", "score", T_ENTIER, 30000, "key = 77 lo = 30000 hi = 120000 step = 5000" );
+	patch_dm( qb, j, m, "RU_AddGoal_gaps2", "goal_text", T_CHAINE, crc( "Get 30,000 points in a manual combo" ),
+		"key = 77 lo = 30000 hi = 120000 step = 5000 fmt = \"Get %s points in a manual combo\"" );
+	patch_dm( qb, j, m, "RU_Addgoal_gaphunt", "time", T_ENTIER, 120, "key = 78 lo = 10 hi = 60 step = 5" );
+	// warm up 90,000 - 1,890,000, double dome 20,000 - 420,000, hangover cure 45 s - 1:30
+	patch_dm( qb, j, m, "RU_AddGoal_hawkchallenge", "score", T_ENTIER, 90000, "key = 79 lo = 90000 hi = 1890000 step = 5000" );
+	patch_dm( qb, j, m, "RU_AddGoal_hawkchallenge", "goal_text", T_CHAINE, crc( "Get 90,000 points" ), "key = 79 lo = 90000 hi = 1890000 step = 5000 fmt = \"Get %s points\"" );
+	patch_dm( qb, j, m, "RU_Addgoal_genericscore2", "winscore", T_ENTIER, 20000, "key = 80 lo = 20000 hi = 420000 step = 5000" );
+	patch_dm( qb, j, m, "RU_Addgoal_genericscore2", "goal_text", T_CHAINE, crc( "Get 20,000 in Doubles Tricks" ),
+		"key = 80 lo = 20000 hi = 420000 step = 5000 fmt = \"Get %s in Doubles Tricks\"" );
+	patch_dm( qb, j, m, "RU_AddGoal_Race5", "time", T_ENTIER, 110, "key = 81 lo = 45 hi = 90 step = 5" );
+
+	// New Jersey: combo the city 24 - all 29 markers, Score Big 800,000 - 19,200,000,
+	// Tear Up Eric's Best Line 1:00 - 1:30
+	patch_dm( qb, j, m, "NJ_AddGoal_Film_Combo", "number", T_ENTIER, 24, "key = 82 lo = 24 hi = 29" );
+	patch_dm( qb, j, m, "NJ_AddGoal_Film_GenericScore", "score", T_ENTIER, 800000, "key = 83 lo = 800000 hi = 19200000 step = 10000" );
+	patch_dm( qb, j, m, "NJ_AddGoal_Film_GenericScore", "goal_text", T_CHAINE, crc( "Score 800,000 points" ), "key = 83 lo = 800000 hi = 19200000 step = 10000 fmt = \"Score %s points\"" );
+	patch_dm( qb, j, m, "NJ_AddGoal_Whup_Eric", "time", T_ENTIER, 90, "key = 84 lo = 60 hi = 90 step = 5" );
+	#undef DM_FLIPS
+	#undef DM_GRABS
 }
 
 // Imported levels (desktop): THPS4's levels, converted to THUG files by
@@ -3618,13 +3796,6 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 		"endif\n" );
 	// Demented: dealt a skater instead of the create-a-skater, no saving,
 	// missing goal tricks slotted in, a life per chapter, its own ending.
-	patch_debut( qb, j, m, "launch_pre_cas_menu",
-		"if DesktopDementedNeedsDialog\n"
-		"if NOT ( goto_cad = 1 )\n"
-		"desktop_demented_deal\n"
-		"return\n"
-		"endif\n"
-		"endif\n" );
 	patch_debut( qb, j, m, "goal_check_for_required_tricks",
 		"if DesktopDemented\n"
 		"GoalManager_GetGoalParams name = <goal_id>\n"
@@ -3665,21 +3836,29 @@ extern "C" unsigned char *custom_music_patch_qb( const char *file_name, const un
 	patch_debut( qb, j, m, "create_options_menu", "if DesktopDemented\nNoCustomRestarts = 1\nendif\n" );
 	patch_debut( qb, j, m, "script_change_tod", "DesktopRandoTod\n" );	// Demented Random World
 	patch_debut( qb, j, m, "watch_cutscene_done", "if DesktopDemented\nDebounce X 0.5\npause_menu_gradient on\ncreate_watch_cutscenes_menu\nreturn\nendif\n" );
-	// the skater is dealt before the first intro, so it's in it
-	patch_debut( qb, j, m, "play_first_cutscene", "if DesktopDementedNeedsDeal\ndesktop_demented_roll\nendif\n" );
-	// Edit Skater BEFORE the first cutscene in every story mode but Demented
-	// (Marcus 2026-11-14): the pre-CAS menu first, then Intro_01, then Intro_02.
+	// Edit Skater BEFORE the first cutscene in every story mode (Marcus
+	// 2026-11-14; Demented too since 2026-11-18, Chaos runs included: "Edit
+	// only", the skater is still dealt): the pre-CAS menu first, then the
+	// Demented deal, then Intro_01 (so the dealt skater is in it), then Intro_02.
 	patch_debut( qb, j, m, "play_first_cutscene",
-		"if NOT DesktopDemented\n"
 		"launch_pre_cas_menu wait_for_skater = wait_for_skater\n"
-		"return\n"
-		"endif\n" );
+		"return\n" );
 	patch_debut( qb, j, m, "show_intro_2",
-		"if NOT DesktopDemented\n"
+		"if DesktopDementedNeedsDeal\n"
+		"desktop_demented_roll\n"
+		"endif\n"
+		"DesktopDementedDialogShown\n"
 		"killskatercamanim all\n"
 		"unpausegame\n"
 		"PlayCutscene name = \"cutscenes\\Intro_01.cut\" exitScript = desktop_intro_2 dont_unload_anims\n"
-		"return\n"
+		"return\n" );
+	// Demented's first Edit Skater menu (before the deal): everything
+	// unlocked, boards included, and Design Deck open (Marcus 2026-11-18)
+	patch_debut( qb, j, m, "create_pre_cas_menu", "DesktopDementedUnlockAll\n" );
+	patch_debut( qb, j, m, "cas_item_is_visible",
+		"if DesktopDementedUnlockAll\n"
+		"RemoveParameter unlock_flag\n"
+		"RemoveParameter only_if_unlocked\n"
 		"endif\n" );
 	// View Tricks (Demented) goes back to the pause menu
 	patch_debut( qb, j, m, "edit_tricks_menu_exit",
